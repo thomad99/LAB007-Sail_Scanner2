@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LAB007-Sail-Photo-Scan</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .upload-section {
+            background: #fff;
+            border: 3px solid #0066cc;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .upload-section h2 {
+            margin: 0 0 10px 0;
+            color: #0066cc;
+        }
+        .upload-section p {
+            color: #666;
+            margin: 10px 0;
+        }
+        .upload-section input[type="file"] {
+            display: block;
+            margin: 10px auto;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: #f8f8f8;
+            width: 80%;
+            max-width: 400px;
+        }
+        .upload-section input[type="file"]:hover {
+            background: #f0f0f0;
+            border-color: #0066cc;
+        }
+        #preview {
+            max-width: 100%;
+            margin: 20px 0;
+        }
+        #results {
+            white-space: pre-wrap;
+            font-family: monospace;
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .loading {
+            display: none;
+            color: #666;
+            margin: 10px 0;
+        }
+        .sail-number {
+            background: #e6f3ff;
+            padding: 10px;
+            border-left: 4px solid #0066cc;
+            margin: 10px 0;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .skipper-details {
+            background: #f0f8ff;
+            padding: 15px;
+            margin-top: 10px;
+            border-radius: 5px;
+            border-left: 3px solid #0066cc;
+        }
+        .skipper-details h3 {
+            margin: 0 0 10px 0;
+            color: #0066cc;
+        }
+        .skipper-details p {
+            margin: 5px 0;
+        }
+        .download-section {
+            margin-top: 15px;
+            text-align: center;
+        }
+        .download-section button {
+            background: #0066cc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .download-section button:hover {
+            background: #0052a3;
+        }
+        .no-skipper {
+            color: #666;
+            font-style: italic;
+            margin-top: 10px;
+        }
+        .no-match {
+            color: #666;
+            font-size: 16px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <h1>LAB007-Sail-Photo-Scan</h1>
+    <div class="upload-section">
+        <h2>Upload Sail Photo</h2>
+        <input type="file" id="imageInput" accept="image/*">
+        <p>Select an image to analyze</p>
+    </div>
+
+    <div id="topResultsBox" class="sail-number-display" style="display: block;">
+        <h2>Top Results</h2>
+        <div class="top-results-content">Awaiting scan...</div>
+        <div class="skipper-info"></div>
+    </div>
+
+    <img id="preview" style="display: none;">
+    <div id="loading" class="loading">Analyzing image...</div>
+
+    <div id="results"></div>
+    <div id="sailNumberBox" class="sail-number-display" style="display: none;">
+        <h2>Detected Sail Number</h2>
+        <div class="sail-number-value">--</div>
+        <div class="sail-number-confidence"></div>
+    </div>
+
+    <script>
+        const imageInput = document.getElementById('imageInput');
+        const preview = document.getElementById('preview');
+        const topResultsBox = document.getElementById('topResultsBox');
+        const topResultsContent = topResultsBox.querySelector('.top-results-content');
+        const loading = document.getElementById('loading');
+
+        imageInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // Show preview
+            preview.src = URL.createObjectURL(file);
+            preview.style.display = 'block';
+            
+            // Show loading state
+            topResultsContent.innerHTML = '<div class="loading">Analyzing image...</div>';
+            loading.style.display = 'block';
+
+            try {
+                // Send to server
+                const formData = new FormData();
+                formData.append('image', file);
+
+                const response = await fetch('/api/scan', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                const data = await response.json();
+                console.log('Server response:', data);
+
+                // Update results display
+                let resultsHtml = '';
+
+                if (data.sailNumbers.found) {
+                    resultsHtml = `
+                        <div class="results-container">
+                            <div class="sail-numbers">
+                                ${data.sailNumbers.numbers.map(num => `
+                                    <div class="result-item">
+                                        <div class="number">Sail #${num.number}</div>
+                                        <div class="confidence">Confidence: ${(num.score * 100).toFixed(1)}%</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            ${data.fileInfo ? `
+                                <div class="file-info">
+                                    <div class="original">Original: ${data.fileInfo.originalFilename}</div>
+                                    <div class="renamed">Renamed to: ${data.fileInfo.newFilename}</div>
+                                    ${data.fileInfo.skipperInfo ? `
+                                        <div class="skipper-details">
+                                            <h3>Sailor Information:</h3>
+                                            <p>Name: ${data.fileInfo.skipperInfo.skipper_name}</p>
+                                            <p>Boat: ${data.fileInfo.skipperInfo.boat_name || 'N/A'}</p>
+                                            <p>Club: ${data.fileInfo.skipperInfo.yacht_club || 'N/A'}</p>
+                                            <p>Last Race: ${data.fileInfo.skipperInfo.Regatta_Date || 'N/A'}</p>
+                                        </div>
+                                    ` : '<div class="no-skipper">No sailor information found</div>'}
+                                    <div class="download-section">
+                                        <button onclick="downloadFile('${data.fileInfo.downloadUrl}', '${data.fileInfo.newFilename}')">
+                                            Download Renamed File
+                                        </button>
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                } else {
+                    resultsHtml = `
+                        <div class="no-results">
+                            No sail numbers detected
+                            ${data.fileInfo ? `
+                                <div class="file-info">
+                                    <p>File saved as: ${data.fileInfo.newFilename}</p>
+                                    <div class="download-section">
+                                        <button onclick="downloadFile('${data.fileInfo.downloadUrl}', '${data.fileInfo.newFilename}')">
+                                            Download Renamed File
+                                        </button>
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                }
+
+                topResultsContent.innerHTML = resultsHtml;
+
+            } catch (err) {
+                console.error('Error:', err);
+                topResultsContent.innerHTML = `
+                    <div class="error">
+                        Error: ${err.message}
+                    </div>
+                `;
+            } finally {
+                loading.style.display = 'none';
+            }
+        });
+
+        function downloadFile(url, filename) {
+            fetch(url)
+                .then(response => response.blob())
+                .then(blob => {
+                    const link = document.createElement('a');
+                    link.href = window.URL.createObjectURL(blob);
+                    link.download = filename;
+                    link.click();
+                    window.URL.revokeObjectURL(link.href);
+                })
+                .catch(console.error);
+        }
+    </script>
+</body>
+</html> 
