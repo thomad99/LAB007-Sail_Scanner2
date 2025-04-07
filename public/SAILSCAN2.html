@@ -188,6 +188,14 @@
                                 <div class="file-info">
                                     <div class="original">Original: ${data.fileInfo.originalFilename}</div>
                                     <div class="renamed">Renamed to: ${data.fileInfo.newFilename}</div>
+                                    <div class="save-locations">
+                                        <h4>Saved Locations:</h4>
+                                        <ul>
+                                            ${data.fileInfo.savedLocations.map(loc => `
+                                                <li>${loc.type}: ${loc.path}</li>
+                                            `).join('')}
+                                        </ul>
+                                    </div>
                                     ${data.fileInfo.skipperInfo ? `
                                         <div class="skipper-details">
                                             <h3>Sailor Information:</h3>

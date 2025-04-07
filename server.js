@@ -9,6 +9,10 @@ const fs = require('fs');
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Add these near the top of server.js
+const LOCAL_SAVE_PATH = process.env.LOCAL_SAVE_PATH || path.join(process.cwd(), 'saved_photos');
+const SAVE_TO_SERVER = true; // Set to false if you don't want server copies
+
 // Add general error handler
 app.use((err, req, res, next) => {
     console.error('Unhandled error:', err);
@@ -70,6 +74,39 @@ const computerVisionClient = new ComputerVisionClient(
     new CognitiveServicesCredentials(computerVisionKey),
     computerVisionEndpoint
 );
+
+// Add this helper function
+async function saveFile(buffer, filename, originalFilename) {
+    console.log('Starting file save operations...');
+    
+    try {
+        // 1. Save to local configured directory
+        const localDir = LOCAL_SAVE_PATH;
+        console.log('Ensuring local directory exists:', localDir);
+        await fs.promises.mkdir(localDir, { recursive: true });
+        
+        const localFilePath = path.join(localDir, filename);
+        await fs.promises.writeFile(localFilePath, buffer);
+        console.log('File saved locally:', localFilePath);
+
+        // 2. Optionally save to server uploads directory
+        if (SAVE_TO_SERVER) {
+            const uploadsDir = path.join('public', 'uploads');
+            await fs.promises.mkdir(uploadsDir, { recursive: true });
+            const serverFilePath = path.join(uploadsDir, filename);
+            await fs.promises.writeFile(serverFilePath, buffer);
+            console.log('File saved on server:', serverFilePath);
+        }
+
+        return {
+            localPath: localFilePath,
+            serverPath: SAVE_TO_SERVER ? `/uploads/${filename}` : null
+        };
+    } catch (error) {
+        console.error('Error saving file:', error);
+        throw error;
+    }
+}
 
 // API endpoint to save numbers
 app.post('/api/numbers', async (req, res) => {
@@ -256,55 +293,59 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
         let bestMatch = null;
 
         try {
-            // Get the uploads directory path
-            const uploadsDir = path.join('public', 'uploads');
-            console.log('Creating uploads directory:', uploadsDir);
-            await fs.promises.mkdir(uploadsDir, { recursive: true });
+            if (analysis.sailNumberAnalysis.found && analysis.sailNumberAnalysis.numbers.length > 0) {
+                const bestMatch = analysis.sailNumberAnalysis.numbers[0];
+                const sailNumber = bestMatch.number;
 
-            const originalFilename = req.file.originalname;
-            const fileExtension = path.extname(originalFilename);
-            const filenameWithoutExt = path.basename(originalFilename, fileExtension);
+                // Look up sailor information
+                const skipperInfo = await lookupSkipperInfo(sailNumber);
+                console.log('Skipper info found:', skipperInfo);
 
-            // Find best match from detected numbers
-            if (analysis.sailNumberAnalysis.numbers.length > 0) {
-                bestMatch = analysis.sailNumberAnalysis.numbers[0];
-                const skipperInfo = await lookupSkipperInfo(bestMatch.number);
-                console.log('Best match found:', { number: bestMatch.number, skipperInfo });
-
-                // Create new filename
                 let newFilename;
                 if (skipperInfo && skipperInfo.skipper_name) {
-                    const sanitizedSkipperName = skipperInfo.skipper_name.replace(/[^a-zA-Z0-9]/g, '_');
-                    newFilename = `${bestMatch.number}_${sanitizedSkipperName}_${filenameWithoutExt}${fileExtension}`;
+                    const sanitizedSkipperName = sanitizeFilename(skipperInfo.skipper_name);
+                    newFilename = `${sailNumber}_${sanitizedSkipperName}_${filenameWithoutExt}${fileExtension}`;
                 } else {
-                    newFilename = `${bestMatch.number}_UNKNOWN_${filenameWithoutExt}${fileExtension}`;
+                    newFilename = `${sailNumber}_UNKNOWN_${filenameWithoutExt}${fileExtension}`;
                 }
 
                 // Save the file
-                const newFilePath = path.join(uploadsDir, newFilename);
-                console.log('Saving file as:', newFilename);
-                await fs.promises.writeFile(newFilePath, req.file.buffer);
+                const saveResult = await saveFile(req.file.buffer, newFilename, originalFilename);
+                console.log('File save result:', saveResult);
 
                 fileInfo = {
                     originalFilename,
                     newFilename,
-                    sailNumber: bestMatch.number,
+                    sailNumber,
                     skipperName: skipperInfo?.skipper_name || 'UNKNOWN',
-                    matchFound: true
+                    skipperInfo: skipperInfo || null,
+                    matchFound: true,
+                    localPath: saveResult.localPath,
+                    downloadUrl: saveResult.serverPath,
+                    savedLocations: [
+                        { type: 'Local', path: saveResult.localPath },
+                        ...(saveResult.serverPath ? [{ type: 'Server', path: saveResult.serverPath }] : [])
+                    ]
                 };
             } else {
                 // No sail number found
                 const newFilename = `NOSAIL_${filenameWithoutExt}${fileExtension}`;
-                const newFilePath = path.join(uploadsDir, newFilename);
-                console.log('No sail number found. Saving file as:', newFilename);
-                await fs.promises.writeFile(newFilePath, req.file.buffer);
+                const saveResult = await saveFile(req.file.buffer, newFilename, originalFilename);
+                console.log('File save result (no sail number):', saveResult);
 
                 fileInfo = {
                     originalFilename,
                     newFilename,
                     sailNumber: null,
                     skipperName: null,
-                    matchFound: false
+                    skipperInfo: null,
+                    matchFound: false,
+                    localPath: saveResult.localPath,
+                    downloadUrl: saveResult.serverPath,
+                    savedLocations: [
+                        { type: 'Local', path: saveResult.localPath },
+                        ...(saveResult.serverPath ? [{ type: 'Server', path: saveResult.serverPath }] : [])
+                    ]
                 };
             }
         } catch (fileError) {
