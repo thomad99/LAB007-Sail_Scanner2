@@ -353,51 +353,74 @@
                     body: formData
                 });
 
-                if (!response.ok) {
-                    throw new Error(await response.text());
+                const data = await response.json();
+                
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || 'Failed to process image');
                 }
 
-                const data = await response.json();
                 console.log('Server response:', data);
 
                 // Update result card with findings
                 const content = resultCard.querySelector('.content');
-                content.innerHTML = `
-                    <div class="sail-numbers-list">
-                        ${data.sailNumbers.numbers.map(num => `
-                            <div class="sail-number-item">
-                                <div class="number">Sail #${num.number}</div>
-                                <div class="confidence">Confidence: ${(num.score * 100).toFixed(1)}%</div>
-                                ${num.skipperInfo ? `
-                                    <div class="sailor-info">
-                                        <strong>Sailor:</strong> ${num.skipperInfo.skipper_name}<br>
-                                        <strong>Club:</strong> ${num.skipperInfo.yacht_club || 'N/A'}<br>
-                                        <strong>Last Race:</strong> ${num.skipperInfo.Regatta_Date || 'N/A'}
-                                    </div>
-                                ` : '<div class="no-sailor">No sailor information found</div>'}
+                
+                if (data.sailNumbers && data.sailNumbers.numbers.length > 0) {
+                    content.innerHTML = `
+                        <div class="sail-numbers-list">
+                            ${data.sailNumbers.numbers.map(num => `
+                                <div class="sail-number-item">
+                                    <div class="number">Sail #${num.number}</div>
+                                    <div class="confidence">Confidence: ${(num.confidence * 100).toFixed(1)}%</div>
+                                    ${num.skipperInfo ? `
+                                        <div class="sailor-info">
+                                            <strong>Sailor:</strong> ${num.skipperInfo.skipper_name}<br>
+                                            <strong>Club:</strong> ${num.skipperInfo.yacht_club || 'N/A'}<br>
+                                            <strong>Last Race:</strong> ${num.skipperInfo.Regatta_Date || 'N/A'}
+                                        </div>
+                                    ` : '<div class="no-sailor">No sailor information found</div>'}
+                                </div>
+                            `).join('')}
+                        </div>
+                        ${data.fileInfo ? `
+                            <div class="file-info">
+                                <p>Original: ${data.fileInfo.originalFilename}</p>
+                                <p>Renamed to: ${data.fileInfo.newFilename}</p>
                             </div>
-                        `).join('') || '<div class="no-numbers">No sail numbers detected</div>'}
-                    </div>
-                    <div class="file-info">
-                        <p>Original: ${data.fileInfo.originalFilename}</p>
-                        <p>Renamed to: ${data.fileInfo.newFilename}</p>
-                    </div>
-                    <div class="file-actions">
-                        <button onclick="downloadFile('${data.fileInfo.downloadUrl}', '${data.fileInfo.newFilename}')">
-                            Download Renamed File
-                        </button>
-                    </div>
-                `;
+                            <div class="file-actions">
+                                <button onclick="downloadFile('${data.fileInfo.downloadUrl}', '${data.fileInfo.newFilename}')">
+                                    Download Renamed File
+                                </button>
+                            </div>
+                        ` : ''}
+                    `;
+                } else {
+                    content.innerHTML = `
+                        <div class="no-numbers">No sail numbers detected</div>
+                        ${data.fileInfo ? `
+                            <div class="file-info">
+                                <p>Original: ${data.fileInfo.originalFilename}</p>
+                                <p>Renamed to: ${data.fileInfo.newFilename}</p>
+                            </div>
+                            <div class="file-actions">
+                                <button onclick="downloadFile('${data.fileInfo.downloadUrl}', '${data.fileInfo.newFilename}')">
+                                    Download Renamed File
+                                </button>
+                            </div>
+                        ` : ''}
+                    `;
+                }
 
                 resultCard.querySelector('.processing-status').textContent = 'Analysis complete';
-                processedFiles.push(data.fileInfo);
+                if (data.fileInfo) {
+                    processedFiles.push(data.fileInfo);
+                }
 
             } catch (err) {
                 console.error('Error:', err);
                 resultCard.querySelector('.processing-status').textContent = `Error: ${err.message}`;
                 resultCard.querySelector('.content').innerHTML = `
                     <div class="error-message">
-                        Failed to process image. Please try again.
+                        Failed to process image. ${err.message}
                     </div>
                 `;
             }

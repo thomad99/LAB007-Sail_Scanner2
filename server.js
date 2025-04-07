@@ -170,24 +170,19 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             throw new Error('No image file received');
         }
 
-        // Initialize tracking variables for debug
+        const originalFilename = req.file.originalname;
+        const fileExtension = path.extname(originalFilename);
+        const filenameWithoutExt = path.basename(originalFilename, fileExtension);
+
+        console.log('Processing file:', originalFilename);
+
+        // Initialize tracking variables
         let processingSteps = {
             rawText: [],
             potentialNumbers: [],
             validNumbers: [],
             ignoredNumbers: []
         };
-
-        const originalFilename = req.file.originalname;
-        const fileExtension = path.extname(originalFilename);
-        const filenameWithoutExt = path.basename(originalFilename, fileExtension);
-
-        console.log('File received:', {
-            originalFilename,
-            extension: fileExtension,
-            size: `${(req.file.size / 1024).toFixed(2)} KB`,
-            type: req.file.mimetype
-        });
 
         // STEP 1: Initial Image Upload
         console.log('Step 1: Image received', {
@@ -232,21 +227,9 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
         console.log('Azure processing completed successfully!');
         console.log('Results:', JSON.stringify(operationResult.analyzeResult, null, 2));
 
-        // STEP 4: Process What Azure Sees
-        console.log('Step 4: Processing Azure results...');
-        
-        let analysis = {
-            generalDescription: {
-                allTextFound: [],
-                totalItems: 0,
-                description: ''
-            },
-            sailNumberAnalysis: {
-                found: false,
-                numbers: [],
-                confidence: 0
-            }
-        };
+        // STEP 4: Process Results
+        let sailNumbersWithInfo = [];
+        let fileInfo = null;
 
         if (operationResult.analyzeResult && operationResult.analyzeResult.readResults) {
             const readResults = operationResult.analyzeResult.readResults;
@@ -259,23 +242,21 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                         confidence: line.confidence,
                         location: `Line ${lineIndex + 1}`
                     };
-                    analysis.generalDescription.allTextFound.push(textItem);
                     processingSteps.rawText.push(textItem);
                 });
             });
 
-            // Enhanced sail number detection
-            const seenNumbers = new Set(); // Track numbers for mirrored validation
+            // Process numbers
+            const seenNumbers = new Set();
             
-            analysis.generalDescription.allTextFound.forEach(item => {
-                // Clean the text (convert O to 0, etc)
+            processingSteps.rawText.forEach(item => {
                 const cleaned = item.text.replace(/[OoIl]/g, '0').replace(/[^0-9]/g, '');
                 
                 if (cleaned.length >= 1 && cleaned.length <= 6) {
                     const num = parseInt(cleaned);
                     if (num >= 1 && num <= 999999) {
-                        // Check if this is a number we should ignore (like 420)
-                        if (IGNORED_NUMBERS && IGNORED_NUMBERS.includes(cleaned)) {
+                        // Skip ignored numbers (like 420)
+                        if (IGNORED_NUMBERS.includes(cleaned)) {
                             processingSteps.ignoredNumbers.push({
                                 number: num,
                                 originalText: item.text,
@@ -284,10 +265,7 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                             return;
                         }
 
-                        // Check if this number is in our valid list
                         const isValidSailNumber = validSailNumbers.includes(num);
-                        
-                        // Check if we've seen this number (might be mirrored on other side of sail)
                         const numberSeenBefore = seenNumbers.has(num);
                         seenNumbers.add(num);
 
@@ -301,7 +279,6 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                         };
 
                         processingSteps.potentialNumbers.push(numberInfo);
-
                         if (isValidSailNumber || numberSeenBefore) {
                             processingSteps.validNumbers.push(numberInfo);
                         }
@@ -309,12 +286,47 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                 }
             });
 
-            // Update sail number analysis
-            analysis.sailNumberAnalysis = {
-                found: processingSteps.validNumbers.length > 0,
-                numbers: processingSteps.validNumbers,
-                confidence: processingSteps.validNumbers.length > 0 ? 
-                    Math.max(...processingSteps.validNumbers.map(n => n.confidence)) : 0
+            // Look up sailor information for valid numbers
+            sailNumbersWithInfo = await Promise.all(
+                processingSteps.validNumbers
+                    .sort((a, b) => b.confidence - a.confidence)
+                    .map(async (num) => {
+                        const skipperInfo = await lookupSkipperInfo(num.number);
+                        return {
+                            ...num,
+                            skipperInfo: skipperInfo || null
+                        };
+                    })
+            );
+
+            // Create filename based on found numbers
+            let newFilename;
+            if (sailNumbersWithInfo.length > 0) {
+                // Get the highest confidence number with sailor info
+                const bestMatch = sailNumbersWithInfo.find(n => n.skipperInfo) || sailNumbersWithInfo[0];
+                
+                if (bestMatch.skipperInfo?.skipper_name) {
+                    const sanitizedSkipperName = sanitizeFilename(bestMatch.skipperInfo.skipper_name);
+                    newFilename = `${bestMatch.number}_${sanitizedSkipperName}_${filenameWithoutExt}${fileExtension}`;
+                } else {
+                    newFilename = `${bestMatch.number}_NONAME_${filenameWithoutExt}${fileExtension}`;
+                }
+            } else {
+                newFilename = `NOSAIL_${filenameWithoutExt}${fileExtension}`;
+            }
+
+            // Save the file
+            const uploadsDir = path.join('public', 'uploads');
+            await fs.promises.mkdir(uploadsDir, { recursive: true });
+            const newFilePath = path.join(uploadsDir, newFilename);
+            await fs.promises.writeFile(newFilePath, req.file.buffer);
+
+            fileInfo = {
+                originalFilename,
+                newFilename,
+                downloadUrl: `/uploads/${newFilename}`,
+                sailNumbers: sailNumbersWithInfo,
+                matchFound: sailNumbersWithInfo.length > 0
             };
         }
 
@@ -322,8 +334,6 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
         const debugInfo = {
             status: operationResult.status,
             processingTime: `${attempts} seconds`,
-            apiVersion: operationResult.modelVersion || 'Not specified',
-            requestId: operationResult.requestId || 'Not available',
             textProcessing: {
                 totalTextItems: processingSteps.rawText.length,
                 rawTextFound: processingSteps.rawText
@@ -336,87 +346,13 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             }
         };
 
-        // Process the results and prepare file operations
-        let fileInfo = null;
-        let bestMatch = null;
-
-        try {
-            if (analysis.sailNumberAnalysis.found && analysis.sailNumberAnalysis.numbers.length > 0) {
-                const sailNumbers = analysis.sailNumberAnalysis.numbers
-                    .sort((a, b) => b.confidence - a.confidence)
-                    .filter((num, index, array) => {
-                        // Remove duplicates but keep numbers that appear multiple times in image
-                        return array.findIndex(n => n.number === num.number && n.location === num.location) === index;
-                    });
-
-                // Look up sailor information for each number
-                const sailNumbersWithInfo = await Promise.all(sailNumbers.map(async (num) => {
-                    const skipperInfo = await lookupSkipperInfo(num.number);
-                    return {
-                        ...num,
-                        skipperInfo
-                    };
-                }));
-
-                // Create filename based on found numbers
-                let newFilename;
-                if (sailNumbersWithInfo.length > 0) {
-                    // Get the highest confidence number with sailor info
-                    const bestMatch = sailNumbersWithInfo.find(n => n.skipperInfo?.skipper_name) || sailNumbersWithInfo[0];
-                    
-                    if (bestMatch.skipperInfo?.skipper_name) {
-                        const sanitizedSkipperName = sanitizeFilename(bestMatch.skipperInfo.skipper_name);
-                        newFilename = `${bestMatch.number}_${sanitizedSkipperName}_${filenameWithoutExt}${fileExtension}`;
-                    } else {
-                        newFilename = `${bestMatch.number}_NONAME_${filenameWithoutExt}${fileExtension}`;
-                    }
-                } else {
-                    newFilename = `NOSAIL_${filenameWithoutExt}${fileExtension}`;
-                }
-
-                // Save the file
-                const saveResult = await saveFile(req.file.buffer, newFilename, originalFilename);
-                console.log('File save result:', saveResult);
-
-                fileInfo = {
-                    originalFilename,
-                    newFilename,
-                    sailNumbers: sailNumbersWithInfo,
-                    matchFound: sailNumbersWithInfo.length > 0,
-                    downloadUrl: saveResult.serverPath
-                };
-            } else {
-                // No sail number found
-                const newFilename = `NOSAIL_${filenameWithoutExt}${fileExtension}`;
-                const saveResult = await saveFile(req.file.buffer, newFilename, originalFilename);
-                console.log('File save result (no sail number):', saveResult);
-
-                fileInfo = {
-                    originalFilename,
-                    newFilename,
-                    sailNumbers: [],
-                    matchFound: false,
-                    downloadUrl: saveResult.serverPath
-                };
-            }
-        } catch (fileError) {
-            console.error('Error handling file:', fileError);
-        }
-
-        // After processing results, add more debug info
-        console.log('Processing complete. Analysis results:', {
-            totalTextFound: analysis.generalDescription.allTextFound.length,
-            sailNumbersFound: analysis.sailNumberAnalysis.numbers.length,
-            bestMatch: analysis.sailNumberAnalysis.numbers[0] || 'None'
-        });
-
         // Send response
         res.json({
             success: true,
             sailNumbers: {
-                found: fileInfo.sailNumbers.length > 0,
-                numbers: fileInfo.sailNumbers,
-                totalFound: fileInfo.sailNumbers.length
+                found: sailNumbersWithInfo.length > 0,
+                numbers: sailNumbersWithInfo,
+                totalFound: sailNumbersWithInfo.length
             },
             fileInfo: fileInfo,
             debug: debugInfo
