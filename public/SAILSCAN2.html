@@ -1,12 +1,32 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>LAB007-Sail-Photo-Scan</title>
+    <title>LAB007 - LOVESAILING PHOTO SCANNER</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
+        .header {
+            text-align: center;
+            padding: 20px;
+            margin-bottom: 30px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .logo {
+            max-height: 100px;
+            margin-bottom: 15px;
+        }
+
+        .header h1 {
+            color: #0066cc;
+            margin: 0;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
         body {
             font-family: Arial, sans-serif;
-            max-width: 800px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
         }
@@ -287,9 +307,19 @@
             background: #f8d7da;
             color: #721c24;
         }
+        .main-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
     </style>
 </head>
 <body>
+    <div class="header">
+        <img src="LOGO BLUE.JPEG" alt="LoveSailing Logo" class="logo">
+        <h1>LAB007 - LOVESAILING PHOTO SCANNER</h1>
+    </div>
+
     <h1>LAB007-Sail-Photo-Scan</h1>
     <div class="upload-section">
         <h2>Upload Sail Photos</h2>
@@ -370,6 +400,8 @@
         const batchProgress = document.getElementById('batchProgress');
         let totalFiles = 0;
         let completedFiles = 0;
+        const RATE_LIMIT_DELAY = 26000; // 26 seconds to be safe
+        let lastAzureCallTime = 0;
 
         debugToggle.addEventListener('change', (e) => {
             document.querySelector('.debug-content').style.display = e.target.checked ? 'block' : 'none';
@@ -377,6 +409,18 @@
 
         imageInput.addEventListener('change', handleFiles);
         downloadAllBtn.addEventListener('click', downloadAllFiles);
+
+        async function waitForRateLimit() {
+            const now = Date.now();
+            const timeSinceLastCall = now - lastAzureCallTime;
+            
+            if (timeSinceLastCall < RATE_LIMIT_DELAY) {
+                const waitTime = RATE_LIMIT_DELAY - timeSinceLastCall;
+                console.log(`Rate limit cooling down. Waiting ${waitTime/1000} seconds...`);
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+            }
+            lastAzureCallTime = Date.now();
+        }
 
         async function handleFiles(e) {
             const files = Array.from(e.target.files);
@@ -386,20 +430,39 @@
             completedFiles = 0;
             
             if (files.length > 0) {
-                batchActions.style.display = 'block';
-                batchProgress.style.display = 'block';
-                updateBatchProgress();
+                try {
+                    // Call cleanup before starting new batch
+                    const cleanupResponse = await fetch('/api/cleanup', {
+                        method: 'POST'
+                    });
+                    
+                    if (!cleanupResponse.ok) {
+                        console.warn('Cleanup warning:', await cleanupResponse.text());
+                        // Continue anyway - non-critical error
+                    }
+                    
+                    batchActions.style.display = 'block';
+                    batchProgress.style.display = 'block';
+                    updateBatchProgress();
 
-                files.forEach(file => {
-                    const resultCard = createResultCard(file);
-                    resultsContainer.appendChild(resultCard);
-                });
+                    // Create result cards for all files first
+                    files.forEach(file => {
+                        const resultCard = createResultCard(file);
+                        resultsContainer.appendChild(resultCard);
+                    });
 
-                for (const file of files) {
-                    await processFile(file);
+                    // Process files sequentially with rate limiting
+                    for (const file of files) {
+                        await processFile(file);
+                        completedFiles++;
+                        updateBatchProgress();
+                    }
+
+                    updateBatchSummary();
+                } catch (err) {
+                    console.error('Error during file processing:', err);
+                    alert('An error occurred while processing files. Please try again.');
                 }
-
-                updateBatchSummary();
             }
         }
 
@@ -443,7 +506,7 @@
 
                 const data = await response.json();
                 
-                if (!response.ok || !data.success) {
+                if (!response.ok) {
                     throw new Error(data.error || 'Failed to process image');
                 }
 
@@ -508,19 +571,26 @@
             } catch (err) {
                 console.error(`Error processing file ${file.name}:`, err);
                 statusDiv.className = 'processing-status status-error';
-                statusDiv.textContent = `Error: ${err.message}`;
-                resultCard.querySelector('.content').innerHTML = `
-                    <div class="error-message">
-                        Failed to process image. ${err.message}
-                    </div>
-                `;
+                
+                if (err.message && err.message.includes('rate limit')) {
+                    statusDiv.innerHTML = `
+                        <div class="error-message">
+                            Rate limit reached. This file will be processed automatically in a few seconds...
+                        </div>
+                    `;
+                    
+                    await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY));
+                    return processFile(file);
+                } else {
+                    statusDiv.textContent = `
+                        <div class="error-message">
+                            Failed to process image. ${err.message}
+                        </div>
+                    `;
+                }
             } finally {
-                completedFiles++;
-                updateBatchProgress();
                 console.log(`Completed processing file: ${file.name}`);
             }
-
-            await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
         function updateBatchSummary() {
@@ -561,6 +631,24 @@
                     window.URL.revokeObjectURL(link.href);
                 })
                 .catch(console.error);
+        }
+
+        // Add a function to handle manual cleanup if needed
+        async function manualCleanup() {
+            try {
+                const response = await fetch('/api/cleanup', {
+                    method: 'POST'
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Cleanup failed');
+                }
+                
+                const result = await response.json();
+                console.log('Manual cleanup completed:', result);
+            } catch (err) {
+                console.error('Error during manual cleanup:', err);
+            }
         }
     </script>
 </body>

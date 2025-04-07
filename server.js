@@ -4,7 +4,7 @@ const path = require('path');
 const multer = require('multer');
 const { ComputerVisionClient } = require('@azure/cognitiveservices-computervision');
 const { CognitiveServicesCredentials } = require('@azure/ms-rest-azure-js');
-const fs = require('fs');
+const fs = require('fs').promises;
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -14,6 +14,12 @@ const LOCAL_SAVE_PATH = process.env.LOCAL_SAVE_PATH || path.join(process.cwd(), 
 const SAVE_TO_SERVER = true; // Set to false if you don't want server copies
 const IGNORED_NUMBERS = ['420']; // Numbers to ignore (boat class markings)
 const validSailNumbers = [13, 118, 9610, 5318, 8008]; // Valid sail numbers
+
+// Add these constants at the top of your file
+const RATE_LIMIT_DELAY = 30000; // 30 seconds
+let lastAzureCallTime = 0;
+const UPLOAD_DIR = './uploads';    // or whatever your upload directory is
+const PROCESSED_DIR = './processed'; // or whatever your processed files directory is
 
 // Add general error handler
 app.use((err, req, res, next) => {
@@ -85,18 +91,18 @@ async function saveFile(buffer, filename, originalFilename) {
         // 1. Save to local configured directory
         const localDir = LOCAL_SAVE_PATH;
         console.log('Ensuring local directory exists:', localDir);
-        await fs.promises.mkdir(localDir, { recursive: true });
+        await fs.mkdir(localDir, { recursive: true });
         
         const localFilePath = path.join(localDir, filename);
-        await fs.promises.writeFile(localFilePath, buffer);
+        await fs.writeFile(localFilePath, buffer);
         console.log('File saved locally:', localFilePath);
 
         // 2. Optionally save to server uploads directory
         if (SAVE_TO_SERVER) {
             const uploadsDir = path.join('public', 'uploads');
-            await fs.promises.mkdir(uploadsDir, { recursive: true });
+            await fs.mkdir(uploadsDir, { recursive: true });
             const serverFilePath = path.join(uploadsDir, filename);
-            await fs.promises.writeFile(serverFilePath, buffer);
+            await fs.writeFile(serverFilePath, buffer);
             console.log('File saved on server:', serverFilePath);
         }
 
@@ -161,9 +167,44 @@ app.post('/api/train', trainUpload.single('image'), async (req, res) => {
     }
 });
 
-// Add Azure processing endpoint
+// Function to clean up directories
+async function cleanupDirectories() {
+    console.log('Starting directory cleanup...');
+    
+    try {
+        // Ensure directories exist
+        await fs.mkdir(UPLOAD_DIR, { recursive: true });
+        await fs.mkdir(PROCESSED_DIR, { recursive: true });
+        
+        // Clean up upload directory
+        const uploadFiles = await fs.readdir(UPLOAD_DIR);
+        for (const file of uploadFiles) {
+            const filePath = path.join(UPLOAD_DIR, file);
+            await fs.unlink(filePath);
+            console.log(`Deleted upload: ${file}`);
+        }
+        
+        // Clean up processed directory
+        const processedFiles = await fs.readdir(PROCESSED_DIR);
+        for (const file of processedFiles) {
+            const filePath = path.join(PROCESSED_DIR, file);
+            await fs.unlink(filePath);
+            console.log(`Deleted processed: ${file}`);
+        }
+        
+        console.log('Directory cleanup completed');
+    } catch (err) {
+        console.error('Error during cleanup:', err);
+        // Don't throw the error - we want to continue even if cleanup fails
+    }
+}
+
+// Update your upload endpoint to include cleanup
 app.post('/api/scan', upload.single('image'), async (req, res) => {
     try {
+        // Clean up old files before processing new ones
+        await cleanupDirectories();
+        
         console.log('=== Starting New Scan ===');
         
         if (!req.file || !req.file.buffer) {
@@ -277,9 +318,9 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
 
         // Save the file
         const uploadsDir = path.join('public', 'uploads');
-        await fs.promises.mkdir(uploadsDir, { recursive: true });
+        await fs.mkdir(uploadsDir, { recursive: true });
         const newFilePath = path.join(uploadsDir, newFilename);
-        await fs.promises.writeFile(newFilePath, req.file.buffer);
+        await fs.writeFile(newFilePath, req.file.buffer);
 
         // Prepare debug info
         const debugInfo = {
@@ -614,7 +655,112 @@ app.get('/api/scans', async (req, res) => {
     }
 });
 
-app.listen(port, () => {
+// Helper function to wait for rate limit
+async function waitForRateLimit() {
+    const now = Date.now();
+    const timeSinceLastCall = now - lastAzureCallTime;
+    
+    if (timeSinceLastCall < RATE_LIMIT_DELAY) {
+        const waitTime = RATE_LIMIT_DELAY - timeSinceLastCall;
+        console.log(`Rate limit cooling down. Waiting ${waitTime/1000} seconds...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+    lastAzureCallTime = Date.now();
+}
+
+// Update your processImage function
+async function processImage(file) {
+    console.log('=== Starting New Scan ===');
+    console.log('Processing file:', file.originalname);
+    
+    const processingSteps = {
+        rawText: [],
+        sailNumbers: {
+            numbers: [],
+            ignored: []
+        },
+        debug: {
+            azureResponse: null,
+            processingTime: null
+        }
+    };
+
+    try {
+        // Wait for rate limit before making Azure call
+        await waitForRateLimit();
+
+        // ... rest of your existing Azure Vision API call code ...
+
+    } catch (err) {
+        console.error('Error during scan:', err);
+        
+        // Check if it's a rate limit error
+        if (err.message && err.message.includes('rate limit')) {
+            // Add 5 seconds to the last call time to prevent immediate retry
+            lastAzureCallTime = Date.now() - (RATE_LIMIT_DELAY - 5000);
+            throw new Error('Rate limit reached. Please try again in a few seconds.');
+        }
+        
+        throw err;
+    }
+}
+
+// Update your batch processing logic
+async function processBatch(files) {
+    const results = [];
+    
+    for (const file of files) {
+        try {
+            const result = await processImage(file);
+            results.push({
+                file: file.originalname,
+                success: true,
+                ...result
+            });
+        } catch (err) {
+            console.error(`Error processing ${file.originalname}:`, err);
+            results.push({
+                file: file.originalname,
+                success: false,
+                error: err.message
+            });
+            
+            // If it's a rate limit error, wait before continuing
+            if (err.message && err.message.includes('rate limit')) {
+                await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY));
+            }
+        }
+    }
+    
+    return results;
+}
+
+// For batch uploads, clean up before processing the batch
+app.post('/api/batch-scan', upload.array('images'), async (req, res) => {
+    try {
+        // Clean up old files before processing new batch
+        await cleanupDirectories();
+        
+        // Your existing batch processing code...
+    } catch (err) {
+        console.error('Error during batch scan:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Add a cleanup endpoint that can be called manually if needed
+app.post('/api/cleanup', async (req, res) => {
+    try {
+        await cleanupDirectories();
+        res.json({ success: true, message: 'Cleanup completed successfully' });
+    } catch (err) {
+        console.error('Error during cleanup:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Add automatic cleanup on server startup
+app.listen(port, async () => {
     console.log(`Server running on port ${port}`);
-    console.log(`Database URL: ${process.env.DATABASE_URL.split('@')[1]}`); // Only log the host part for security
+    await cleanupDirectories();
 }); 
