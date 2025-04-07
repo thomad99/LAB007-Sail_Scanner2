@@ -342,19 +342,36 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
 
         try {
             if (analysis.sailNumberAnalysis.found && analysis.sailNumberAnalysis.numbers.length > 0) {
-                const bestMatch = analysis.sailNumberAnalysis.numbers[0];
-                const sailNumber = bestMatch.number;
+                const sailNumbers = analysis.sailNumberAnalysis.numbers
+                    .sort((a, b) => b.confidence - a.confidence)
+                    .filter((num, index, array) => {
+                        // Remove duplicates but keep numbers that appear multiple times in image
+                        return array.findIndex(n => n.number === num.number && n.location === num.location) === index;
+                    });
 
-                // Look up sailor information
-                const skipperInfo = await lookupSkipperInfo(sailNumber);
-                console.log('Skipper info found:', skipperInfo);
+                // Look up sailor information for each number
+                const sailNumbersWithInfo = await Promise.all(sailNumbers.map(async (num) => {
+                    const skipperInfo = await lookupSkipperInfo(num.number);
+                    return {
+                        ...num,
+                        skipperInfo
+                    };
+                }));
 
+                // Create filename based on found numbers
                 let newFilename;
-                if (skipperInfo && skipperInfo.skipper_name) {
-                    const sanitizedSkipperName = sanitizeFilename(skipperInfo.skipper_name);
-                    newFilename = `${sailNumber}_${sanitizedSkipperName}_${filenameWithoutExt}${fileExtension}`;
+                if (sailNumbersWithInfo.length > 0) {
+                    // Get the highest confidence number with sailor info
+                    const bestMatch = sailNumbersWithInfo.find(n => n.skipperInfo?.skipper_name) || sailNumbersWithInfo[0];
+                    
+                    if (bestMatch.skipperInfo?.skipper_name) {
+                        const sanitizedSkipperName = sanitizeFilename(bestMatch.skipperInfo.skipper_name);
+                        newFilename = `${bestMatch.number}_${sanitizedSkipperName}_${filenameWithoutExt}${fileExtension}`;
+                    } else {
+                        newFilename = `${bestMatch.number}_NONAME_${filenameWithoutExt}${fileExtension}`;
+                    }
                 } else {
-                    newFilename = `${sailNumber}_UNKNOWN_${filenameWithoutExt}${fileExtension}`;
+                    newFilename = `NOSAIL_${filenameWithoutExt}${fileExtension}`;
                 }
 
                 // Save the file
@@ -364,16 +381,9 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                 fileInfo = {
                     originalFilename,
                     newFilename,
-                    sailNumber,
-                    skipperName: skipperInfo?.skipper_name || 'UNKNOWN',
-                    skipperInfo: skipperInfo || null,
-                    matchFound: true,
-                    localPath: saveResult.localPath,
-                    downloadUrl: saveResult.serverPath,
-                    savedLocations: [
-                        { type: 'Local', path: saveResult.localPath },
-                        ...(saveResult.serverPath ? [{ type: 'Server', path: saveResult.serverPath }] : [])
-                    ]
+                    sailNumbers: sailNumbersWithInfo,
+                    matchFound: sailNumbersWithInfo.length > 0,
+                    downloadUrl: saveResult.serverPath
                 };
             } else {
                 // No sail number found
@@ -384,16 +394,9 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                 fileInfo = {
                     originalFilename,
                     newFilename,
-                    sailNumber: null,
-                    skipperName: null,
-                    skipperInfo: null,
+                    sailNumbers: [],
                     matchFound: false,
-                    localPath: saveResult.localPath,
-                    downloadUrl: saveResult.serverPath,
-                    savedLocations: [
-                        { type: 'Local', path: saveResult.localPath },
-                        ...(saveResult.serverPath ? [{ type: 'Server', path: saveResult.serverPath }] : [])
-                    ]
+                    downloadUrl: saveResult.serverPath
                 };
             }
         } catch (fileError) {
@@ -410,15 +413,10 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
         // Send response
         res.json({
             success: true,
-            imageContents: {
-                totalTextItems: analysis.generalDescription.totalItems,
-                description: analysis.generalDescription.description,
-                allTextFound: analysis.generalDescription.allTextFound
-            },
             sailNumbers: {
-                found: analysis.sailNumberAnalysis.found,
-                numbers: analysis.sailNumberAnalysis.numbers,
-                confidence: analysis.sailNumberAnalysis.confidence
+                found: fileInfo.sailNumbers.length > 0,
+                numbers: fileInfo.sailNumbers,
+                totalFound: fileInfo.sailNumbers.length
             },
             fileInfo: fileInfo,
             debug: debugInfo
