@@ -494,9 +494,9 @@
         }
 
         async function processFile(file) {
-            console.log(`Starting to process file: ${file.name}`);
             const resultCard = document.getElementById(`result-${file.name.replace(/[^a-zA-Z0-9]/g, '_')}`);
             const statusDiv = resultCard.querySelector('.processing-status');
+            const contentDiv = resultCard.querySelector('.content');
             
             try {
                 statusDiv.className = 'processing-status status-processing';

@@ -708,15 +708,14 @@ async function processImage(file) {
     const processingSteps = {
         rawText: [],
         sailNumbers: {
-            numbers: [],
-            ignored: []
+            numbers: []
         },
+        processedFiles: [], // Initialize the array
         debug: {
             azureResponse: null,
             processingTime: null,
             databaseLookups: []
-        },
-        generatedFiles: [] // Track all generated files
+        }
     };
 
     try {
@@ -781,8 +780,6 @@ async function processImage(file) {
         }
 
         // After getting sail numbers and looking up sailors
-        const processedFiles = [];
-        
         if (processingSteps.sailNumbers.numbers.length > 0) {
             // Create a copy for each sail number found
             for (const sailData of processingSteps.sailNumbers.numbers) {
@@ -791,7 +788,6 @@ async function processImage(file) {
                     sanitizeForFilename(sailData.skipperInfo.Skipper) : 
                     'NONAME';
                 
-                // Create new filename: sailnumber_skippername_originalname
                 const newFilename = `${sailData.number}_${sailorName}_${file.originalname}`;
                 
                 // Copy the file to new location
@@ -801,7 +797,7 @@ async function processImage(file) {
                 await fs.copyFile(originalPath, newPath);
                 console.log(`Created copy for sail number ${sailData.number}: ${newFilename}`);
                 
-                processedFiles.push({
+                processingSteps.processedFiles.push({
                     originalFilename: file.originalname,
                     newFilename: newFilename,
                     downloadUrl: `/download/${newFilename}`,
@@ -817,7 +813,7 @@ async function processImage(file) {
             
             await fs.copyFile(originalPath, newPath);
             
-            processedFiles.push({
+            processingSteps.processedFiles.push({
                 originalFilename: file.originalname,
                 newFilename: newFilename,
                 downloadUrl: `/download/${newFilename}`,
@@ -829,13 +825,18 @@ async function processImage(file) {
         return {
             success: true,
             sailNumbers: processingSteps.sailNumbers,
-            processedFiles: processedFiles, // Return all generated files
+            processedFiles: processingSteps.processedFiles,
             debug: processingSteps.debug
         };
 
     } catch (err) {
         console.error('Error during scan:', err);
-        throw err;
+        return {
+            success: false,
+            error: err.message,
+            processedFiles: [], // Always include processedFiles array
+            debug: processingSteps.debug
+        };
     }
 }
 
