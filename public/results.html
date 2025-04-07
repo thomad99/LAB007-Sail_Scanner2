@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LAB007-Scan-Results</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .scan-result {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 10px 0;
+            position: relative;
+        }
+        .scan-time {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .sail-number {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #0066cc;
+        }
+        .skipper-name {
+            color: #333;
+            font-size: 1.1em;
+            margin: 5px 0;
+        }
+        .boat-name, .yacht-club {
+            color: #666;
+            margin: 3px 0;
+        }
+        .confidence {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            padding: 5px 10px;
+            border-radius: 3px;
+        }
+        .confidence-high { background: #dff0d8; color: #3c763d; }
+        .confidence-medium { background: #fcf8e3; color: #8a6d3b; }
+        .confidence-low { background: #f2dede; color: #a94442; }
+        .error { color: #a94442; background: #f2dede; padding: 10px; border-radius: 5px; }
+        .no-match { color: #666; font-style: italic; }
+    </style>
+</head>
+<body>
+    <h1>LAB007-Scan-Results</h1>
+    <div id="scanResults"></div>
+
+    <script>
+        async function loadScanResults() {
+            try {
+                console.log('Fetching scan results...');
+                const response = await fetch('/api/scans');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const scans = await response.json();
+                console.log('Received scans:', scans);
+                
+                const resultsDiv = document.getElementById('scanResults');
+                if (!scans || scans.length === 0) {
+                    resultsDiv.innerHTML = '<p>No scan results found</p>';
+                    return;
+                }
+
+                resultsDiv.innerHTML = scans.map(scan => `
+                    <div class="scan-result">
+                        <div class="scan-time">${new Date(scan.scan_time).toLocaleString()}</div>
+                        <div class="sail-number">Sail #${scan.sail_number}</div>
+                        ${scan.skipper_name ? 
+                            `<div class="skipper-name">Skipper: ${scan.skipper_name}</div>` : 
+                            '<div class="no-match">(No Sailor Match)</div>'
+                        }
+                        ${scan.boat_name ? 
+                            `<div class="boat-name">Boat: ${scan.boat_name}</div>` : ''
+                        }
+                        ${scan.yacht_club ? 
+                            `<div class="yacht-club">Club: ${scan.yacht_club}</div>` : ''
+                        }
+                        <div class="confidence ${getConfidenceClass(scan.confidence)}">
+                            ${(scan.confidence * 100).toFixed(1)}%
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                console.error('Error loading scan results:', err);
+                document.getElementById('scanResults').innerHTML = 
+                    `<p class="error">Error loading scan results: ${err.message}</p>`;
+            }
+        }
+
+        function getConfidenceClass(confidence) {
+            if (confidence >= 0.9) return 'confidence-high';
+            if (confidence >= 0.7) return 'confidence-medium';
+            return 'confidence-low';
+        }
+
+        // Load results immediately and then every 30 seconds
+        loadScanResults();
+        setInterval(loadScanResults, 30000);
+    </script>
+</body>
+</html> 

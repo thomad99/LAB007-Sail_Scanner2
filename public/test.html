@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LAB007-Sail-Photo-Scan</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .upload-section {
+            background: #fff;
+            border: 3px solid #0066cc;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .upload-section h2 {
+            margin: 0 0 10px 0;
+            color: #0066cc;
+        }
+        .upload-section p {
+            color: #666;
+            margin: 10px 0;
+        }
+        .upload-section input[type="file"] {
+            display: block;
+            margin: 10px auto;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: #f8f8f8;
+            width: 80%;
+            max-width: 400px;
+        }
+        .upload-section input[type="file"]:hover {
+            background: #f0f0f0;
+            border-color: #0066cc;
+        }
+        #preview {
+            max-width: 100%;
+            margin: 20px 0;
+        }
+        #results {
+            white-space: pre-wrap;
+            font-family: monospace;
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .loading {
+            display: none;
+            color: #666;
+            margin: 10px 0;
+        }
+        .sail-number {
+            background: #e6f3ff;
+            padding: 10px;
+            border-left: 4px solid #0066cc;
+            margin: 10px 0;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .confidence-high {
+            color: #2d8a2d;
+        }
+        .confidence-medium {
+            color: #b37400;
+        }
+        .confidence-low {
+            color: #cc0000;
+        }
+        .sail-number-display {
+            background: #fff;
+            border: 3px solid #0066cc;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .sail-number-display h2 {
+            margin: 0 0 10px 0;
+            color: #0066cc;
+        }
+        
+        .sail-number-value {
+            font-size: 48px;
+            font-weight: bold;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+        
+        .sail-number-confidence {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .confidence-indicator {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            margin-left: 5px;
+        }
+        
+        .top-results-content {
+            font-size: 24px;
+            font-family: monospace;
+            margin: 15px 0;
+            padding: 10px;
+        }
+
+        .top-result-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            margin: 5px 0;
+        }
+
+        .top-result-number {
+            font-size: 32px;
+            font-weight: bold;
+        }
+
+        .top-result-confidence {
+            font-size: 16px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>LAB007-Sail-Photo-Scan</h1>
+    <div class="upload-section">
+        <h2>Upload Sail Photo</h2>
+        <input type="file" id="imageInput" accept="image/*">
+        <p>Select an image to analyze</p>
+    </div>
+
+    <!-- Top results box -->
+    <div id="topResultsBox" class="sail-number-display" style="display: block;">
+        <h2>Top Results</h2>
+        <div class="top-results-content">Awaiting scan...</div>
+    </div>
+
+    <img id="preview" style="display: none;">
+    <div id="loading" class="loading">Analyzing image...</div>
+
+    <div id="results"></div>
+    <div id="sailNumberBox" class="sail-number-display" style="display: none;">
+        <h2>Detected Sail Number</h2>
+        <div class="sail-number-value">--</div>
+        <div class="sail-number-confidence"></div>
+    </div>
+
+    <script>
+        const imageInput = document.getElementById('imageInput');
+        const preview = document.getElementById('preview');
+        const results = document.getElementById('results');
+        const loading = document.getElementById('loading');
+
+        imageInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // Show preview
+            preview.src = URL.createObjectURL(file);
+            preview.style.display = 'block';
+            
+            // Clear previous results and show loading
+            results.textContent = '';
+            loading.style.display = 'block';
+            loading.textContent = 'Uploading image...';
+
+            // Send to Azure
+            const formData = new FormData();
+            formData.append('image', file);
+
+            try {
+                loading.textContent = 'Analyzing with Azure Vision...';
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    if (response.status === 429) {
+                        throw new Error('Rate limit exceeded. Please wait a minute before trying again.');
+                    }
+                    throw new Error(errorData.error || 'Failed to analyze image');
+                }
+
+                const data = await response.json();
+                
+                // Display results
+                results.innerHTML = `
+=== Azure Vision Analysis ===
+Time: ${new Date().toLocaleString()}
+${data.status === 'Succeeded' ? '✅ Analysis Complete' : '⚠️ Analysis Limited'}
+
+=== DETECTED SAIL NUMBERS ===
+${extractSailNumbers(data).message}
+
+=== RAW AZURE ANALYSIS ===
+Raw Text Found:
+${formatTextResults(data.rawText)}
+
+Detected Items:
+${formatDetectedItems(data.detectedItems)}
+
+Processing Info:
+- Processing Time: ${data.processingTime}
+- Status: ${data.status}
+
+=== Complete Azure Response ===
+${JSON.stringify(data.rawResponse, null, 2)}
+                `.trim();
+
+                if (data.status === 'Succeeded') {
+                    const sailNumberBox = document.getElementById('sailNumberBox');
+                    const potentialNumbers = extractSailNumbers(data);
+                    
+                    if (potentialNumbers.bestMatch) {
+                        sailNumberBox.style.display = 'block';
+                        const confidenceClass = getConfidenceClass(potentialNumbers.bestMatch.confidence);
+                        const confidencePercent = (potentialNumbers.bestMatch.confidence * 100).toFixed(1);
+                        
+                        sailNumberBox.innerHTML = `
+                            <h2>Detected Sail Number</h2>
+                            <div class="sail-number-value">${potentialNumbers.bestMatch.number}</div>
+                            <div class="sail-number-confidence">
+                                Confidence: <span class="${confidenceClass}">${confidencePercent}%</span>
+                            </div>
+                        `;
+                    } else {
+                        sailNumberBox.style.display = 'none';
+                    }
+                }
+
+            } catch (err) {
+                results.innerHTML = `
+⚠️ Error: ${err.message}
+
+Note: The free tier of Azure Vision has strict rate limits.
+If you see a rate limit error, please wait about a minute before trying again.
+                `.trim();
+            } finally {
+                loading.style.display = 'none';
+            }
+        });
+
+        function formatTextResults(text) {
+            if (!text || text.length === 0) return 'No text found';
+            return text.map(item => 
+                `• "${item.text}" (${(item.confidence * 100).toFixed(1)}% confident)
+                 Location: ${formatBoundingBox(item.boundingBox)}`
+            ).join('\n');
+        }
+
+        function formatDetectedItems(items) {
+            if (!items || items.length === 0) return 'No items detected';
+            return items.map(item => 
+                `• Type: ${item.type}
+  Text: "${item.text}"
+  Confidence: ${(item.confidence * 100).toFixed(1)}%
+  Location: ${formatBoundingBox(item.boundingBox)}`
+            ).join('\n\n');
+        }
+
+        function formatBoundingBox(box) {
+            if (!box) return 'No location data';
+            return `[${box.join(', ')}]`;
+        }
+
+        function getConfidenceClass(confidence) {
+            if (confidence >= 0.9) return 'confidence-high';
+            if (confidence >= 0.7) return 'confidence-medium';
+            return 'confidence-low';
+        }
+
+        function extractSailNumbers(data) {
+            const potentialNumbers = [];
+            
+            // Process each text item
+            data.rawText.forEach(item => {
+                // Clean the text (convert O to 0, etc)
+                const cleaned = item.text.replace(/[OoIl]/g, '0').replace(/[^0-9]/g, '');
+                
+                // Check if it could be a sail number
+                if (cleaned.length >= 1 && cleaned.length <= 6) {
+                    const num = parseInt(cleaned);
+                    if (num >= 1 && num <= 999999) {
+                        potentialNumbers.push({
+                            number: num,
+                            confidence: item.confidence,
+                            originalText: item.text
+                        });
+                    }
+                }
+            });
+
+            if (potentialNumbers.length === 0) {
+                return {
+                    bestMatch: null,
+                    message: 'No potential sail numbers found'
+                };
+            }
+
+            // Sort and get best match
+            potentialNumbers.sort((a, b) => b.confidence - a.confidence);
+            return {
+                bestMatch: potentialNumbers[0],
+                allNumbers: potentialNumbers,
+                message: formatNumbersMessage(potentialNumbers)
+            };
+        }
+
+        function formatNumbersMessage(numbers) {
+            return `
+All Potential Numbers:
+${numbers.map(num => 
+    `• ${num.number} (${(num.confidence * 100).toFixed(1)}% confident)
+     From text: "${num.originalText}"`
+).join('\n')}
+            `.trim();
+        }
+    </script>
+</body>
+</html> 
