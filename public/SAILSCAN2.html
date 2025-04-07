@@ -238,6 +238,55 @@
             font-size: 14px;
             color: #666;
         }
+        .batch-progress {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .progress-bar {
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #0066cc;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .result-card {
+            position: relative;
+            margin-bottom: 20px;
+        }
+        .processing-status {
+            padding: 8px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        .status-waiting {
+            background: #f8f9fa;
+            color: #6c757d;
+        }
+        .status-processing {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status-complete {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
     </style>
 </head>
 <body>
@@ -292,6 +341,16 @@
         </div>
     </div>
 
+    <div id="batchProgress" class="batch-progress" style="display: none;">
+        <div class="progress-header">
+            <span class="progress-title">Processing Files</span>
+            <span class="progress-count">0/0 files complete</span>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill"></div>
+        </div>
+    </div>
+
     <script>
         const imageInput = document.getElementById('imageInput');
         const preview = document.getElementById('preview');
@@ -308,6 +367,9 @@
         const downloadAllBtn = document.getElementById('downloadAllBtn');
         const resultsContainer = document.querySelector('.results-list');
         let processedFiles = [];
+        const batchProgress = document.getElementById('batchProgress');
+        let totalFiles = 0;
+        let completedFiles = 0;
 
         debugToggle.addEventListener('change', (e) => {
             document.querySelector('.debug-content').style.display = e.target.checked ? 'block' : 'none';
@@ -320,31 +382,57 @@
             const files = Array.from(e.target.files);
             processedFiles = [];
             resultsContainer.innerHTML = '';
+            totalFiles = files.length;
+            completedFiles = 0;
             
             if (files.length > 0) {
                 batchActions.style.display = 'block';
-                batchActions.querySelector('.batch-summary').textContent = 
-                    `Processing ${files.length} file(s)...`;
-            }
+                batchProgress.style.display = 'block';
+                updateBatchProgress();
 
-            for (const file of files) {
-                await processFile(file);
-            }
+                files.forEach(file => {
+                    const resultCard = createResultCard(file);
+                    resultsContainer.appendChild(resultCard);
+                });
 
-            updateBatchSummary();
+                for (const file of files) {
+                    await processFile(file);
+                }
+
+                updateBatchSummary();
+            }
+        }
+
+        function createResultCard(file) {
+            const resultCard = document.createElement('div');
+            resultCard.className = 'result-card';
+            resultCard.id = `result-${file.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+            resultCard.innerHTML = `
+                <h3>${file.name}</h3>
+                <div class="processing-status status-waiting">Waiting to process...</div>
+                <div class="content"></div>
+            `;
+            return resultCard;
+        }
+
+        function updateBatchProgress() {
+            const progressCount = batchProgress.querySelector('.progress-count');
+            const progressFill = batchProgress.querySelector('.progress-fill');
+            const percentage = (completedFiles / totalFiles) * 100;
+            
+            progressCount.textContent = `${completedFiles}/${totalFiles} files complete`;
+            progressFill.style.width = `${percentage}%`;
         }
 
         async function processFile(file) {
-            const resultCard = document.createElement('div');
-            resultCard.className = 'result-card';
-            resultCard.innerHTML = `
-                <h3>Processing: ${file.name}</h3>
-                <div class="processing-status">Analyzing image...</div>
-                <div class="content"></div>
-            `;
-            resultsContainer.appendChild(resultCard);
-
+            console.log(`Starting to process file: ${file.name}`);
+            const resultCard = document.getElementById(`result-${file.name.replace(/[^a-zA-Z0-9]/g, '_')}`);
+            const statusDiv = resultCard.querySelector('.processing-status');
+            
             try {
+                statusDiv.className = 'processing-status status-processing';
+                statusDiv.textContent = 'Analyzing image...';
+
                 const formData = new FormData();
                 formData.append('image', file);
 
@@ -359,9 +447,8 @@
                     throw new Error(data.error || 'Failed to process image');
                 }
 
-                console.log('Server response:', data);
+                console.log(`File processed successfully: ${file.name}`, data);
 
-                // Update result card with findings
                 const content = resultCard.querySelector('.content');
                 
                 if (data.sailNumbers && data.sailNumbers.numbers.length > 0) {
@@ -410,32 +497,55 @@
                     `;
                 }
 
-                resultCard.querySelector('.processing-status').textContent = 'Analysis complete';
+                statusDiv.className = 'processing-status status-complete';
+                statusDiv.textContent = 'Analysis complete';
+                
                 if (data.fileInfo) {
                     processedFiles.push(data.fileInfo);
                 }
 
             } catch (err) {
-                console.error('Error:', err);
-                resultCard.querySelector('.processing-status').textContent = `Error: ${err.message}`;
+                console.error(`Error processing file ${file.name}:`, err);
+                statusDiv.className = 'processing-status status-error';
+                statusDiv.textContent = `Error: ${err.message}`;
                 resultCard.querySelector('.content').innerHTML = `
                     <div class="error-message">
                         Failed to process image. ${err.message}
                     </div>
                 `;
+            } finally {
+                completedFiles++;
+                updateBatchProgress();
+                console.log(`Completed processing file: ${file.name}`);
             }
+
+            await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
         function updateBatchSummary() {
             const summary = batchActions.querySelector('.batch-summary');
-            summary.textContent = `Processed ${processedFiles.length} file(s)`;
+            const successCount = processedFiles.length;
+            const failedCount = totalFiles - successCount;
+            
+            summary.innerHTML = `
+                <div>Processed ${totalFiles} file(s)</div>
+                <div>Success: ${successCount}, Failed: ${failedCount}</div>
+            `;
         }
 
         async function downloadAllFiles() {
-            for (const fileInfo of processedFiles) {
-                await downloadFile(fileInfo.downloadUrl, fileInfo.newFilename);
-                // Small delay between downloads to prevent browser issues
-                await new Promise(resolve => setTimeout(resolve, 500));
+            const downloadBtn = document.getElementById('downloadAllBtn');
+            downloadBtn.disabled = true;
+            downloadBtn.textContent = 'Downloading...';
+
+            try {
+                for (const fileInfo of processedFiles) {
+                    await downloadFile(fileInfo.downloadUrl, fileInfo.newFilename);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            } finally {
+                downloadBtn.disabled = false;
+                downloadBtn.textContent = 'Download All Renamed Files';
             }
         }
 
