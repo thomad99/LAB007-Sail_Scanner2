@@ -154,6 +154,32 @@
             font-size: 16px;
             font-style: italic;
         }
+
+        .file-info {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f5f5f5;
+            border-left: 3px solid #0066cc;
+        }
+
+        .file-info p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+
+        .error {
+            color: #cc0000;
+            padding: 10px;
+            background: #ffe6e6;
+            border-left: 3px solid #cc0000;
+        }
+
+        .confidence {
+            font-size: 12px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-left: 8px;
+        }
     </style>
 </head>
 <body>
@@ -212,59 +238,48 @@
                 });
 
                 if (!response.ok) {
-                    const errorData = await response.json();
-                    if (response.status === 429) {
-                        throw new Error('Rate limit exceeded. Please wait a minute before trying again.');
-                    }
-                    throw new Error(errorData.error || 'Failed to analyze image');
+                    throw new Error(await response.text() || 'Failed to analyze image');
                 }
 
                 const data = await response.json();
-                console.log('Server response:', data);
+                console.log('Received server response:', data);
                 
                 // Update top results box
                 const topResultsBox = document.getElementById('topResultsBox');
-                const potentialNumbers = data.rawText
-                    .map(item => {
-                        const cleaned = item.text.replace(/[OoIl]/g, '0').replace(/[^0-9]/g, '');
-                        return {
-                            number: cleaned,
-                            confidence: item.confidence,
-                            originalText: item.text
-                        };
-                    })
-                    .filter(item => {
-                        const num = parseInt(item.number);
-                        return item.number.length >= 1 && 
-                               item.number.length <= 6 && 
-                               num >= 1 && 
-                               num <= 999999;
-                    })
-                    .sort((a, b) => b.confidence - a.confidence)
-                    .slice(0, 3); // Take top 3 results
+                const topResultsContent = topResultsBox.querySelector('.top-results-content');
+                const skipperInfo = topResultsBox.querySelector('.skipper-info');
 
-                if (potentialNumbers.length > 0) {
-                    topResultsBox.querySelector('.top-results-content').innerHTML = potentialNumbers.map(result => {
-                        console.log('Processing result:', result);
-                        // Find matching skipper info from server response
-                        const matchInfo = data.numbersWithSkippers?.find(n => n.number === result.number);
-                        return `
-                            <div class="top-result-item">
-                                <div class="result-info">
-                                    <span class="top-result-number">${result.number}</span>
-                                    ${matchInfo?.skipperInfo ? 
-                                        `<span class="skipper-info">${matchInfo.skipperInfo.skipper_name || matchInfo.skipperInfo.boat_name || ''}</span>` : 
-                                        '<span class="no-match">(No Sailor Match)</span>'
-                                    }
-                                </div>
-                                <span class="top-result-confidence ${getConfidenceClass(result.confidence)}">
-                                    ${(result.confidence * 100).toFixed(1)}%
+                if (data.sailNumbers && data.sailNumbers.found) {
+                    const numbers = data.sailNumbers.numbers;
+                    topResultsContent.innerHTML = numbers.map(result => `
+                        <div class="top-result-item">
+                            <div class="result-info">
+                                <span class="top-result-number">Sail #${result.number}</span>
+                                <span class="confidence ${getConfidenceClass(result.score)}">
+                                    ${(result.score * 100).toFixed(1)}% confident
                                 </span>
                             </div>
+                        </div>
+                    `).join('');
+
+                    if (data.fileInfo) {
+                        skipperInfo.innerHTML = `
+                            <div class="file-info">
+                                <p>File renamed: ${data.fileInfo.newFilename}</p>
+                                ${data.fileInfo.skipperName ? 
+                                    `<p>Skipper: ${data.fileInfo.skipperName}</p>` : 
+                                    '<p>No skipper information found</p>'}
+                            </div>
                         `;
-                    }).join('');
+                    }
                 } else {
-                    topResultsBox.querySelector('.top-results-content').textContent = 'No numbers detected';
+                    topResultsContent.innerHTML = '<div class="no-match">No sail numbers detected</div>';
+                    skipperInfo.innerHTML = `
+                        <div class="file-info">
+                            <p>File renamed: ${data.fileInfo.newFilename}</p>
+                            <p>No sail numbers found</p>
+                        </div>
+                    `;
                 }
 
                 // Display debug results
@@ -274,10 +289,9 @@ Time: ${new Date().toLocaleString()}
 ${data.status === 'Succeeded' ? '✅ Analysis Complete' : '⚠️ Analysis Limited'}
 
 === DETECTED NUMBERS ===
-${potentialNumbers.map(num => 
-    `• ${num.number} (${(num.confidence * 100).toFixed(1)}% confident)
-     From text: "${num.originalText}"`
-).join('\n')}
+${data.sailNumbers && data.sailNumbers.numbers ? data.sailNumbers.numbers.map(num => 
+    `• ${num.number} (${(num.score * 100).toFixed(1)}% confident)`
+).join('\n') : 'No numbers detected'}
 
 === RAW AZURE ANALYSIS ===
 Raw Text Found:
@@ -294,8 +308,8 @@ Processing Info:
                     
                     if (potentialNumbers.bestMatch) {
                         sailNumberBox.style.display = 'block';
-                        const confidenceClass = getConfidenceClass(potentialNumbers.bestMatch.confidence);
-                        const confidencePercent = (potentialNumbers.bestMatch.confidence * 100).toFixed(1);
+                        const confidenceClass = getConfidenceClass(potentialNumbers.bestMatch.score);
+                        const confidencePercent = (potentialNumbers.bestMatch.score * 100).toFixed(1);
                         
                         sailNumberBox.innerHTML = `
                             <h2>Detected Sail Number</h2>
@@ -310,16 +324,9 @@ Processing Info:
                 }
 
             } catch (err) {
-                // Update top results box to show error
-                const topResultsBox = document.getElementById('topResultsBox');
-                topResultsBox.querySelector('.top-results-content').textContent = 'Error during scan';
-                
-                results.innerHTML = `
-                ⚠️ Error: ${err.message}
-
-                Note: The free tier of Azure Vision has strict rate limits.
-                If you see a rate limit error, please wait about a minute before trying again.
-                `.trim();
+                console.error('Error processing image:', err);
+                topResultsBox.querySelector('.top-results-content').innerHTML = 
+                    `<div class="error">Error: ${err.message}</div>`;
             } finally {
                 loading.style.display = 'none';
             }
@@ -368,7 +375,7 @@ Processing Info:
                     if (num >= 1 && num <= 999999) {
                         potentialNumbers.push({
                             number: num,
-                            confidence: item.confidence,
+                            score: item.confidence,
                             originalText: item.text
                         });
                     }
@@ -383,7 +390,7 @@ Processing Info:
             }
 
             // Sort and get best match
-            potentialNumbers.sort((a, b) => b.confidence - a.confidence);
+            potentialNumbers.sort((a, b) => b.score - a.score);
             return {
                 bestMatch: potentialNumbers[0],
                 allNumbers: potentialNumbers,
@@ -395,7 +402,7 @@ Processing Info:
             return `
 All Potential Numbers:
 ${numbers.map(num => 
-    `• ${num.number} (${(num.confidence * 100).toFixed(1)}% confident)
+    `• ${num.number} (${(num.score * 100).toFixed(1)}% confident)
      From text: "${num.originalText}"`
 ).join('\n')}
             `.trim();

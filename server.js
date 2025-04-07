@@ -4,6 +4,7 @@ const path = require('path');
 const multer = require('multer');
 const { ComputerVisionClient } = require('@azure/cognitiveservices-computervision');
 const { CognitiveServicesCredentials } = require('@azure/ms-rest-azure-js');
+const fs = require('fs');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -129,6 +130,17 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             throw new Error('No image file received');
         }
 
+        const originalFilename = req.file.originalname;
+        const fileExtension = path.extname(originalFilename);
+        const filenameWithoutExt = path.basename(originalFilename, fileExtension);
+
+        console.log('File received:', {
+            originalFilename,
+            extension: fileExtension,
+            size: `${(req.file.size / 1024).toFixed(2)} KB`,
+            type: req.file.mimetype
+        });
+
         // STEP 1: Initial Image Upload
         console.log('Step 1: Image received', {
             size: `${(req.file.size / 1024).toFixed(2)} KB`,
@@ -231,27 +243,132 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             hasSailNumber: analysis.sailNumberAnalysis.found
         });
 
-        res.json({
+        // After processing results, add detailed logging
+        console.log('Processing complete. Analysis results:', {
+            totalTextFound: analysis.generalDescription.allTextFound.length,
+            sailNumbersFound: analysis.sailNumberAnalysis.numbers.length,
+            bestMatch: analysis.sailNumberAnalysis.numbers[0] || 'None'
+        });
+
+        // Get the uploads directory path
+        const uploadsDir = path.join('public', 'uploads');
+        console.log('Creating uploads directory:', uploadsDir);
+        await fs.promises.mkdir(uploadsDir, { recursive: true });
+
+        let newFilename;
+        let fileInfo;
+
+        // If valid sail number and skipper found
+        if (analysis.sailNumberAnalysis.found && analysis.sailNumberAnalysis.numbers.length > 0) {
+            const bestMatch = analysis.sailNumberAnalysis.numbers[0];
+            const sailNumber = bestMatch.number;
+
+            console.log('Found sail number:', sailNumber);
+
+            // Look up sailor information
+            console.log('Looking up skipper info for sail number:', sailNumber);
+            const skipperInfo = await lookupSkipperInfo(sailNumber);
+            console.log('Skipper info result:', skipperInfo);
+            
+            if (skipperInfo && skipperInfo.skipper_name) {
+                // Create new filename with sail number and skipper name
+                const sanitizedSkipperName = sanitizeFilename(skipperInfo.skipper_name);
+                newFilename = `${sailNumber}_${sanitizedSkipperName}_${filenameWithoutExt}${fileExtension}`;
+                console.log('Creating filename with sail number and skipper:', newFilename);
+                
+                fileInfo = {
+                    originalFilename: originalFilename,
+                    newFilename: newFilename,
+                    sailNumber: sailNumber,
+                    skipperName: skipperInfo.skipper_name,
+                    matchFound: true
+                };
+            } else {
+                // Sail number found but no skipper info
+                newFilename = `${bestMatch.number}_UNKNOWN_${filenameWithoutExt}${fileExtension}`;
+                console.log('Creating filename with sail number only:', newFilename);
+                
+                fileInfo = {
+                    originalFilename: originalFilename,
+                    newFilename: newFilename,
+                    sailNumber: bestMatch.number,
+                    skipperName: 'UNKNOWN',
+                    matchFound: false
+                };
+            }
+        } else {
+            // No sail number found
+            newFilename = `NOSAIL_${filenameWithoutExt}${fileExtension}`;
+            console.log('No sail number found, using NOSAIL prefix:', newFilename);
+            
+            fileInfo = {
+                originalFilename: originalFilename,
+                newFilename: newFilename,
+                sailNumber: null,
+                skipperName: null,
+                matchFound: false
+            };
+        }
+
+        // Save the file with its new name
+        const tempFilePath = path.join(uploadsDir, originalFilename);
+        const newFilePath = path.join(uploadsDir, newFilename);
+        
+        console.log('File operations:', {
+            tempPath: tempFilePath,
+            newPath: newFilePath,
+            operation: 'Renaming file'
+        });
+
+        try {
+            // Write the buffer to a file and then rename it
+            await fs.promises.writeFile(tempFilePath, req.file.buffer);
+            console.log('Temporary file written:', tempFilePath);
+            
+            await fs.promises.rename(tempFilePath, newFilePath);
+            console.log('File successfully renamed:', {
+                from: originalFilename,
+                to: newFilename
+            });
+        } catch (fileError) {
+            console.error('Error during file operations:', fileError);
+            throw fileError;
+        }
+
+        // Prepare the response with all necessary information
+        const response = {
             success: true,
-            // A) What's in the image
+            imageContext: {
+                hasSailboat: analysis.sailNumberAnalysis.found,
+                tags: [],
+                objects: []
+            },
             imageContents: {
                 totalTextItems: analysis.generalDescription.totalItems,
                 description: analysis.generalDescription.description,
                 allTextFound: analysis.generalDescription.allTextFound
             },
-            // B) Sail number results
             sailNumbers: {
                 found: analysis.sailNumberAnalysis.found,
                 numbers: analysis.sailNumberAnalysis.numbers,
                 confidence: analysis.sailNumberAnalysis.confidence
             },
-            // Debug info
+            fileInfo: fileInfo,
             debug: {
                 processingTime: `${attempts} seconds`,
                 status: operationResult.status,
                 rawResponse: operationResult.analyzeResult
             }
+        };
+
+        console.log('Sending response to client:', {
+            success: true,
+            sailNumberFound: fileInfo.sailNumber,
+            skipperName: fileInfo.skipperName,
+            newFilename: fileInfo.newFilename
         });
+
+        res.json(response);
 
     } catch (err) {
         console.error('Error during scan:', err);
