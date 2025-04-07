@@ -454,46 +454,47 @@
                 if (data.sailNumbers && data.sailNumbers.numbers.length > 0) {
                     content.innerHTML = `
                         <div class="sail-numbers-list">
-                            ${data.sailNumbers.numbers.map(num => `
-                                <div class="sail-number-item">
-                                    <div class="number">Sail #${num.number}</div>
-                                    <div class="confidence">Confidence: ${(num.confidence * 100).toFixed(1)}%</div>
+                            <h4>Detected Sail Numbers:</h4>
+                            ${data.sailNumbers.numbers.map((num, index) => `
+                                <div class="sail-number-item" style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+                                    <div class="number" style="font-size: 1.2em; font-weight: bold;">
+                                        Sail #${num.number} 
+                                        <span style="font-size: 0.8em; color: #666;">
+                                            (Confidence: ${(num.confidence * 100).toFixed(1)}%)
+                                        </span>
+                                    </div>
                                     ${num.skipperInfo ? `
-                                        <div class="sailor-info">
+                                        <div class="sailor-info" style="margin-top: 5px;">
                                             <strong>Sailor:</strong> ${num.skipperInfo.skipper_name}<br>
                                             <strong>Club:</strong> ${num.skipperInfo.yacht_club || 'N/A'}<br>
                                             <strong>Last Race:</strong> ${num.skipperInfo.Regatta_Date || 'N/A'}
                                         </div>
-                                    ` : '<div class="no-sailor">No sailor information found</div>'}
+                                    ` : '<div class="no-sailor" style="color: #666; margin-top: 5px;">No sailor information found</div>'}
                                 </div>
                             `).join('')}
                         </div>
-                        ${data.fileInfo ? `
-                            <div class="file-info">
-                                <p>Original: ${data.fileInfo.originalFilename}</p>
-                                <p>Renamed to: ${data.fileInfo.newFilename}</p>
-                            </div>
-                            <div class="file-actions">
-                                <button onclick="downloadFile('${data.fileInfo.downloadUrl}', '${data.fileInfo.newFilename}')">
-                                    Download Renamed File
-                                </button>
-                            </div>
-                        ` : ''}
+                        <div class="file-info" style="margin-top: 15px;">
+                            <p><strong>Original:</strong> ${data.fileInfo.originalFilename}</p>
+                            <p><strong>Renamed to:</strong> ${data.fileInfo.newFilename}</p>
+                        </div>
+                        <div class="file-actions" style="margin-top: 10px;">
+                            <button class="btn btn-primary" onclick="downloadFile('${data.fileInfo.downloadUrl}', '${data.fileInfo.newFilename}')">
+                                Download Renamed File
+                            </button>
+                        </div>
                     `;
                 } else {
                     content.innerHTML = `
-                        <div class="no-numbers">No sail numbers detected</div>
-                        ${data.fileInfo ? `
-                            <div class="file-info">
-                                <p>Original: ${data.fileInfo.originalFilename}</p>
-                                <p>Renamed to: ${data.fileInfo.newFilename}</p>
-                            </div>
-                            <div class="file-actions">
-                                <button onclick="downloadFile('${data.fileInfo.downloadUrl}', '${data.fileInfo.newFilename}')">
-                                    Download Renamed File
-                                </button>
-                            </div>
-                        ` : ''}
+                        <div class="no-numbers" style="color: #666;">No sail numbers detected</div>
+                        <div class="file-info" style="margin-top: 15px;">
+                            <p><strong>Original:</strong> ${data.fileInfo.originalFilename}</p>
+                            <p><strong>Renamed to:</strong> ${data.fileInfo.newFilename}</p>
+                        </div>
+                        <div class="file-actions" style="margin-top: 10px;">
+                            <button class="btn btn-primary" onclick="downloadFile('${data.fileInfo.downloadUrl}', '${data.fileInfo.newFilename}')">
+                                Download Renamed File
+                            </button>
+                        </div>
                     `;
                 }
 

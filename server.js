@@ -181,7 +181,15 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             rawText: [],
             potentialNumbers: [],
             validNumbers: [],
-            ignoredNumbers: []
+            ignoredNumbers: [],
+            sailNumbers: {
+                numbers: [],
+                ignored: []
+            },
+            debug: {
+                azureResponse: null,
+                processingTime: null
+            }
         };
 
         // STEP 1: Initial Image Upload
@@ -227,108 +235,51 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
         console.log('Azure processing completed successfully!');
         console.log('Results:', JSON.stringify(operationResult.analyzeResult, null, 2));
 
-        // STEP 4: Process Results
-        let sailNumbersWithInfo = [];
-        let fileInfo = null;
-
-        if (operationResult.analyzeResult && operationResult.analyzeResult.readResults) {
-            const readResults = operationResult.analyzeResult.readResults;
+        processingSteps.debug.azureResponse = operationResult.analyzeResult;
+        
+        // Extract sail numbers from results
+        const foundNumbers = extractSailNumbers(operationResult.analyzeResult);
+        
+        // Sort by confidence but keep all numbers
+        const sortedNumbers = foundNumbers.sort((a, b) => b.confidence - a.confidence);
             
-            // Process text found
-            readResults.forEach((page, pageIndex) => {
-                page.lines.forEach((line, lineIndex) => {
-                    const textItem = {
-                        text: line.text,
-                        confidence: line.confidence,
-                        location: `Line ${lineIndex + 1}`
-                    };
-                    processingSteps.rawText.push(textItem);
-                });
-            });
-
-            // Process numbers
-            const seenNumbers = new Set();
-            
-            processingSteps.rawText.forEach(item => {
-                const cleaned = item.text.replace(/[OoIl]/g, '0').replace(/[^0-9]/g, '');
-                
-                if (cleaned.length >= 1 && cleaned.length <= 6) {
-                    const num = parseInt(cleaned);
-                    if (num >= 1 && num <= 999999) {
-                        // Skip ignored numbers (like 420)
-                        if (IGNORED_NUMBERS.includes(cleaned)) {
-                            processingSteps.ignoredNumbers.push({
-                                number: num,
-                                originalText: item.text,
-                                reason: 'Ignored number (e.g., boat class)'
-                            });
-                            return;
-                        }
-
-                        const isValidSailNumber = validSailNumbers.includes(num);
-                        const numberSeenBefore = seenNumbers.has(num);
-                        seenNumbers.add(num);
-
-                        const numberInfo = {
-                            number: num,
-                            confidence: item.confidence,
-                            originalText: item.text,
-                            location: item.location,
-                            isValidSailNumber: isValidSailNumber,
-                            hasMultipleViews: numberSeenBefore
-                        };
-
-                        processingSteps.potentialNumbers.push(numberInfo);
-                        if (isValidSailNumber || numberSeenBefore) {
-                            processingSteps.validNumbers.push(numberInfo);
-                        }
-                    }
+        processingSteps.sailNumbers.numbers = sortedNumbers;
+        
+        // Look up sailor information for each number
+        for (const num of processingSteps.sailNumbers.numbers) {
+            try {
+                const sailorInfo = await lookupSkipperInfo(num.number);
+                if (sailorInfo) {
+                    num.skipperInfo = sailorInfo;
                 }
-            });
-
-            // Look up sailor information for valid numbers
-            sailNumbersWithInfo = await Promise.all(
-                processingSteps.validNumbers
-                    .sort((a, b) => b.confidence - a.confidence)
-                    .map(async (num) => {
-                        const skipperInfo = await lookupSkipperInfo(num.number);
-                        return {
-                            ...num,
-                            skipperInfo: skipperInfo || null
-                        };
-                    })
-            );
-
-            // Create filename based on found numbers
-            let newFilename;
-            if (sailNumbersWithInfo.length > 0) {
-                // Get the highest confidence number with sailor info
-                const bestMatch = sailNumbersWithInfo.find(n => n.skipperInfo) || sailNumbersWithInfo[0];
-                
-                if (bestMatch.skipperInfo?.skipper_name) {
-                    const sanitizedSkipperName = sanitizeFilename(bestMatch.skipperInfo.skipper_name);
-                    newFilename = `${bestMatch.number}_${sanitizedSkipperName}_${filenameWithoutExt}${fileExtension}`;
-                } else {
-                    newFilename = `${bestMatch.number}_NONAME_${filenameWithoutExt}${fileExtension}`;
-                }
-            } else {
-                newFilename = `NOSAIL_${filenameWithoutExt}${fileExtension}`;
+            } catch (err) {
+                console.error(`Error looking up sailor for number ${num.number}:`, err);
             }
-
-            // Save the file
-            const uploadsDir = path.join('public', 'uploads');
-            await fs.promises.mkdir(uploadsDir, { recursive: true });
-            const newFilePath = path.join(uploadsDir, newFilename);
-            await fs.promises.writeFile(newFilePath, req.file.buffer);
-
-            fileInfo = {
-                originalFilename,
-                newFilename,
-                downloadUrl: `/uploads/${newFilename}`,
-                sailNumbers: sailNumbersWithInfo,
-                matchFound: sailNumbersWithInfo.length > 0
-            };
         }
+
+        // Generate new filename incorporating all sail numbers and sailor names
+        let filenameParts = [];
+        
+        if (processingSteps.sailNumbers.numbers.length > 0) {
+            // Add each sail number and sailor name to the filename
+            for (const sailData of processingSteps.sailNumbers.numbers) {
+                const sailorName = sailData.skipperInfo ? 
+                    sanitizeForFilename(sailData.skipperInfo.skipper_name) : 
+                    'NONAME';
+                filenameParts.push(`${sailData.number}_${sailorName}`);
+            }
+        } else {
+            filenameParts.push('NOSAIL');
+        }
+
+        // Construct the final filename
+        const newFilename = `${filenameParts.join('_')}_${filenameWithoutExt}${fileExtension}`;
+
+        // Save the file
+        const uploadsDir = path.join('public', 'uploads');
+        await fs.promises.mkdir(uploadsDir, { recursive: true });
+        const newFilePath = path.join(uploadsDir, newFilename);
+        await fs.promises.writeFile(newFilePath, req.file.buffer);
 
         // Prepare debug info
         const debugInfo = {
@@ -349,12 +300,12 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
         // Send response
         res.json({
             success: true,
-            sailNumbers: {
-                found: sailNumbersWithInfo.length > 0,
-                numbers: sailNumbersWithInfo,
-                totalFound: sailNumbersWithInfo.length
+            sailNumbers: processingSteps.sailNumbers,
+            fileInfo: {
+                originalFilename,
+                newFilename,
+                downloadUrl: `/uploads/${newFilename}`
             },
-            fileInfo: fileInfo,
             debug: debugInfo
         });
 
@@ -409,25 +360,31 @@ function areLinesNearby(line1, line2) {
     return verticalDistance < averageHeight * 1.5;
 }
 
-// Helper function to extract sail numbers
-function extractSailNumbers(text) {
-    // Remove common OCR mistakes
-    const cleaned = text
-        .replace(/[OoIl]/g, '0') // Replace common letter/number confusions
-        .replace(/[^0-9]/g, ''); // Remove non-numbers
-
-    // Look for number patterns
+// Helper function to extract sail numbers from Azure results
+function extractSailNumbers(azureResults) {
     const numbers = [];
-    let current = '';
     
-    for (let i = 0; i < cleaned.length; i++) {
-        current += cleaned[i];
-        if (current.length >= 2 && current.length <= 6) {
-            numbers.push(current);
+    if (azureResults && azureResults.readResults) {
+        for (const page of azureResults.readResults) {
+            for (const line of page.lines) {
+                // Check if the text matches a sail number pattern (1-6 digits)
+                const text = line.text.trim();
+                if (/^\d{1,6}$/.test(text)) {
+                    numbers.push({
+                        number: text,
+                        confidence: line.words[0].confidence,
+                        boundingBox: line.boundingBox
+                    });
+                }
+            }
         }
     }
-
     return numbers;
+}
+
+// Helper function to create a filename-safe string
+function sanitizeForFilename(str) {
+    return str.replace(/[^a-zA-Z0-9]/g, '');
 }
 
 // Helper function to validate sail numbers
@@ -535,167 +492,6 @@ async function lookupSkipperInfo(sailNumber) {
         return null;
     }
 }
-
-// Update the analyze endpoint
-app.post('/api/analyze', upload.single('image'), async (req, res) => {
-    try {
-        console.log('Starting Azure Vision analysis...');
-        
-        if (!req.file || !req.file.buffer) {
-            throw new Error('No image file received');
-        }
-
-        console.log('Image received:', {
-            size: `${(req.file.size / 1024).toFixed(2)} KB`,
-            type: req.file.mimetype
-        });
-
-        // Send image to Azure
-        console.log('Sending to Azure...');
-        const result = await computerVisionClient.readInStream(
-            req.file.buffer,
-            { language: 'en' }
-        );
-        
-        // Get operation ID
-        const operationId = result.operationLocation.split('/').pop();
-        console.log('Got operation ID:', operationId);
-
-        // Wait 3 seconds before checking result
-        console.log('Waiting 3 seconds before checking result...');
-        await new Promise(resolve => setTimeout(resolve, 3000));
-
-        // Get the result
-        console.log('Checking result...');
-        const operationResult = await computerVisionClient.getReadResult(operationId);
-        
-        console.log('Azure response status:', operationResult.status);
-
-        // Process results
-        const analysis = {
-            rawText: [],
-            detectedItems: []
-        };
-
-        if (operationResult.analyzeResult?.readResults) {
-            operationResult.analyzeResult.readResults.forEach(page => {
-                page.lines.forEach(line => {
-                    // Add raw text
-                    analysis.rawText.push({
-                        text: line.text,
-                        confidence: line.confidence,
-                        boundingBox: line.boundingBox
-                    });
-
-                    // Add detected items (words)
-                    line.words?.forEach(word => {
-                        analysis.detectedItems.push({
-                            type: 'word',
-                            text: word.text,
-                            confidence: word.confidence,
-                            boundingBox: word.boundingBox
-                        });
-                    });
-                });
-            });
-        }
-
-        console.log('Analysis complete:', {
-            textItems: analysis.rawText.length,
-            words: analysis.detectedItems.length
-        });
-
-        // After processing results, before sending response
-        if (analysis.rawText.length > 0) {
-            // Extract potential sail numbers
-            const potentialNumbers = analysis.rawText
-                .map(item => {
-                    const cleaned = item.text.replace(/[OoIl]/g, '0').replace(/[^0-9]/g, '');
-                    return {
-                        number: cleaned,
-                        confidence: item.confidence,
-                        originalText: item.text
-                    };
-                })
-                .filter(item => {
-                    const num = parseInt(item.number);
-                    return item.number.length >= 1 && 
-                           item.number.length <= 6 && 
-                           num >= 1 && 
-                           num <= 999999;
-                })
-                .sort((a, b) => b.confidence - a.confidence);
-
-            if (potentialNumbers.length > 0) {
-                // Look up skipper info for all numbers
-                const lookupPromises = potentialNumbers.map(async (match) => {
-                    const skipperInfo = await lookupSkipperInfo(match.number);
-                    return {
-                        ...match,
-                        skipperInfo
-                    };
-                });
-                
-                const numbersWithSkippers = await Promise.all(lookupPromises);
-                const bestMatch = numbersWithSkippers[0];
-
-                // Store scan result for the best match
-                await pool.query(`
-                    INSERT INTO scan_results 
-                    (sail_number, confidence, raw_text, status, skipper_name, boat_name, yacht_club)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                    [
-                        bestMatch.number,
-                        bestMatch.confidence,
-                        JSON.stringify(analysis.rawText),
-                        operationResult.status,
-                        bestMatch.skipperInfo?.skipper_name || null,
-                        bestMatch.skipperInfo?.boat_name || null,
-                        bestMatch.skipperInfo?.yacht_club || null
-                    ]
-                );
-                console.log('Saved scan result:', {
-                    sailNumber: bestMatch.number,
-                    confidence: bestMatch.confidence,
-                    skipperName: bestMatch.skipperInfo?.skipper_name
-                });
-
-                // Add all skipper info to response
-                res.json({
-                    success: true,
-                    rawText: analysis.rawText,
-                    detectedItems: analysis.detectedItems,
-                    numbersWithSkippers,
-                    bestMatch: {
-                        sailNumber: bestMatch.number,
-                        confidence: bestMatch.confidence
-                    },
-                    processingTime: '3 seconds',
-                    status: operationResult.status,
-                    rawResponse: operationResult.analyzeResult
-                });
-                return;
-            }
-        }
-
-        // If no numbers found, send original response
-        res.json({
-            success: true,
-            rawText: analysis.rawText,
-            detectedItems: analysis.detectedItems,
-            processingTime: '3 seconds',
-            status: operationResult.status,
-            rawResponse: operationResult.analyzeResult
-        });
-
-    } catch (err) {
-        console.error('Analysis error:', err);
-        res.status(500).json({ 
-            error: 'Analysis failed: ' + err.message,
-            details: err.stack
-        });
-    }
-});
 
 // Add route to serve test page
 app.get('/test', (req, res) => {
