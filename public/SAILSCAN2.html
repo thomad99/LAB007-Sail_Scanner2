@@ -24,6 +24,9 @@
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
         .upload-section {
             background: #fff;
@@ -313,6 +316,24 @@
             margin: 10px 0;
             user-select: none;
         }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            margin-top: 40px;
+            background: #f8f9fa;
+            border-top: 1px solid #dee2e6;
+        }
+
+        .footer img {
+            max-height: 100px;
+            width: auto;
+            margin: 0 auto;
+            display: block;
+        }
+
+        .content-wrapper {
+            flex: 1;
+        }
     </style>
 </head>
 <body>
@@ -320,65 +341,71 @@
         <img src="LOGO BLUE.JPEG" alt="LoveSailing Logo" class="logo">
     </div>
 
-    <h1>LAB007-Sail-Photo-Scan</h1>
-    <div class="upload-section">
-        <h2>Upload Sail Photos</h2>
-        <input type="file" id="imageInput" accept="image/*" multiple>
-        <p>Select one or more images to analyze</p>
-    </div>
-
-    <div id="topResultsBox" class="sail-number-display">
-        <h2>Results</h2>
-        <div class="results-list"></div>
-    </div>
-
-    <div id="batchActions" class="batch-actions" style="display: none;">
-        <button id="downloadAllBtn" class="download-all-btn">Download All Renamed Files</button>
-        <div class="batch-summary"></div>
-    </div>
-
-    <img id="preview" style="display: none;">
-    <div id="loading" class="loading">Analyzing image...</div>
-
-    <div id="results"></div>
-    <div id="sailNumberBox" class="sail-number-display" style="display: none;">
-        <h2>Detected Sail Number</h2>
-        <div class="sail-number-value">--</div>
-        <div class="sail-number-confidence"></div>
-    </div>
-
-    <div id="debugPanel" class="debug-panel">
-        <div class="debug-header">
-            <h3>Debug Information</h3>
-            <label>
-                <input type="checkbox" id="debugToggle" checked> Show Debug Info
-            </label>
+    <div class="content-wrapper">
+        <h1>LAB007-Sail-Photo-Scan</h1>
+        <div class="upload-section">
+            <h2>Upload Sail Photos</h2>
+            <input type="file" id="imageInput" accept="image/*" multiple>
+            <p>Select one or more images to analyze</p>
         </div>
-        <div class="debug-content">
-            <div class="debug-section">
-                <h4>Azure Vision Processing Status</h4>
-                <div id="processingStatus" class="processing-status">Waiting to start...</div>
-                <pre id="azureDebug">Waiting for scan...</pre>
+
+        <div id="topResultsBox" class="sail-number-display">
+            <h2>Results</h2>
+            <div class="results-list"></div>
+        </div>
+
+        <div id="batchActions" class="batch-actions" style="display: none;">
+            <button id="downloadAllBtn" class="download-all-btn">Download All Renamed Files</button>
+            <div class="batch-summary"></div>
+        </div>
+
+        <img id="preview" style="display: none;">
+        <div id="loading" class="loading">Analyzing image...</div>
+
+        <div id="results"></div>
+        <div id="sailNumberBox" class="sail-number-display" style="display: none;">
+            <h2>Detected Sail Number</h2>
+            <div class="sail-number-value">--</div>
+            <div class="sail-number-confidence"></div>
+        </div>
+
+        <div id="debugPanel" class="debug-panel">
+            <div class="debug-header">
+                <h3>Debug Information</h3>
+                <label>
+                    <input type="checkbox" id="debugToggle" checked> Show Debug Info
+                </label>
             </div>
-            <div class="debug-section">
-                <h4>Raw Text Detected</h4>
-                <pre id="rawTextDebug">Waiting for scan...</pre>
+            <div class="debug-content">
+                <div class="debug-section">
+                    <h4>Azure Vision Processing Status</h4>
+                    <div id="processingStatus" class="processing-status">Waiting to start...</div>
+                    <pre id="azureDebug">Waiting for scan...</pre>
+                </div>
+                <div class="debug-section">
+                    <h4>Raw Text Detected</h4>
+                    <pre id="rawTextDebug">Waiting for scan...</pre>
+                </div>
+                <div class="debug-section">
+                    <h4>Number Processing</h4>
+                    <pre id="numberDebug">Waiting for scan...</pre>
+                </div>
             </div>
-            <div class="debug-section">
-                <h4>Number Processing</h4>
-                <pre id="numberDebug">Waiting for scan...</pre>
+        </div>
+
+        <div id="batchProgress" class="batch-progress" style="display: none;">
+            <div class="progress-header">
+                <span class="progress-title">Processing Files</span>
+                <span class="progress-count">0/0 files complete</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill"></div>
             </div>
         </div>
     </div>
 
-    <div id="batchProgress" class="batch-progress" style="display: none;">
-        <div class="progress-header">
-            <span class="progress-title">Processing Files</span>
-            <span class="progress-count">0/0 files complete</span>
-        </div>
-        <div class="progress-bar">
-            <div class="progress-fill"></div>
-        </div>
+    <div class="footer">
+        <img src="LAB007-FOOTER.JPEG" alt="LAB007 Footer">
     </div>
 
     <script>
