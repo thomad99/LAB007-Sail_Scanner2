@@ -251,130 +251,84 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             bestMatch: analysis.sailNumberAnalysis.numbers[0] || 'None'
         });
 
-        // Get the uploads directory path
-        const uploadsDir = path.join('public', 'uploads');
-        console.log('Creating uploads directory:', uploadsDir);
+        // Process the results and prepare file operations
+        let fileInfo = null;
+        let bestMatch = null;
 
         try {
+            // Get the uploads directory path
+            const uploadsDir = path.join('public', 'uploads');
+            console.log('Creating uploads directory:', uploadsDir);
             await fs.promises.mkdir(uploadsDir, { recursive: true });
-            console.log('Uploads directory created/verified');
 
             const originalFilename = req.file.originalname;
             const fileExtension = path.extname(originalFilename);
             const filenameWithoutExt = path.basename(originalFilename, fileExtension);
-            
-            // Determine new filename based on sail number detection
-            let newFilename;
-            if (analysis.sailNumberAnalysis.found && analysis.sailNumberAnalysis.numbers.length > 0) {
-                const bestMatch = analysis.sailNumberAnalysis.numbers[0];
-                const sailNumber = bestMatch.number;
 
-                console.log('Found sail number:', sailNumber);
+            // Find best match from detected numbers
+            if (analysis.sailNumberAnalysis.numbers.length > 0) {
+                bestMatch = analysis.sailNumberAnalysis.numbers[0];
+                const skipperInfo = await lookupSkipperInfo(bestMatch.number);
+                console.log('Best match found:', { number: bestMatch.number, skipperInfo });
 
-                // Look up sailor information
-                console.log('Looking up skipper info for sail number:', sailNumber);
-                const skipperInfo = await lookupSkipperInfo(sailNumber);
-                console.log('Skipper info result:', skipperInfo);
-                
+                // Create new filename
+                let newFilename;
                 if (skipperInfo && skipperInfo.skipper_name) {
-                    // Create new filename with sail number and skipper name
-                    const sanitizedSkipperName = sanitizeFilename(skipperInfo.skipper_name);
-                    newFilename = `${sailNumber}_${sanitizedSkipperName}_${filenameWithoutExt}${fileExtension}`;
-                    console.log('Creating filename with sail number and skipper:', newFilename);
-                    
-                    // Save the file with new name
-                    const newFilePath = path.join(uploadsDir, newFilename);
-                    await fs.promises.writeFile(newFilePath, req.file.buffer);
-                    console.log('File saved with new name:', newFilePath);
-
-                    // Add file info to response
-                    fileInfo = {
-                        originalFilename: originalFilename,
-                        newFilename: newFilename,
-                        sailNumber: sailNumber,
-                        skipperName: skipperInfo.skipper_name,
-                        matchFound: true,
-                        path: `/uploads/${newFilename}` // URL path to access the file
-                    };
+                    const sanitizedSkipperName = skipperInfo.skipper_name.replace(/[^a-zA-Z0-9]/g, '_');
+                    newFilename = `${bestMatch.number}_${sanitizedSkipperName}_${filenameWithoutExt}${fileExtension}`;
                 } else {
-                    // Sail number found but no skipper info
                     newFilename = `${bestMatch.number}_UNKNOWN_${filenameWithoutExt}${fileExtension}`;
-                    console.log('Creating filename with sail number only:', newFilename);
-                    
-                    // Save the file with new name
-                    const newFilePath = path.join(uploadsDir, newFilename);
-                    await fs.promises.writeFile(newFilePath, req.file.buffer);
-                    console.log('File saved with new name:', newFilePath);
-
-                    // Add file info to response
-                    fileInfo = {
-                        originalFilename: originalFilename,
-                        newFilename: newFilename,
-                        sailNumber: bestMatch.number,
-                        skipperName: 'UNKNOWN',
-                        matchFound: false,
-                        path: `/uploads/${newFilename}` // URL path to access the file
-                    };
                 }
+
+                // Save the file
+                const newFilePath = path.join(uploadsDir, newFilename);
+                console.log('Saving file as:', newFilename);
+                await fs.promises.writeFile(newFilePath, req.file.buffer);
+
+                fileInfo = {
+                    originalFilename,
+                    newFilename,
+                    sailNumber: bestMatch.number,
+                    skipperName: skipperInfo?.skipper_name || 'UNKNOWN',
+                    matchFound: true
+                };
             } else {
                 // No sail number found
-                newFilename = `NOSAIL_${filenameWithoutExt}${fileExtension}`;
-                console.log('No sail number found, using NOSAIL prefix:', newFilename);
-                
-                // Save the file with new name
+                const newFilename = `NOSAIL_${filenameWithoutExt}${fileExtension}`;
                 const newFilePath = path.join(uploadsDir, newFilename);
+                console.log('No sail number found. Saving file as:', newFilename);
                 await fs.promises.writeFile(newFilePath, req.file.buffer);
-                console.log('File saved with new name:', newFilePath);
 
-                // Add file info to response
                 fileInfo = {
-                    originalFilename: originalFilename,
-                    newFilename: newFilename,
+                    originalFilename,
+                    newFilename,
                     sailNumber: null,
                     skipperName: null,
-                    matchFound: false,
-                    path: `/uploads/${newFilename}` // URL path to access the file
+                    matchFound: false
                 };
             }
         } catch (fileError) {
             console.error('Error handling file:', fileError);
-            // Continue with response even if file operations fail
         }
 
-        // Prepare the response with all necessary information
-        const response = {
+        // Send the response
+        res.json({
             success: true,
-            imageContext: {
-                hasSailboat: analysis.sailNumberAnalysis.found,
-                tags: [],
-                objects: []
-            },
-            imageContents: {
-                totalTextItems: analysis.generalDescription.totalItems,
-                description: analysis.generalDescription.description,
-                allTextFound: analysis.generalDescription.allTextFound
-            },
             sailNumbers: {
                 found: analysis.sailNumberAnalysis.found,
-                numbers: analysis.sailNumberAnalysis.numbers,
-                confidence: analysis.sailNumberAnalysis.confidence
+                numbers: analysis.sailNumberAnalysis.numbers.map(num => ({
+                    number: num.number,
+                    confidence: num.confidence,
+                    score: num.score || num.confidence,
+                    originalText: num.originalText
+                }))
             },
             fileInfo: fileInfo,
             debug: {
                 processingTime: `${attempts} seconds`,
-                status: operationResult.status,
-                rawResponse: operationResult.analyzeResult
+                status: operationResult.status
             }
-        };
-
-        console.log('Sending response to client:', {
-            success: true,
-            sailNumberFound: fileInfo.sailNumber,
-            skipperName: fileInfo.skipperName,
-            newFilename: fileInfo.newFilename
         });
-
-        res.json(response);
 
     } catch (err) {
         console.error('Error during scan:', err);

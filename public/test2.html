@@ -194,6 +194,54 @@
             background: #e6f3ff;
             border-radius: 5px;
         }
+
+        .results-container {
+            padding: 15px;
+        }
+
+        .result-item {
+            background: #f5f5f5;
+            padding: 10px;
+            margin: 5px 0;
+            border-left: 3px solid #0066cc;
+        }
+
+        .number {
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+
+        .confidence {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .file-info {
+            margin-top: 15px;
+            padding: 10px;
+            background: #e6f3ff;
+            border-radius: 5px;
+        }
+
+        .skipper {
+            color: #0066cc;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+
+        .loading {
+            color: #666;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .no-results {
+            color: #666;
+            text-align: center;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body>
@@ -224,7 +272,8 @@
     <script>
         const imageInput = document.getElementById('imageInput');
         const preview = document.getElementById('preview');
-        const results = document.getElementById('results');
+        const topResultsBox = document.getElementById('topResultsBox');
+        const topResultsContent = topResultsBox.querySelector('.top-results-content');
         const loading = document.getElementById('loading');
 
         imageInput.addEventListener('change', async (e) => {
@@ -235,16 +284,16 @@
             preview.src = URL.createObjectURL(file);
             preview.style.display = 'block';
             
-            // Clear previous results and show loading
-            topResultsContent.innerHTML = 'Analyzing image...';
+            // Show loading state
+            topResultsContent.innerHTML = '<div class="loading">Analyzing image...</div>';
             loading.style.display = 'block';
 
-            // Send to Azure
-            const formData = new FormData();
-            formData.append('image', file);
-
             try {
-                const response = await fetch('/api/analyze', {
+                // Send to server
+                const formData = new FormData();
+                formData.append('image', file);
+
+                const response = await fetch('/api/scan', {
                     method: 'POST',
                     body: formData
                 });
@@ -254,29 +303,44 @@
                 }
 
                 const data = await response.json();
-                console.log('Received data:', data);
+                console.log('Server response:', data);
 
-                // Update top results box
+                // Update results display
                 let resultsHtml = '';
 
-                if (data.sailNumbers && data.sailNumbers.numbers.length > 0) {
-                    resultsHtml = data.sailNumbers.numbers.map(number => `
-                        <div class="result-item">
-                            <div>Sail Number: ${number.number}</div>
-                            <div>Confidence: ${(number.score * 100).toFixed(1)}%</div>
-                        </div>
-                    `).join('');
-
-                    if (data.fileInfo) {
-                        resultsHtml += `
-                            <div class="file-info">
-                                <div>Original file: ${data.fileInfo.originalFilename}</div>
-                                <div>Renamed to: ${data.fileInfo.newFilename}</div>
+                if (data.sailNumbers.found) {
+                    resultsHtml = `
+                        <div class="results-container">
+                            <div class="sail-numbers">
+                                ${data.sailNumbers.numbers.map(num => `
+                                    <div class="result-item">
+                                        <div class="number">Sail #${num.number}</div>
+                                        <div class="confidence">Confidence: ${(num.score * 100).toFixed(1)}%</div>
+                                    </div>
+                                `).join('')}
                             </div>
-                        `;
-                    }
+                            ${data.fileInfo ? `
+                                <div class="file-info">
+                                    <div class="original">Original: ${data.fileInfo.originalFilename}</div>
+                                    <div class="renamed">Renamed to: ${data.fileInfo.newFilename}</div>
+                                    ${data.fileInfo.skipperName ? `
+                                        <div class="skipper">Skipper: ${data.fileInfo.skipperName}</div>
+                                    ` : ''}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
                 } else {
-                    resultsHtml = '<div class="result-item">No sail numbers detected</div>';
+                    resultsHtml = `
+                        <div class="no-results">
+                            No sail numbers detected
+                            ${data.fileInfo ? `
+                                <div class="file-info">
+                                    File saved as: ${data.fileInfo.newFilename}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
                 }
 
                 topResultsContent.innerHTML = resultsHtml;
@@ -284,7 +348,7 @@
             } catch (err) {
                 console.error('Error:', err);
                 topResultsContent.innerHTML = `
-                    <div class="result-item" style="border-left-color: #cc0000">
+                    <div class="error">
                         Error: ${err.message}
                     </div>
                 `;
