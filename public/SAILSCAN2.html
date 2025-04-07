@@ -402,10 +402,36 @@
                 <div class="progress-fill"></div>
             </div>
         </div>
+
+        <div class="results-container">
+            <!-- Sail numbers and file listings here -->
+
+            <!-- Always show the Download All section -->
+            <div class="batch-download" style="
+                margin-top: 30px;
+                padding: 20px;
+                background: #f8f9fa;
+                border-radius: 8px;
+                text-align: center;
+                border: 1px solid #dee2e6;
+            ">
+                <button onclick="downloadAllFiles()" 
+                        class="btn btn-success btn-lg"
+                        style="padding: 15px 40px; font-size: 1.2em;">
+                    Download All Renamed Files
+                </button>
+                <div class="processed-count" style="margin-top: 10px; color: #666;">
+                    Processed ${data.processedFiles.length} file(s)
+                    ${data.processedFiles.length > 0 ? 
+                        `<br>Success: ${data.processedFiles.length}, Failed: 0` : 
+                        '<br>Success: 0, Failed: 1'}
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="footer">
-        <img src="LAB007-FOOTER.JPEG" alt="LAB007 Footer">
+        <img src="LAB007-FOOTER.jpeg" alt="LAB007 Footer">
     </div>
 
     <script>
@@ -638,18 +664,26 @@
         }
 
         async function downloadAllFiles() {
-            const downloadBtn = document.getElementById('downloadAllBtn');
-            downloadBtn.disabled = true;
-            downloadBtn.textContent = 'Downloading...';
-
+            const downloadButton = document.querySelector('.batch-download button');
+            const originalText = downloadButton.textContent;
+            
             try {
-                for (const fileInfo of processedFiles) {
-                    await downloadFile(fileInfo.downloadUrl, fileInfo.newFilename);
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                downloadButton.disabled = true;
+                downloadButton.textContent = 'Downloading...';
+                
+                const response = await fetch('/api/download-all');
+                const files = await response.json();
+                
+                for (const file of files.processedFiles) {
+                    await downloadFile(file.downloadUrl, file.newFilename);
+                    // Add small delay between downloads
+                    await new Promise(resolve => setTimeout(resolve, 500));
                 }
+            } catch (err) {
+                console.error('Download error:', err);
             } finally {
-                downloadBtn.disabled = false;
-                downloadBtn.textContent = 'Download All Renamed Files';
+                downloadButton.disabled = false;
+                downloadButton.textContent = originalText;
             }
         }
 
