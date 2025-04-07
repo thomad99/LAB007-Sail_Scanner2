@@ -44,6 +44,7 @@ pool.connect()
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
 // Define multer storage configurations
 const trainUpload = multer({ 
@@ -253,86 +254,91 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
         // Get the uploads directory path
         const uploadsDir = path.join('public', 'uploads');
         console.log('Creating uploads directory:', uploadsDir);
-        await fs.promises.mkdir(uploadsDir, { recursive: true });
-
-        let newFilename;
-        let fileInfo;
-
-        // If valid sail number and skipper found
-        if (analysis.sailNumberAnalysis.found && analysis.sailNumberAnalysis.numbers.length > 0) {
-            const bestMatch = analysis.sailNumberAnalysis.numbers[0];
-            const sailNumber = bestMatch.number;
-
-            console.log('Found sail number:', sailNumber);
-
-            // Look up sailor information
-            console.log('Looking up skipper info for sail number:', sailNumber);
-            const skipperInfo = await lookupSkipperInfo(sailNumber);
-            console.log('Skipper info result:', skipperInfo);
-            
-            if (skipperInfo && skipperInfo.skipper_name) {
-                // Create new filename with sail number and skipper name
-                const sanitizedSkipperName = sanitizeFilename(skipperInfo.skipper_name);
-                newFilename = `${sailNumber}_${sanitizedSkipperName}_${filenameWithoutExt}${fileExtension}`;
-                console.log('Creating filename with sail number and skipper:', newFilename);
-                
-                fileInfo = {
-                    originalFilename: originalFilename,
-                    newFilename: newFilename,
-                    sailNumber: sailNumber,
-                    skipperName: skipperInfo.skipper_name,
-                    matchFound: true
-                };
-            } else {
-                // Sail number found but no skipper info
-                newFilename = `${bestMatch.number}_UNKNOWN_${filenameWithoutExt}${fileExtension}`;
-                console.log('Creating filename with sail number only:', newFilename);
-                
-                fileInfo = {
-                    originalFilename: originalFilename,
-                    newFilename: newFilename,
-                    sailNumber: bestMatch.number,
-                    skipperName: 'UNKNOWN',
-                    matchFound: false
-                };
-            }
-        } else {
-            // No sail number found
-            newFilename = `NOSAIL_${filenameWithoutExt}${fileExtension}`;
-            console.log('No sail number found, using NOSAIL prefix:', newFilename);
-            
-            fileInfo = {
-                originalFilename: originalFilename,
-                newFilename: newFilename,
-                sailNumber: null,
-                skipperName: null,
-                matchFound: false
-            };
-        }
-
-        // Save the file with its new name
-        const tempFilePath = path.join(uploadsDir, originalFilename);
-        const newFilePath = path.join(uploadsDir, newFilename);
-        
-        console.log('File operations:', {
-            tempPath: tempFilePath,
-            newPath: newFilePath,
-            operation: 'Renaming file'
-        });
 
         try {
-            // Write the buffer to a file and then rename it
-            await fs.promises.writeFile(tempFilePath, req.file.buffer);
-            console.log('Temporary file written:', tempFilePath);
+            await fs.promises.mkdir(uploadsDir, { recursive: true });
+            console.log('Uploads directory created/verified');
+
+            const originalFilename = req.file.originalname;
+            const fileExtension = path.extname(originalFilename);
+            const filenameWithoutExt = path.basename(originalFilename, fileExtension);
             
-            await fs.promises.rename(tempFilePath, newFilePath);
-            console.log('File successfully renamed:', {
-                from: originalFilename,
-                to: newFilename
-            });
+            // Determine new filename based on sail number detection
+            let newFilename;
+            if (analysis.sailNumberAnalysis.found && analysis.sailNumberAnalysis.numbers.length > 0) {
+                const bestMatch = analysis.sailNumberAnalysis.numbers[0];
+                const sailNumber = bestMatch.number;
+
+                console.log('Found sail number:', sailNumber);
+
+                // Look up sailor information
+                console.log('Looking up skipper info for sail number:', sailNumber);
+                const skipperInfo = await lookupSkipperInfo(sailNumber);
+                console.log('Skipper info result:', skipperInfo);
+                
+                if (skipperInfo && skipperInfo.skipper_name) {
+                    // Create new filename with sail number and skipper name
+                    const sanitizedSkipperName = sanitizeFilename(skipperInfo.skipper_name);
+                    newFilename = `${sailNumber}_${sanitizedSkipperName}_${filenameWithoutExt}${fileExtension}`;
+                    console.log('Creating filename with sail number and skipper:', newFilename);
+                    
+                    // Save the file with new name
+                    const newFilePath = path.join(uploadsDir, newFilename);
+                    await fs.promises.writeFile(newFilePath, req.file.buffer);
+                    console.log('File saved with new name:', newFilePath);
+
+                    // Add file info to response
+                    fileInfo = {
+                        originalFilename: originalFilename,
+                        newFilename: newFilename,
+                        sailNumber: sailNumber,
+                        skipperName: skipperInfo.skipper_name,
+                        matchFound: true,
+                        path: `/uploads/${newFilename}` // URL path to access the file
+                    };
+                } else {
+                    // Sail number found but no skipper info
+                    newFilename = `${bestMatch.number}_UNKNOWN_${filenameWithoutExt}${fileExtension}`;
+                    console.log('Creating filename with sail number only:', newFilename);
+                    
+                    // Save the file with new name
+                    const newFilePath = path.join(uploadsDir, newFilename);
+                    await fs.promises.writeFile(newFilePath, req.file.buffer);
+                    console.log('File saved with new name:', newFilePath);
+
+                    // Add file info to response
+                    fileInfo = {
+                        originalFilename: originalFilename,
+                        newFilename: newFilename,
+                        sailNumber: bestMatch.number,
+                        skipperName: 'UNKNOWN',
+                        matchFound: false,
+                        path: `/uploads/${newFilename}` // URL path to access the file
+                    };
+                }
+            } else {
+                // No sail number found
+                newFilename = `NOSAIL_${filenameWithoutExt}${fileExtension}`;
+                console.log('No sail number found, using NOSAIL prefix:', newFilename);
+                
+                // Save the file with new name
+                const newFilePath = path.join(uploadsDir, newFilename);
+                await fs.promises.writeFile(newFilePath, req.file.buffer);
+                console.log('File saved with new name:', newFilePath);
+
+                // Add file info to response
+                fileInfo = {
+                    originalFilename: originalFilename,
+                    newFilename: newFilename,
+                    sailNumber: null,
+                    skipperName: null,
+                    matchFound: false,
+                    path: `/uploads/${newFilename}` // URL path to access the file
+                };
+            }
         } catch (fileError) {
-            console.error('Error during file operations:', fileError);
-            throw fileError;
+            console.error('Error handling file:', fileError);
+            // Continue with response even if file operations fail
         }
 
         // Prepare the response with all necessary information

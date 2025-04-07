@@ -180,6 +180,20 @@
             border-radius: 3px;
             margin-left: 8px;
         }
+
+        .result-item {
+            padding: 10px;
+            margin: 5px 0;
+            background: #f5f5f5;
+            border-left: 3px solid #0066cc;
+        }
+
+        .file-info {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e6f3ff;
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body>
@@ -222,111 +236,58 @@
             preview.style.display = 'block';
             
             // Clear previous results and show loading
-            results.textContent = '';
+            topResultsContent.innerHTML = 'Analyzing image...';
             loading.style.display = 'block';
-            loading.textContent = 'Uploading image...';
 
             // Send to Azure
             const formData = new FormData();
             formData.append('image', file);
 
             try {
-                loading.textContent = 'Analyzing with Azure Vision...';
                 const response = await fetch('/api/analyze', {
                     method: 'POST',
                     body: formData
                 });
 
                 if (!response.ok) {
-                    throw new Error(await response.text() || 'Failed to analyze image');
+                    throw new Error(await response.text());
                 }
 
                 const data = await response.json();
-                console.log('Received server response:', data);
-                
-                // Update top results box
-                const topResultsBox = document.getElementById('topResultsBox');
-                const topResultsContent = topResultsBox.querySelector('.top-results-content');
-                const skipperInfo = topResultsBox.querySelector('.skipper-info');
+                console.log('Received data:', data);
 
-                if (data.sailNumbers && data.sailNumbers.found) {
-                    const numbers = data.sailNumbers.numbers;
-                    topResultsContent.innerHTML = numbers.map(result => `
-                        <div class="top-result-item">
-                            <div class="result-info">
-                                <span class="top-result-number">Sail #${result.number}</span>
-                                <span class="confidence ${getConfidenceClass(result.score)}">
-                                    ${(result.score * 100).toFixed(1)}% confident
-                                </span>
-                            </div>
+                // Update top results box
+                let resultsHtml = '';
+
+                if (data.sailNumbers && data.sailNumbers.numbers.length > 0) {
+                    resultsHtml = data.sailNumbers.numbers.map(number => `
+                        <div class="result-item">
+                            <div>Sail Number: ${number.number}</div>
+                            <div>Confidence: ${(number.score * 100).toFixed(1)}%</div>
                         </div>
                     `).join('');
 
                     if (data.fileInfo) {
-                        skipperInfo.innerHTML = `
+                        resultsHtml += `
                             <div class="file-info">
-                                <p>File renamed: ${data.fileInfo.newFilename}</p>
-                                ${data.fileInfo.skipperName ? 
-                                    `<p>Skipper: ${data.fileInfo.skipperName}</p>` : 
-                                    '<p>No skipper information found</p>'}
+                                <div>Original file: ${data.fileInfo.originalFilename}</div>
+                                <div>Renamed to: ${data.fileInfo.newFilename}</div>
                             </div>
                         `;
                     }
                 } else {
-                    topResultsContent.innerHTML = '<div class="no-match">No sail numbers detected</div>';
-                    skipperInfo.innerHTML = `
-                        <div class="file-info">
-                            <p>File renamed: ${data.fileInfo.newFilename}</p>
-                            <p>No sail numbers found</p>
-                        </div>
-                    `;
+                    resultsHtml = '<div class="result-item">No sail numbers detected</div>';
                 }
 
-                // Display debug results
-                results.innerHTML = `
-=== Azure Vision Analysis ===
-Time: ${new Date().toLocaleString()}
-${data.status === 'Succeeded' ? '✅ Analysis Complete' : '⚠️ Analysis Limited'}
-
-=== DETECTED NUMBERS ===
-${data.sailNumbers && data.sailNumbers.numbers ? data.sailNumbers.numbers.map(num => 
-    `• ${num.number} (${(num.score * 100).toFixed(1)}% confident)`
-).join('\n') : 'No numbers detected'}
-
-=== RAW AZURE ANALYSIS ===
-Raw Text Found:
-${formatTextResults(data.rawText)}
-
-Processing Info:
-- Processing Time: ${data.processingTime}
-- Status: ${data.status}
-                `.trim();
-
-                if (data.status === 'Succeeded') {
-                    const sailNumberBox = document.getElementById('sailNumberBox');
-                    const potentialNumbers = extractSailNumbers(data);
-                    
-                    if (potentialNumbers.bestMatch) {
-                        sailNumberBox.style.display = 'block';
-                        const confidenceClass = getConfidenceClass(potentialNumbers.bestMatch.score);
-                        const confidencePercent = (potentialNumbers.bestMatch.score * 100).toFixed(1);
-                        
-                        sailNumberBox.innerHTML = `
-                            <h2>Detected Sail Number</h2>
-                            <div class="sail-number-value">${potentialNumbers.bestMatch.number}</div>
-                            <div class="sail-number-confidence">
-                                Confidence: <span class="${confidenceClass}">${confidencePercent}%</span>
-                            </div>
-                        `;
-                    } else {
-                        sailNumberBox.style.display = 'none';
-                    }
-                }
+                topResultsContent.innerHTML = resultsHtml;
 
             } catch (err) {
-                console.error('Error processing image:', err);
-                topResultsBox.querySelector('.top-results-content').innerHTML = 
-                    `<div class="error">Error: ${err.message}</div>`;
+                console.error('Error:', err);
+                topResultsContent.innerHTML = `
+                    <div class="result-item" style="border-left-color: #cc0000">
+                        Error: ${err.message}
+                    </div>
+                `;
             } finally {
                 loading.style.display = 'none';
             }
