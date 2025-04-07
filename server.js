@@ -824,8 +824,10 @@ async function processImage(file) {
 
         return {
             success: true,
-            sailNumbers: processingSteps.sailNumbers,
-            processedFiles: processingSteps.processedFiles,
+            sailNumbers: {
+                numbers: processingSteps.sailNumbers.numbers // Array of sail numbers with skipper info
+            },
+            processedFiles: processingSteps.processedFiles, // Array of generated files
             debug: processingSteps.debug
         };
 

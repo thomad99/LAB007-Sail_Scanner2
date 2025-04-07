@@ -13,15 +13,10 @@
         }
 
         .logo {
-            max-height: 100px;
-            margin-bottom: 15px;
-        }
-
-        .header h1 {
-            color: #0066cc;
-            margin: 0;
-            font-size: 24px;
-            font-weight: bold;
+            max-height: 200px;
+            width: auto;
+            margin: 0 auto;
+            display: block;
         }
 
         body {
@@ -323,7 +318,6 @@
 <body>
     <div class="header">
         <img src="LOGO BLUE.JPEG" alt="LoveSailing Logo" class="logo">
-        <h1>LAB007 - LOVESAILING PHOTO SCANNER</h1>
     </div>
 
     <h1>LAB007-Sail-Photo-Scan</h1>
@@ -511,45 +505,59 @@
                 });
 
                 const data = await response.json();
+                console.log('Received data from server:', data); // Debug log
                 
                 if (!response.ok) {
                     throw new Error(data.error || 'Failed to process image');
                 }
 
-                console.log(`File processed successfully: ${file.name}`, data);
-
-                const contentDiv = resultCard.querySelector('.content');
+                // Ensure we have the required data structures
+                const sailNumbers = data.sailNumbers?.numbers || [];
+                const processedFiles = data.processedFiles || [];
                 
-                if (data.sailNumbers && data.sailNumbers.numbers.length > 0) {
+                console.log('Sail numbers:', sailNumbers); // Debug log
+                console.log('Processed files:', processedFiles); // Debug log
+
+                if (sailNumbers.length > 0) {
                     contentDiv.innerHTML = `
                         <div class="sail-numbers-list">
                             <h4>Detected Sail Numbers:</h4>
-                            ${data.processedFiles.map((fileInfo, index) => `
+                            ${sailNumbers.map((sailData, index) => `
                                 <div class="sail-number-item" style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
                                     <div class="number" style="font-size: 1.2em; font-weight: bold;">
-                                        ${fileInfo.sailNumber ? `Sail #${fileInfo.sailNumber}` : 'No Sail Number'} 
+                                        Sail #${sailData.number} 
+                                        <span style="font-size: 0.8em; color: #666;">
+                                            (Confidence: ${(sailData.confidence * 100).toFixed(1)}%)
+                                        </span>
                                     </div>
-                                    ${fileInfo.skipperInfo ? `
+                                    ${sailData.skipperInfo ? `
                                         <div class="sailor-info" style="margin-top: 5px; color: #28a745;">
-                                            <strong>Sailor:</strong> ${fileInfo.skipperInfo.Skipper}<br>
-                                            <strong>Boat:</strong> ${fileInfo.skipperInfo.Boat_Name}<br>
-                                            <strong>Club:</strong> ${fileInfo.skipperInfo.Yacht_Club}
+                                            <strong>Sailor:</strong> ${sailData.skipperInfo.Skipper}<br>
+                                            <strong>Boat:</strong> ${sailData.skipperInfo.Boat_Name}<br>
+                                            <strong>Club:</strong> ${sailData.skipperInfo.Yacht_Club}
                                         </div>
                                     ` : '<div class="no-sailor" style="color: #dc3545; margin-top: 5px;">No sailor information found</div>'}
-                                    <div class="file-info" style="margin-top: 10px;">
-                                        <p><strong>Generated File:</strong> ${fileInfo.newFilename}</p>
-                                        <button class="btn btn-primary" onclick="downloadFile('${fileInfo.downloadUrl}', '${fileInfo.newFilename}')">
-                                            Download This Version
-                                        </button>
-                                    </div>
                                 </div>
                             `).join('')}
                         </div>
-                        <div class="batch-download" style="margin-top: 20px;">
-                            <button class="btn btn-success" onclick="downloadAllVersions(${JSON.stringify(data.processedFiles)})">
-                                Download All Versions
-                            </button>
+                        <div class="files-list">
+                            <h4>Generated Files:</h4>
+                            ${processedFiles.map((fileInfo, index) => `
+                                <div class="file-info" style="margin-top: 10px;">
+                                    <p><strong>File ${index + 1}:</strong> ${fileInfo.newFilename}</p>
+                                    <button class="btn btn-primary" onclick="downloadFile('${fileInfo.downloadUrl}', '${fileInfo.newFilename}')">
+                                        Download This Version
+                                    </button>
+                                </div>
+                            `).join('')}
                         </div>
+                        ${processedFiles.length > 1 ? `
+                            <div class="batch-download" style="margin-top: 20px;">
+                                <button class="btn btn-success" onclick="downloadAllVersions(${JSON.stringify(processedFiles)})">
+                                    Download All Versions
+                                </button>
+                            </div>
+                        ` : ''}
                         
                         <label class="debug-toggle">
                             <input type="checkbox" onclick="toggleDebug(this)" id="debugToggle"> Show Debug Information
@@ -561,13 +569,14 @@
                 } else {
                     contentDiv.innerHTML = `
                         <div class="no-numbers" style="color: #dc3545;">No sail numbers detected</div>
-                        <div class="file-info" style="margin-top: 15px;">
-                            <p><strong>Original:</strong> ${data.processedFiles[0].originalFilename}</p>
-                            <p><strong>Renamed to:</strong> ${data.processedFiles[0].newFilename}</p>
-                            <button class="btn btn-primary" onclick="downloadFile('${data.processedFiles[0].downloadUrl}', '${data.processedFiles[0].newFilename}')">
-                                Download File
-                            </button>
-                        </div>
+                        ${processedFiles.length > 0 ? `
+                            <div class="file-info" style="margin-top: 15px;">
+                                <p><strong>Generated File:</strong> ${processedFiles[0].newFilename}</p>
+                                <button class="btn btn-primary" onclick="downloadFile('${processedFiles[0].downloadUrl}', '${processedFiles[0].newFilename}')">
+                                    Download File
+                                </button>
+                            </div>
+                        ` : ''}
                     `;
                 }
 
@@ -580,26 +589,15 @@
 
             } catch (err) {
                 console.error(`Error processing file ${file.name}:`, err);
+                console.error('Full error details:', err); // Additional error logging
                 statusDiv.className = 'processing-status status-error';
-                
-                if (err.message && err.message.includes('rate limit')) {
-                    statusDiv.innerHTML = `
-                        <div class="error-message">
-                            Rate limit reached. This file will be processed automatically in a few seconds...
-                        </div>
-                    `;
-                    
-                    await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY));
-                    return processFile(file);
-                } else {
-                    statusDiv.textContent = `
-                        <div class="error-message">
-                            Failed to process image. ${err.message}
-                        </div>
-                    `;
-                }
-            } finally {
-                console.log(`Completed processing file: ${file.name}`);
+                contentDiv.innerHTML = `
+                    <div class="error-message">
+                        Failed to process image. ${err.message}
+                        <br>
+                        <small>Check console for more details</small>
+                    </div>
+                `;
             }
         }
 
