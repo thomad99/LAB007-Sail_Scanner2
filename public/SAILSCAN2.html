@@ -129,10 +129,12 @@
             font-style: italic;
         }
         .debug-panel {
-            margin-top: 30px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            background: #f8f8f8;
+            display: none;
+            margin-top: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
         }
         .debug-header {
             padding: 10px;
@@ -311,6 +313,10 @@
             background: white;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .debug-toggle {
+            margin: 10px 0;
+            user-select: none;
         }
     </style>
 </head>
@@ -544,6 +550,13 @@
                                 Download All Versions
                             </button>
                         </div>
+                        
+                        <label class="debug-toggle">
+                            <input type="checkbox" onclick="toggleDebug(this)" id="debugToggle"> Show Debug Information
+                        </label>
+                        <div class="debug-panel" id="debugPanel">
+                            <pre>${JSON.stringify(data.debug, null, 2)}</pre>
+                        </div>
                     `;
                 } else {
                     contentDiv.innerHTML = `
@@ -655,6 +668,11 @@
                 // Small delay between downloads
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
+        }
+
+        function toggleDebug(checkbox) {
+            const debugPanel = document.getElementById('debugPanel');
+            debugPanel.style.display = checkbox.checked ? 'block' : 'none';
         }
     </script>
 </body>

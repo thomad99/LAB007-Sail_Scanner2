@@ -544,7 +544,9 @@ async function lookupSailorInDatabase(sailNumber) {
             LIMIT 1
         `;
         
-        const [rows] = await pool.query(query, [sailNumber]);
+        const result = await pool.query(query, [sailNumber]);
+        const rows = result.rows; // PostgreSQL returns results in .rows
+        
         if (rows && rows.length > 0) {
             console.log(`Found sailor for sail number ${sailNumber}:`, rows[0]);
             return {
@@ -554,8 +556,10 @@ async function lookupSailorInDatabase(sailNumber) {
                 yacht_club: rows[0].Yacht_Club
             };
         }
+        
         console.log(`No sailor found for sail number ${sailNumber}`);
         return null;
+        
     } catch (err) {
         console.error(`Database lookup error for sail number ${sailNumber}:`, err);
         return null;
