@@ -532,21 +532,19 @@
                                     </div>
                                     ${sailData.skipperInfo ? `
                                         <div class="sailor-info" style="margin-top: 5px; color: #28a745;">
-                                            <strong>Sailor:</strong> ${sailData.skipperInfo.Boat_Name}<br>
-                                            <strong>Club:</strong> ${sailData.skipperInfo.Yacht_Club || 'N/A'}<br>
-                                            <strong>Organization:</strong> ${sailData.skipperInfo.Skipper || 'N/A'}
+                                            <strong>Sailor:</strong> ${sailData.skipperInfo.sailorName}
                                         </div>
                                     ` : '<div class="no-sailor" style="color: #dc3545; margin-top: 5px;">No sailor information found</div>'}
                                 </div>
                             `).join('')}
                         </div>
-                        <div class="files-list">
+                        <div class="generated-files" style="margin-top: 20px;">
                             <h4>Generated Files:</h4>
-                            ${processedFiles.map((fileInfo, index) => `
-                                <div class="file-info" style="margin-top: 10px;">
-                                    <p><strong>File ${index + 1}:</strong> ${fileInfo.newFilename}</p>
-                                    <button class="btn btn-primary" onclick="downloadFile('${fileInfo.downloadUrl}', '${fileInfo.newFilename}')">
-                                        Download This Version
+                            ${processedFiles.map(file => `
+                                <div class="file-item" style="margin: 10px 0;">
+                                    <p>${file.newFilename}</p>
+                                    <button onclick="downloadFile('${file.downloadUrl}', '${file.newFilename}')" class="btn btn-primary">
+                                        Download File
                                     </button>
                                 </div>
                             `).join('')}

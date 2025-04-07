@@ -773,52 +773,47 @@ async function processImage(file) {
             }
         }
 
-        // After getting sail numbers and looking up sailors
-        if (processingSteps.sailNumbers.numbers.length > 0) {
-            // Create a copy for each sail number found
-            for (const sailData of processingSteps.sailNumbers.numbers) {
-                let sailorName = 'NONAME';
-                if (sailData.skipperInfo && sailData.skipperInfo.sailorName) {
-                    // Clean up sailor name for filename
-                    sailorName = sailData.skipperInfo.sailorName
-                        .replace(/[^a-zA-Z0-9]/g, '')
-                        .substring(0, 30); // Limit length
-                }
-                
-                // Create new filename
-                const newFilename = `${sailData.number}_${sailorName}_${file.originalname}`;
-                
-                try {
-                    // Ensure directories exist
-                    await fs.mkdir(PROCESSED_DIR, { recursive: true });
-                    
-                    // Copy the file
-                    const originalPath = path.join(UPLOAD_DIR, file.filename);
-                    const newPath = path.join(PROCESSED_DIR, newFilename);
-                    
-                    await fs.copyFile(originalPath, newPath);
-                    console.log(`Created file: ${newFilename}`);
-                    
-                    processingSteps.processedFiles.push({
-                        originalFilename: file.originalname,
-                        newFilename: newFilename,
-                        downloadUrl: `/download/${newFilename}`,
-                        sailNumber: sailData.number,
-                        sailorName: sailorName
-                    });
-                } catch (fileErr) {
-                    console.error(`Error creating file: ${newFilename}`, fileErr);
-                }
-            }
-        } else {
-            // No sail numbers found - create single NOSAIL copy
-            const newFilename = `NOSAIL_${file.originalname}`;
+        // Create directory if it doesn't exist
+        await fs.mkdir(PROCESSED_DIR, { recursive: true });
+
+        // Process each sail number
+        for (const sailData of processingSteps.sailNumbers.numbers) {
+            // Get sailor name
+            const sailorName = sailData.skipperInfo ? 
+                sailData.skipperInfo.sailorName.replace(/[^a-zA-Z0-9]/g, '') : 
+                'NONAME';
+
+            // Create filename
+            const newFilename = `${sailData.number}_${sailorName}_${file.originalname}`;
+            const originalPath = path.join(UPLOAD_DIR, file.filename);
+            const newPath = path.join(PROCESSED_DIR, newFilename);
+
             try {
-                const originalPath = path.join(UPLOAD_DIR, file.filename);
-                const newPath = path.join(PROCESSED_DIR, newFilename);
-                
+                // Copy file
                 await fs.copyFile(originalPath, newPath);
-                
+                console.log(`Created file: ${newFilename}`);
+
+                // Add to processed files
+                processingSteps.processedFiles.push({
+                    originalFilename: file.originalname,
+                    newFilename: newFilename,
+                    downloadUrl: `/download/${newFilename}`,
+                    sailNumber: sailData.number,
+                    sailorName: sailorName
+                });
+            } catch (fileErr) {
+                console.error(`Error creating file ${newFilename}:`, fileErr);
+            }
+        }
+
+        // If no sail numbers found, create NOSAIL version
+        if (processingSteps.sailNumbers.numbers.length === 0) {
+            const newFilename = `NOSAIL_${file.originalname}`;
+            const originalPath = path.join(UPLOAD_DIR, file.filename);
+            const newPath = path.join(PROCESSED_DIR, newFilename);
+
+            try {
+                await fs.copyFile(originalPath, newPath);
                 processingSteps.processedFiles.push({
                     originalFilename: file.originalname,
                     newFilename: newFilename,
@@ -827,28 +822,20 @@ async function processImage(file) {
                     sailorName: null
                 });
             } catch (fileErr) {
-                console.error('Error creating NOSAIL file:', fileErr);
+                console.error(`Error creating NOSAIL file:`, fileErr);
             }
         }
 
         return {
             success: true,
-            sailNumbers: {
-                numbers: processingSteps.sailNumbers.numbers
-            },
+            sailNumbers: processingSteps.sailNumbers.numbers,
             processedFiles: processingSteps.processedFiles,
             debug: processingSteps.debug
         };
 
     } catch (err) {
         console.error('Error during scan:', err);
-        return {
-            success: false,
-            error: err.message,
-            sailNumbers: { numbers: [] },
-            processedFiles: [],
-            debug: processingSteps.debug
-        };
+        throw err;
     }
 }
 
@@ -913,18 +900,13 @@ app.listen(port, async () => {
 });
 
 // Add this endpoint to handle file downloads
-app.get('/download/:filename', async (req, res) => {
-    try {
-        const filename = req.params.filename;
-        const filePath = path.join(PROCESSED_DIR, filename);
-        
-        if (await fs.access(filePath).then(() => true).catch(() => false)) {
-            res.download(filePath);
-        } else {
-            res.status(404).send('File not found');
+app.get('/download/:filename', (req, res) => {
+    const filename = req.params.filename;
+    const filePath = path.join(PROCESSED_DIR, filename);
+    res.download(filePath, filename, (err) => {
+        if (err) {
+            console.error(`Download error for ${filename}:`, err);
+            res.status(500).send('Error downloading file');
         }
-    } catch (err) {
-        console.error('Download error:', err);
-        res.status(500).send('Error downloading file');
-    }
+    });
 }); 
