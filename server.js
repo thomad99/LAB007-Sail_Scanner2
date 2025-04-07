@@ -21,6 +21,10 @@ let lastAzureCallTime = 0;
 const UPLOAD_DIR = './uploads';    // or whatever your upload directory is
 const PROCESSED_DIR = './processed'; // or whatever your processed files directory is
 
+// Add these constants at the top
+const MAX_RETRIES = 3;
+const BASE_RETRY_DELAY = 5000; // 5 seconds
+
 // Add general error handler
 app.use((err, req, res, next) => {
     console.error('Unhandled error:', err);
@@ -199,6 +203,41 @@ async function cleanupDirectories() {
     }
 }
 
+// Helper function for exponential backoff delay
+function getRetryDelay(attempt) {
+    return BASE_RETRY_DELAY * Math.pow(2, attempt);
+}
+
+// Updated Azure processing function with retry logic
+async function processWithRetry(operation, operationName) {
+    let attempt = 0;
+    
+    while (attempt <= MAX_RETRIES) {
+        try {
+            await waitForRateLimit();
+            return await operation();
+        } catch (err) {
+            attempt++;
+            
+            // Check specifically for rate limit errors
+            const isRateLimit = 
+                err.message?.includes('rate limit') || 
+                err.message?.includes('429') ||
+                err.statusCode === 429;
+            
+            if (isRateLimit && attempt <= MAX_RETRIES) {
+                const delay = getRetryDelay(attempt);
+                console.log(`Rate limit hit for ${operationName}. Attempt ${attempt} of ${MAX_RETRIES}. Waiting ${delay/1000} seconds...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue;
+            }
+            
+            // If it's not a rate limit error or we're out of retries, throw the error
+            throw err;
+        }
+    }
+}
+
 // Update your upload endpoint to include cleanup
 app.post('/api/scan', upload.single('image'), async (req, res) => {
     try {
@@ -229,7 +268,8 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             },
             debug: {
                 azureResponse: null,
-                processingTime: null
+                processingTime: null,
+                retryAttempts: 0
             }
         };
 
@@ -241,9 +281,12 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
 
         // STEP 2: Send to Azure for Text Detection
         console.log('Step 2: Sending to Azure Vision...');
-        const result = await computerVisionClient.readInStream(
-            req.file.buffer,
-            { language: 'en' }
+        const result = await processWithRetry(
+            () => computerVisionClient.readInStream(
+                req.file.buffer,
+                { language: 'en' }
+            ),
+            'Azure Vision API call'
         );
         
         // STEP 3: Wait for Azure Processing
@@ -259,7 +302,10 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             attempts++;
             console.log(`Checking Azure results - Attempt ${attempts}...`);
             
-            operationResult = await computerVisionClient.getReadResult(operationId);
+            operationResult = await processWithRetry(
+                () => computerVisionClient.getReadResult(operationId),
+                'Azure Results Polling'
+            );
             console.log(`Status: ${operationResult.status}`);
             
             if (operationResult.status === 'running' || operationResult.status === 'notStarted') {
@@ -289,7 +335,7 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
         // Look up sailor information for each number
         for (const num of processingSteps.sailNumbers.numbers) {
             try {
-                const sailorInfo = await lookupSkipperInfo(num.number);
+                const sailorInfo = await lookupSailorInDatabase(num.number);
                 if (sailorInfo) {
                     num.skipperInfo = sailorInfo;
                 }
@@ -487,49 +533,31 @@ app.get('/results', (req, res) => {
 });
 
 // Add this helper function to look up skipper info
-async function lookupSkipperInfo(sailNumber) {
+async function lookupSailorInDatabase(sailNumber) {
     try {
-        console.log('Looking up skipper info for sail number:', sailNumber);
+        console.log(`Looking up sailor for number: ${sailNumber}`);
         
-        // First check imported_data (since it has Skipper information)
-        const importedQuery = await pool.query(`
-            SELECT DISTINCT 
-                "Sail_Number" as sail_number, 
-                "Boat_Name" as boat_name, 
-                "Skipper" as skipper_name,
-                "Yacht_Club" as yacht_club,
-                "Regatta_Date"
+        const query = `
+            SELECT "Sail_Number", "Boat_Name", "Skipper", "Yacht_Club"
             FROM imported_data 
-            WHERE "Sail_Number" = $1 
-            ORDER BY "Regatta_Date" DESC 
-            LIMIT 1`,
-            [sailNumber]
-        );
-
-        console.log('Imported data query result:', importedQuery.rows);
-
-        if (importedQuery.rows.length > 0) {
-            return importedQuery.rows[0];
+            WHERE "Sail_Number" = $1
+            LIMIT 1
+        `;
+        
+        const [rows] = await pool.query(query, [sailNumber]);
+        if (rows && rows.length > 0) {
+            console.log(`Found sailor for sail number ${sailNumber}:`, rows[0]);
+            return {
+                sail_number: rows[0].Sail_Number,
+                skipper_name: rows[0].Skipper,
+                boat_name: rows[0].Boat_Name,
+                yacht_club: rows[0].Yacht_Club
+            };
         }
-
-        // If not found, check race_results
-        const raceQuery = await pool.query(`
-            SELECT DISTINCT 
-                sail_number, 
-                boat_name, 
-                yacht_club,
-                id
-            FROM race_results 
-            WHERE sail_number = $1 
-            ORDER BY id DESC 
-            LIMIT 1`, 
-            [sailNumber]
-        );
-
-        console.log('Race results query result:', raceQuery.rows);
-        return raceQuery.rows[0] || null;
+        console.log(`No sailor found for sail number ${sailNumber}`);
+        return null;
     } catch (err) {
-        console.error('Error looking up skipper:', err);
+        console.error(`Database lookup error for sail number ${sailNumber}:`, err);
         return null;
     }
 }
@@ -681,26 +709,126 @@ async function processImage(file) {
         },
         debug: {
             azureResponse: null,
-            processingTime: null
+            processingTime: null,
+            retryAttempts: 0
         }
     };
 
     try {
-        // Wait for rate limit before making Azure call
-        await waitForRateLimit();
+        // Wrap Azure API call in retry logic
+        const azureResults = await processWithRetry(
+            () => computerVisionClient.readInStream(
+                file.buffer,
+                { language: 'en' }
+            ),
+            'Azure Vision API call'
+        );
+        
+        let operationId = azureResults.operationLocation.split('/').pop();
+        let results;
+        
+        // Wrap the results polling in retry logic
+        results = await processWithRetry(
+            async () => {
+                let attempts = 0;
+                while (attempts < 30) {
+                    attempts++;
+                    console.log(`Checking Azure results - Attempt ${attempts}...`);
+                    
+                    const getResults = await computerVisionClient.getReadResult(operationId);
+                    
+                    if (getResults.status === 'succeeded') {
+                        console.log('Azure processing completed successfully!');
+                        return getResults;
+                    } else if (getResults.status === 'failed') {
+                        throw new Error('Azure processing failed');
+                    }
+                    
+                    console.log(`Status: ${getResults.status}`);
+                    console.log('Waiting 1000ms before next check...');
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+                throw new Error('Timeout waiting for Azure processing');
+            },
+            'Azure Results Polling'
+        );
 
-        // ... rest of your existing Azure Vision API call code ...
+        processingSteps.debug.azureResponse = results;
+        
+        // Extract sail numbers from results
+        const foundNumbers = extractSailNumbers(results);
+        
+        // Sort by confidence but keep all numbers
+        const sortedNumbers = foundNumbers.sort((a, b) => b.confidence - a.confidence);
+            
+        processingSteps.sailNumbers.numbers = sortedNumbers;
+        
+        // Look up sailor information for each number
+        for (const num of processingSteps.sailNumbers.numbers) {
+            try {
+                const sailorInfo = await lookupSailorInDatabase(num.number);
+                if (sailorInfo) {
+                    num.skipperInfo = sailorInfo;
+                }
+            } catch (err) {
+                console.error(`Error looking up sailor for number ${num.number}:`, err);
+            }
+        }
+
+        // Generate new filename incorporating all sail numbers and sailor names
+        let filenameParts = [];
+        
+        if (processingSteps.sailNumbers.numbers.length > 0) {
+            // Add each sail number and sailor name to the filename
+            for (const sailData of processingSteps.sailNumbers.numbers) {
+                const sailorName = sailData.skipperInfo ? 
+                    sanitizeForFilename(sailData.skipperInfo.skipper_name) : 
+                    'NONAME';
+                filenameParts.push(`${sailData.number}_${sailorName}`);
+            }
+        } else {
+            filenameParts.push('NOSAIL');
+        }
+
+        // Construct the final filename
+        const newFilename = `${filenameParts.join('_')}_${file.originalname.replace(/[^a-zA-Z0-9]/g, '')}`;
+
+        // Save the file
+        const uploadsDir = path.join('public', 'uploads');
+        await fs.mkdir(uploadsDir, { recursive: true });
+        const newFilePath = path.join(uploadsDir, newFilename);
+        await fs.writeFile(newFilePath, file.buffer);
+
+        // Prepare debug info
+        const debugInfo = {
+            status: results.status,
+            processingTime: `${attempts} seconds`,
+            textProcessing: {
+                totalTextItems: processingSteps.rawText.length,
+                rawTextFound: processingSteps.rawText
+            },
+            numberProcessing: {
+                totalPotentialNumbers: processingSteps.potentialNumbers.length,
+                ignoredNumbers: processingSteps.ignoredNumbers,
+                potentialNumbers: processingSteps.potentialNumbers,
+                validNumbers: processingSteps.validNumbers
+            }
+        };
+
+        // Send response
+        res.json({
+            success: true,
+            sailNumbers: processingSteps.sailNumbers,
+            fileInfo: {
+                originalFilename: file.originalname,
+                newFilename,
+                downloadUrl: `/uploads/${newFilename}`
+            },
+            debug: debugInfo
+        });
 
     } catch (err) {
         console.error('Error during scan:', err);
-        
-        // Check if it's a rate limit error
-        if (err.message && err.message.includes('rate limit')) {
-            // Add 5 seconds to the last call time to prevent immediate retry
-            lastAzureCallTime = Date.now() - (RATE_LIMIT_DELAY - 5000);
-            throw new Error('Rate limit reached. Please try again in a few seconds.');
-        }
-        
         throw err;
     }
 }
