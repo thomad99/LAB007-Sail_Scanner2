@@ -12,6 +12,8 @@ const port = process.env.PORT || 3000;
 // Add these near the top of server.js
 const LOCAL_SAVE_PATH = process.env.LOCAL_SAVE_PATH || path.join(process.cwd(), 'saved_photos');
 const SAVE_TO_SERVER = true; // Set to false if you don't want server copies
+const IGNORED_NUMBERS = ['420']; // Numbers to ignore (boat class markings)
+const validSailNumbers = [13, 118, 9610, 5318, 8008]; // Valid sail numbers
 
 // Add general error handler
 app.use((err, req, res, next) => {
@@ -168,6 +170,14 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             throw new Error('No image file received');
         }
 
+        // Initialize tracking variables for debug
+        let processingSteps = {
+            rawText: [],
+            potentialNumbers: [],
+            validNumbers: [],
+            ignoredNumbers: []
+        };
+
         const originalFilename = req.file.originalname;
         const fileExtension = path.extname(originalFilename);
         const filenameWithoutExt = path.basename(originalFilename, fileExtension);
@@ -213,13 +223,11 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
         console.log('Step 4: Processing Azure results...');
         
         let analysis = {
-            // A) What Azure sees in the image
             generalDescription: {
                 allTextFound: [],
                 totalItems: 0,
                 description: ''
             },
-            // B) Sail number specific analysis
             sailNumberAnalysis: {
                 found: false,
                 numbers: [],
@@ -230,63 +238,90 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
         if (operationResult.analyzeResult && operationResult.analyzeResult.readResults) {
             const readResults = operationResult.analyzeResult.readResults;
             
-            // A) Process everything Azure sees
+            // Process text found
             readResults.forEach((page, pageIndex) => {
                 page.lines.forEach((line, lineIndex) => {
-                    analysis.generalDescription.allTextFound.push({
+                    const textItem = {
                         text: line.text,
                         confidence: line.confidence,
                         location: `Line ${lineIndex + 1}`
-                    });
+                    };
+                    analysis.generalDescription.allTextFound.push(textItem);
+                    processingSteps.rawText.push(textItem);
                 });
             });
 
-            analysis.generalDescription.totalItems = analysis.generalDescription.allTextFound.length;
-            analysis.generalDescription.description = `Found ${analysis.generalDescription.totalItems} text items in image`;
-
-            // B) Look specifically for sail numbers
-            const potentialNumbers = [];
+            // Enhanced sail number detection
+            const seenNumbers = new Set(); // Track numbers for mirrored validation
+            
             analysis.generalDescription.allTextFound.forEach(item => {
+                // Clean the text (convert O to 0, etc)
                 const cleaned = item.text.replace(/[OoIl]/g, '0').replace(/[^0-9]/g, '');
                 
-                if (cleaned.length >= 2 && cleaned.length <= 6) {
+                if (cleaned.length >= 1 && cleaned.length <= 6) {
                     const num = parseInt(cleaned);
-                    if (num >= 10 && num <= 999999) {
-                        potentialNumbers.push({
+                    if (num >= 1 && num <= 999999) {
+                        // Check if this is a number we should ignore (like 420)
+                        if (IGNORED_NUMBERS && IGNORED_NUMBERS.includes(cleaned)) {
+                            processingSteps.ignoredNumbers.push({
+                                number: num,
+                                originalText: item.text,
+                                reason: 'Ignored number (e.g., boat class)'
+                            });
+                            return;
+                        }
+
+                        // Check if this number is in our valid list
+                        const isValidSailNumber = validSailNumbers.includes(num);
+                        
+                        // Check if we've seen this number (might be mirrored on other side of sail)
+                        const numberSeenBefore = seenNumbers.has(num);
+                        seenNumbers.add(num);
+
+                        const numberInfo = {
                             number: num,
                             confidence: item.confidence,
                             originalText: item.text,
-                            location: item.location
-                        });
+                            location: item.location,
+                            isValidSailNumber: isValidSailNumber,
+                            hasMultipleViews: numberSeenBefore
+                        };
+
+                        processingSteps.potentialNumbers.push(numberInfo);
+
+                        if (isValidSailNumber || numberSeenBefore) {
+                            processingSteps.validNumbers.push(numberInfo);
+                        }
                     }
                 }
             });
 
-            // Filter for high confidence sail numbers
-            const validNumbers = potentialNumbers.filter(item => item.confidence > 0.6);
-            
+            // Update sail number analysis
             analysis.sailNumberAnalysis = {
-                found: validNumbers.length > 0,
-                numbers: validNumbers,
-                confidence: validNumbers.length > 0 ? 
-                    Math.max(...validNumbers.map(n => n.confidence)) : 0
+                found: processingSteps.validNumbers.length > 0,
+                numbers: processingSteps.validNumbers,
+                confidence: processingSteps.validNumbers.length > 0 ? 
+                    Math.max(...processingSteps.validNumbers.map(n => n.confidence)) : 0
             };
         }
 
-        // STEP 5: Send Back Detailed Results
-        console.log('Step 5: Sending results...');
-        console.log('Analysis Summary:', {
-            textItemsFound: analysis.generalDescription.totalItems,
-            sailNumbersFound: analysis.sailNumberAnalysis.numbers.length,
-            hasSailNumber: analysis.sailNumberAnalysis.found
-        });
-
-        // After processing results, add detailed logging
-        console.log('Processing complete. Analysis results:', {
-            totalTextFound: analysis.generalDescription.allTextFound.length,
-            sailNumbersFound: analysis.sailNumberAnalysis.numbers.length,
-            bestMatch: analysis.sailNumberAnalysis.numbers[0] || 'None'
-        });
+        // Prepare debug info
+        const debugInfo = {
+            status: operationResult.status,
+            processingTime: `${attempts} seconds`,
+            apiVersion: operationResult.modelVersion || 'Not specified',
+            requestId: operationResult.requestId || 'Not available',
+            textProcessing: {
+                totalTextItems: processingSteps.rawText.length,
+                rawTextFound: processingSteps.rawText
+            },
+            numberProcessing: {
+                totalPotentialNumbers: processingSteps.potentialNumbers.length,
+                ignoredNumbers: processingSteps.ignoredNumbers,
+                potentialNumbers: processingSteps.potentialNumbers,
+                validNumbers: processingSteps.validNumbers
+            }
+        };
 
         // Process the results and prepare file operations
         let fileInfo = null;
@@ -352,32 +387,14 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             console.error('Error handling file:', fileError);
         }
 
-        // Before sending the response, add more debug info
-        const debugInfo = {
-            status: operationResult.status,
-            processingTime: `${attempts} seconds`,
-            apiVersion: operationResult.modelVersion || 'Not specified',
-            requestId: operationResult.requestId || 'Not available',
-            rawTextFound: analysis.generalDescription.allTextFound.map(item => ({
-                text: item.text,
-                confidence: item.confidence,
-                location: item.location
-            })),
-            numberProcessing: {
-                totalPotentialNumbers: potentialNumbers.length,
-                ignoredNumbers: potentialNumbers.filter(n => IGNORED_NUMBERS.includes(n.number.toString())),
-                validationSteps: {
-                    beforeFiltering: potentialNumbers.map(n => ({
-                        number: n.number,
-                        confidence: n.confidence,
-                        originalText: n.originalText,
-                        isValid: validSailNumbers.includes(n.number)
-                    })),
-                    afterFiltering: analysis.sailNumberAnalysis.numbers
-                }
-            }
-        };
+        // After processing results, add more debug info
+        console.log('Processing complete. Analysis results:', {
+            totalTextFound: analysis.generalDescription.allTextFound.length,
+            sailNumbersFound: analysis.sailNumberAnalysis.numbers.length,
+            bestMatch: analysis.sailNumberAnalysis.numbers[0] || 'None'
+        });
 
+        // Send response
         res.json({
             success: true,
             imageContents: {
