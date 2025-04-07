@@ -351,7 +351,7 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             // Add each sail number and sailor name to the filename
             for (const sailData of processingSteps.sailNumbers.numbers) {
                 const sailorName = sailData.skipperInfo ? 
-                    sanitizeForFilename(sailData.skipperInfo.skipper_name) : 
+                    sanitizeForFilename(sailData.skipperInfo.sailorName) : 
                     'NONAME';
                 filenameParts.push(`${sailData.number}_${sailorName}`);
             }
@@ -538,28 +538,22 @@ async function lookupSailorInDatabase(sailNumber) {
         console.log(`Looking up sailor for number: ${sailNumber}`);
         
         const query = `
-            SELECT "Sail_Number", "Boat_Name", "Skipper", "Yacht_Club"
+            SELECT "Sail_Number", "Boat_Name"
             FROM imported_data 
             WHERE "Sail_Number" = $1
             LIMIT 1
         `;
         
         const result = await pool.query(query, [sailNumber]);
-        const rows = result.rows; // PostgreSQL returns results in .rows
-        
-        if (rows && rows.length > 0) {
-            console.log(`Found sailor for sail number ${sailNumber}:`, rows[0]);
+        if (result.rows && result.rows.length > 0) {
+            console.log(`Found sailor for sail number ${sailNumber}:`, result.rows[0]);
             return {
-                sail_number: rows[0].Sail_Number,
-                skipper_name: rows[0].Skipper,
-                boat_name: rows[0].Boat_Name,
-                yacht_club: rows[0].Yacht_Club
+                sailNumber: result.rows[0].Sail_Number,
+                sailorName: result.rows[0].Boat_Name // Using Boat_Name as sailor name
             };
         }
-        
         console.log(`No sailor found for sail number ${sailNumber}`);
         return null;
-        
     } catch (err) {
         console.error(`Database lookup error for sail number ${sailNumber}:`, err);
         return null;
@@ -784,33 +778,36 @@ async function processImage(file) {
             // Create a copy for each sail number found
             for (const sailData of processingSteps.sailNumbers.numbers) {
                 let sailorName = 'NONAME';
-                if (sailData.skipperInfo && sailData.skipperInfo.Boat_Name) {
+                if (sailData.skipperInfo && sailData.skipperInfo.sailorName) {
                     // Clean up sailor name for filename
-                    sailorName = sailData.skipperInfo.Boat_Name
+                    sailorName = sailData.skipperInfo.sailorName
                         .replace(/[^a-zA-Z0-9]/g, '')
                         .substring(0, 30); // Limit length
                 }
                 
-                // Create new filename: sailnumber_skippername_originalname
+                // Create new filename
                 const newFilename = `${sailData.number}_${sailorName}_${file.originalname}`;
                 
                 try {
-                    // Copy the file to new location
+                    // Ensure directories exist
+                    await fs.mkdir(PROCESSED_DIR, { recursive: true });
+                    
+                    // Copy the file
                     const originalPath = path.join(UPLOAD_DIR, file.filename);
                     const newPath = path.join(PROCESSED_DIR, newFilename);
                     
                     await fs.copyFile(originalPath, newPath);
-                    console.log(`Created copy for sail number ${sailData.number}: ${newFilename}`);
+                    console.log(`Created file: ${newFilename}`);
                     
                     processingSteps.processedFiles.push({
                         originalFilename: file.originalname,
                         newFilename: newFilename,
                         downloadUrl: `/download/${newFilename}`,
                         sailNumber: sailData.number,
-                        skipperInfo: sailData.skipperInfo
+                        sailorName: sailorName
                     });
                 } catch (fileErr) {
-                    console.error(`Error creating file for sail number ${sailData.number}:`, fileErr);
+                    console.error(`Error creating file: ${newFilename}`, fileErr);
                 }
             }
         } else {
@@ -827,7 +824,7 @@ async function processImage(file) {
                     newFilename: newFilename,
                     downloadUrl: `/download/${newFilename}`,
                     sailNumber: null,
-                    skipperInfo: null
+                    sailorName: null
                 });
             } catch (fileErr) {
                 console.error('Error creating NOSAIL file:', fileErr);
