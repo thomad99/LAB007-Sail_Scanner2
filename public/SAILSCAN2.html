@@ -532,9 +532,9 @@
                                     </div>
                                     ${sailData.skipperInfo ? `
                                         <div class="sailor-info" style="margin-top: 5px; color: #28a745;">
-                                            <strong>Sailor:</strong> ${sailData.skipperInfo.Skipper}<br>
-                                            <strong>Boat:</strong> ${sailData.skipperInfo.Boat_Name}<br>
-                                            <strong>Club:</strong> ${sailData.skipperInfo.Yacht_Club}
+                                            <strong>Sailor:</strong> ${sailData.skipperInfo.Boat_Name}<br>
+                                            <strong>Club:</strong> ${sailData.skipperInfo.Yacht_Club || 'N/A'}<br>
+                                            <strong>Organization:</strong> ${sailData.skipperInfo.Skipper || 'N/A'}
                                         </div>
                                     ` : '<div class="no-sailor" style="color: #dc3545; margin-top: 5px;">No sailor information found</div>'}
                                 </div>

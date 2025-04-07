@@ -783,51 +783,63 @@ async function processImage(file) {
         if (processingSteps.sailNumbers.numbers.length > 0) {
             // Create a copy for each sail number found
             for (const sailData of processingSteps.sailNumbers.numbers) {
-                // Generate filename for this sail number
-                const sailorName = sailData.skipperInfo ? 
-                    sanitizeForFilename(sailData.skipperInfo.Skipper) : 
-                    'NONAME';
+                let sailorName = 'NONAME';
+                if (sailData.skipperInfo && sailData.skipperInfo.Boat_Name) {
+                    // Clean up sailor name for filename
+                    sailorName = sailData.skipperInfo.Boat_Name
+                        .replace(/[^a-zA-Z0-9]/g, '')
+                        .substring(0, 30); // Limit length
+                }
                 
+                // Create new filename: sailnumber_skippername_originalname
                 const newFilename = `${sailData.number}_${sailorName}_${file.originalname}`;
                 
-                // Copy the file to new location
+                try {
+                    // Copy the file to new location
+                    const originalPath = path.join(UPLOAD_DIR, file.filename);
+                    const newPath = path.join(PROCESSED_DIR, newFilename);
+                    
+                    await fs.copyFile(originalPath, newPath);
+                    console.log(`Created copy for sail number ${sailData.number}: ${newFilename}`);
+                    
+                    processingSteps.processedFiles.push({
+                        originalFilename: file.originalname,
+                        newFilename: newFilename,
+                        downloadUrl: `/download/${newFilename}`,
+                        sailNumber: sailData.number,
+                        skipperInfo: sailData.skipperInfo
+                    });
+                } catch (fileErr) {
+                    console.error(`Error creating file for sail number ${sailData.number}:`, fileErr);
+                }
+            }
+        } else {
+            // No sail numbers found - create single NOSAIL copy
+            const newFilename = `NOSAIL_${file.originalname}`;
+            try {
                 const originalPath = path.join(UPLOAD_DIR, file.filename);
                 const newPath = path.join(PROCESSED_DIR, newFilename);
                 
                 await fs.copyFile(originalPath, newPath);
-                console.log(`Created copy for sail number ${sailData.number}: ${newFilename}`);
                 
                 processingSteps.processedFiles.push({
                     originalFilename: file.originalname,
                     newFilename: newFilename,
                     downloadUrl: `/download/${newFilename}`,
-                    sailNumber: sailData.number,
-                    skipperInfo: sailData.skipperInfo
+                    sailNumber: null,
+                    skipperInfo: null
                 });
+            } catch (fileErr) {
+                console.error('Error creating NOSAIL file:', fileErr);
             }
-        } else {
-            // No sail numbers found - create single NOSAIL copy
-            const newFilename = `NOSAIL_${file.originalname}`;
-            const originalPath = path.join(UPLOAD_DIR, file.filename);
-            const newPath = path.join(PROCESSED_DIR, newFilename);
-            
-            await fs.copyFile(originalPath, newPath);
-            
-            processingSteps.processedFiles.push({
-                originalFilename: file.originalname,
-                newFilename: newFilename,
-                downloadUrl: `/download/${newFilename}`,
-                sailNumber: null,
-                skipperInfo: null
-            });
         }
 
         return {
             success: true,
             sailNumbers: {
-                numbers: processingSteps.sailNumbers.numbers // Array of sail numbers with skipper info
+                numbers: processingSteps.sailNumbers.numbers
             },
-            processedFiles: processingSteps.processedFiles, // Array of generated files
+            processedFiles: processingSteps.processedFiles,
             debug: processingSteps.debug
         };
 
@@ -836,7 +848,8 @@ async function processImage(file) {
         return {
             success: false,
             error: err.message,
-            processedFiles: [], // Always include processedFiles array
+            sailNumbers: { numbers: [] },
+            processedFiles: [],
             debug: processingSteps.debug
         };
     }
@@ -900,4 +913,21 @@ app.post('/api/cleanup', async (req, res) => {
 app.listen(port, async () => {
     console.log(`Server running on port ${port}`);
     await cleanupDirectories();
+});
+
+// Add this endpoint to handle file downloads
+app.get('/download/:filename', async (req, res) => {
+    try {
+        const filename = req.params.filename;
+        const filePath = path.join(PROCESSED_DIR, filename);
+        
+        if (await fs.access(filePath).then(() => true).catch(() => false)) {
+            res.download(filePath);
+        } else {
+            res.status(404).send('File not found');
+        }
+    } catch (err) {
+        console.error('Download error:', err);
+        res.status(500).send('Error downloading file');
+    }
 }); 
