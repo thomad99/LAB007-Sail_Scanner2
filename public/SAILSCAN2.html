@@ -108,6 +108,61 @@
             font-size: 16px;
             font-style: italic;
         }
+        .debug-panel {
+            margin-top: 30px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background: #f8f8f8;
+        }
+        .debug-header {
+            padding: 10px;
+            background: #0066cc;
+            color: white;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .debug-header h3 {
+            margin: 0;
+        }
+        .debug-header label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .debug-content {
+            padding: 15px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .debug-section {
+            margin-bottom: 20px;
+            padding: 10px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .debug-section h4 {
+            margin: 0 0 10px 0;
+            color: #0066cc;
+        }
+        .debug-section pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+        .highlight {
+            background: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
     </style>
 </head>
 <body>
@@ -134,16 +189,53 @@
         <div class="sail-number-confidence"></div>
     </div>
 
+    <div id="debugPanel" class="debug-panel">
+        <div class="debug-header">
+            <h3>Debug Information</h3>
+            <label>
+                <input type="checkbox" id="debugToggle" checked> Show Debug Info
+            </label>
+        </div>
+        <div class="debug-content">
+            <div class="debug-section">
+                <h4>Azure Vision Processing</h4>
+                <pre id="azureDebug">Waiting for scan...</pre>
+            </div>
+            <div class="debug-section">
+                <h4>Raw Text Detected</h4>
+                <pre id="rawTextDebug">Waiting for scan...</pre>
+            </div>
+            <div class="debug-section">
+                <h4>Number Processing</h4>
+                <pre id="numberDebug">Waiting for scan...</pre>
+            </div>
+        </div>
+    </div>
+
     <script>
         const imageInput = document.getElementById('imageInput');
         const preview = document.getElementById('preview');
         const topResultsBox = document.getElementById('topResultsBox');
         const topResultsContent = topResultsBox.querySelector('.top-results-content');
         const loading = document.getElementById('loading');
+        const debugPanel = document.getElementById('debugPanel');
+        const azureDebug = document.getElementById('azureDebug');
+        const rawTextDebug = document.getElementById('rawTextDebug');
+        const numberDebug = document.getElementById('numberDebug');
+        const debugToggle = document.getElementById('debugToggle');
+
+        debugToggle.addEventListener('change', (e) => {
+            document.querySelector('.debug-content').style.display = e.target.checked ? 'block' : 'none';
+        });
 
         imageInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
+
+            // Reset debug panels
+            azureDebug.textContent = 'Processing...';
+            rawTextDebug.textContent = 'Processing...';
+            numberDebug.textContent = 'Processing...';
 
             // Show preview
             preview.src = URL.createObjectURL(file);
@@ -169,6 +261,40 @@
 
                 const data = await response.json();
                 console.log('Server response:', data);
+
+                // Update debug panels
+                azureDebug.innerHTML = `
+Status: ${data.debug.status}
+Processing Time: ${data.debug.processingTime}
+API Version: ${data.debug.apiVersion || 'Not specified'}
+Request ID: ${data.debug.requestId || 'Not available'}
+
+Azure Response Summary:
+${JSON.stringify(data.debug, null, 2)}
+                `.trim();
+
+                rawTextDebug.innerHTML = `
+Total Items: ${data.imageContents?.totalTextItems || 0}
+Detected Text:
+${data.imageContents?.allTextFound?.map(item => 
+    `• "${item.text}" (Confidence: ${(item.confidence * 100).toFixed(1)}%)`
+).join('\n') || 'No text detected'}
+                `.trim();
+
+                numberDebug.innerHTML = `
+Numbers Found: ${data.sailNumbers?.numbers?.length || 0}
+Valid Numbers:
+${data.sailNumbers?.numbers?.map(num => 
+    `• ${num.number} (Confidence: ${(num.score * 100).toFixed(1)}%)
+    Original Text: "${num.originalText}"
+    Valid Sail Number: ${num.isValidSailNumber ? 'Yes' : 'No'}
+    Multiple Views: ${num.hasMultipleViews ? 'Yes' : 'No'}`
+).join('\n\n') || 'No valid numbers detected'}
+
+File Operations:
+Original: ${data.fileInfo?.originalFilename || 'N/A'}
+Renamed To: ${data.fileInfo?.newFilename || 'N/A'}
+                `.trim();
 
                 // Update results display
                 let resultsHtml = '';
@@ -236,6 +362,9 @@
 
             } catch (err) {
                 console.error('Error:', err);
+                azureDebug.textContent = `Error: ${err.message}`;
+                rawTextDebug.textContent = 'Processing failed';
+                numberDebug.textContent = 'Processing failed';
                 topResultsContent.innerHTML = `
                     <div class="error">
                         Error: ${err.message}

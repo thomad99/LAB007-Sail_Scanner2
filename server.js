@@ -352,23 +352,46 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             console.error('Error handling file:', fileError);
         }
 
-        // Send the response
+        // Before sending the response, add more debug info
+        const debugInfo = {
+            status: operationResult.status,
+            processingTime: `${attempts} seconds`,
+            apiVersion: operationResult.modelVersion || 'Not specified',
+            requestId: operationResult.requestId || 'Not available',
+            rawTextFound: analysis.generalDescription.allTextFound.map(item => ({
+                text: item.text,
+                confidence: item.confidence,
+                location: item.location
+            })),
+            numberProcessing: {
+                totalPotentialNumbers: potentialNumbers.length,
+                ignoredNumbers: potentialNumbers.filter(n => IGNORED_NUMBERS.includes(n.number.toString())),
+                validationSteps: {
+                    beforeFiltering: potentialNumbers.map(n => ({
+                        number: n.number,
+                        confidence: n.confidence,
+                        originalText: n.originalText,
+                        isValid: validSailNumbers.includes(n.number)
+                    })),
+                    afterFiltering: analysis.sailNumberAnalysis.numbers
+                }
+            }
+        };
+
         res.json({
             success: true,
+            imageContents: {
+                totalTextItems: analysis.generalDescription.totalItems,
+                description: analysis.generalDescription.description,
+                allTextFound: analysis.generalDescription.allTextFound
+            },
             sailNumbers: {
                 found: analysis.sailNumberAnalysis.found,
-                numbers: analysis.sailNumberAnalysis.numbers.map(num => ({
-                    number: num.number,
-                    confidence: num.confidence,
-                    score: num.score || num.confidence,
-                    originalText: num.originalText
-                }))
+                numbers: analysis.sailNumberAnalysis.numbers,
+                confidence: analysis.sailNumberAnalysis.confidence
             },
             fileInfo: fileInfo,
-            debug: {
-                processingTime: `${attempts} seconds`,
-                status: operationResult.status
-            }
+            debug: debugInfo
         });
 
     } catch (err) {
