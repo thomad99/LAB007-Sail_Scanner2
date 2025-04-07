@@ -163,6 +163,27 @@
             padding: 2px 4px;
             border-radius: 2px;
         }
+        .processing-status {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status-running {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+        .status-succeeded {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status-failed {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
     </style>
 </head>
 <body>
@@ -198,7 +219,8 @@
         </div>
         <div class="debug-content">
             <div class="debug-section">
-                <h4>Azure Vision Processing</h4>
+                <h4>Azure Vision Processing Status</h4>
+                <div id="processingStatus" class="processing-status">Waiting to start...</div>
                 <pre id="azureDebug">Waiting for scan...</pre>
             </div>
             <div class="debug-section">
@@ -223,6 +245,7 @@
         const rawTextDebug = document.getElementById('rawTextDebug');
         const numberDebug = document.getElementById('numberDebug');
         const debugToggle = document.getElementById('debugToggle');
+        const processingStatus = document.getElementById('processingStatus');
 
         debugToggle.addEventListener('change', (e) => {
             document.querySelector('.debug-content').style.display = e.target.checked ? 'block' : 'none';
@@ -246,7 +269,9 @@
             loading.style.display = 'block';
 
             try {
-                // Send to server
+                processingStatus.textContent = 'Starting Azure processing...';
+                processingStatus.className = 'processing-status status-running';
+
                 const formData = new FormData();
                 formData.append('image', file);
 
@@ -262,7 +287,16 @@
                 const data = await response.json();
                 console.log('Server response:', data);
 
-                // Update debug panels
+                // Update processing status
+                if (data.debug.status === 'succeeded') {
+                    processingStatus.textContent = 'Processing completed successfully!';
+                    processingStatus.className = 'processing-status status-succeeded';
+                } else {
+                    processingStatus.textContent = `Processing status: ${data.debug.status}`;
+                    processingStatus.className = 'processing-status status-running';
+                }
+
+                // Update debug panels with more detailed information
                 azureDebug.innerHTML = `
 Status: ${data.debug.status}
 Processing Time: ${data.debug.processingTime}
@@ -271,29 +305,39 @@ Request ID: ${data.debug.requestId || 'Not available'}
 
 Azure Response Summary:
 ${JSON.stringify(data.debug, null, 2)}
+
+Raw Azure Response:
+${JSON.stringify(data.debug.rawResponse || {}, null, 2)}
                 `.trim();
 
                 rawTextDebug.innerHTML = `
-Total Items: ${data.imageContents?.totalTextItems || 0}
-Detected Text:
-${data.imageContents?.allTextFound?.map(item => 
+Total Items Found: ${data.debug.textProcessing.totalTextItems}
+
+Raw Text Detected:
+${data.debug.textProcessing.rawTextFound.map(item => 
     `• "${item.text}" (Confidence: ${(item.confidence * 100).toFixed(1)}%)`
 ).join('\n') || 'No text detected'}
                 `.trim();
 
                 numberDebug.innerHTML = `
-Numbers Found: ${data.sailNumbers?.numbers?.length || 0}
-Valid Numbers:
-${data.sailNumbers?.numbers?.map(num => 
-    `• ${num.number} (Confidence: ${(num.score * 100).toFixed(1)}%)
+Processing Summary:
+- Total Potential Numbers: ${data.debug.numberProcessing.totalPotentialNumbers}
+- Valid Numbers Found: ${data.debug.numberProcessing.validNumbers.length}
+- Ignored Numbers: ${data.debug.numberProcessing.ignoredNumbers.length}
+
+Potential Numbers Found:
+${data.debug.numberProcessing.potentialNumbers.map(num => 
+    `• ${num.number} (Confidence: ${(num.confidence * 100).toFixed(1)}%)
     Original Text: "${num.originalText}"
     Valid Sail Number: ${num.isValidSailNumber ? 'Yes' : 'No'}
     Multiple Views: ${num.hasMultipleViews ? 'Yes' : 'No'}`
-).join('\n\n') || 'No valid numbers detected'}
+).join('\n\n') || 'No potential numbers detected'}
 
-File Operations:
-Original: ${data.fileInfo?.originalFilename || 'N/A'}
-Renamed To: ${data.fileInfo?.newFilename || 'N/A'}
+Ignored Numbers:
+${data.debug.numberProcessing.ignoredNumbers.map(num =>
+    `• ${num.number} (Original: "${num.originalText}")
+    Reason: ${num.reason}`
+).join('\n\n') || 'No ignored numbers'}
                 `.trim();
 
                 // Update results display
@@ -362,6 +406,8 @@ Renamed To: ${data.fileInfo?.newFilename || 'N/A'}
 
             } catch (err) {
                 console.error('Error:', err);
+                processingStatus.textContent = `Error: ${err.message}`;
+                processingStatus.className = 'processing-status status-failed';
                 azureDebug.textContent = `Error: ${err.message}`;
                 rawTextDebug.textContent = 'Processing failed';
                 numberDebug.textContent = 'Processing failed';

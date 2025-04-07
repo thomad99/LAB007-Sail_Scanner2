@@ -208,16 +208,29 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
         
         let operationResult;
         let attempts = 0;
-        
+        const maxAttempts = 30;  // Maximum number of attempts
+        const delayMs = 1000;    // Delay between attempts (1 second)
+
         do {
             attempts++;
-            operationResult = await computerVisionClient.getReadResult(operationId);
-            console.log(`Attempt ${attempts}: Status = ${operationResult.status}`);
+            console.log(`Checking Azure results - Attempt ${attempts}...`);
             
-            if (operationResult.status !== 'Succeeded') {
-                await new Promise(resolve => setTimeout(resolve, 1000));
+            operationResult = await computerVisionClient.getReadResult(operationId);
+            console.log(`Status: ${operationResult.status}`);
+            
+            if (operationResult.status === 'running' || operationResult.status === 'notStarted') {
+                console.log(`Waiting ${delayMs}ms before next check...`);
+                await new Promise(resolve => setTimeout(resolve, delayMs));
             }
-        } while (operationResult.status === 'Running' && attempts < 30);
+        } while ((operationResult.status === 'running' || operationResult.status === 'notStarted') && attempts < maxAttempts);
+
+        if (operationResult.status !== 'succeeded') {
+            console.log('Azure processing did not complete successfully:', operationResult.status);
+            throw new Error(`Azure processing failed or timed out. Status: ${operationResult.status}`);
+        }
+
+        console.log('Azure processing completed successfully!');
+        console.log('Results:', JSON.stringify(operationResult.analyzeResult, null, 2));
 
         // STEP 4: Process What Azure Sees
         console.log('Step 4: Processing Azure results...');
