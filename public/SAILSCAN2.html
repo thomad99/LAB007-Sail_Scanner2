@@ -629,15 +629,35 @@
                 statusDiv.textContent = 'Analysis complete';
                 
                 if (data.processedFiles && data.processedFiles.length > 0) {
-                    console.log(`Server returned ${data.processedFiles.length} files:`, data.processedFiles);
+                    console.log(`Server returned ${data.processedFiles.length} processed files`);
                     
-                    // Add these files to the global processedFiles array
-                    data.processedFiles.forEach(file => {
-                        console.log(`Adding file to global array: ${file.newFilename}`);
-                        processedFiles.push(file);
-                    });
+                    // Clear any duplicates first to avoid issues
+                    if (processedFiles.length > 0) {
+                        const existingFilenames = processedFiles.map(f => f.newFilename);
+                        console.log('Existing filenames:', existingFilenames);
+                        
+                        // Handle duplicates
+                        for (const newFile of data.processedFiles) {
+                            const existingIndex = processedFiles.findIndex(f => f.newFilename === newFile.newFilename);
+                            if (existingIndex !== -1) {
+                                // Replace existing file with new version
+                                console.log(`Replacing existing file: ${newFile.newFilename}`);
+                                processedFiles[existingIndex] = newFile;
+                            } else {
+                                // Add new file
+                                console.log(`Adding new file: ${newFile.newFilename}`);
+                                processedFiles.push(newFile);
+                            }
+                        }
+                    } else {
+                        // First files, just add them all
+                        processedFiles.push(...data.processedFiles);
+                    }
                     
-                    console.log(`Global processedFiles now has ${processedFiles.length} files`);
+                    console.log(`Global processedFiles now has ${processedFiles.length} files:`, 
+                        processedFiles.map(f => f.newFilename));
+                    
+                    // Update the UI with new file count
                     updateBatchSummary();
                 }
 
@@ -682,41 +702,61 @@
                 
                 // Check if URL is valid
                 if (!url || !url.startsWith('/')) {
-                    throw new Error(`Invalid download URL: ${url}`);
+                    console.error(`Invalid download URL: ${url}`);
+                    throw new Error(`Invalid download URL`);
                 }
                 
-                const response = await fetch(url);
+                // Make absolute URL if needed
+                const fullUrl = url.startsWith('http') ? url : window.location.origin + url;
+                console.log(`Downloading from full URL: ${fullUrl}`);
                 
+                // Fetch the file with proper headers
+                const response = await fetch(fullUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/octet-stream'
+                    },
+                    cache: 'no-store'
+                });
+                
+                // Check for successful response
                 if (!response.ok) {
                     console.error(`Download failed with status: ${response.status}`);
-                    throw new Error(`Download failed with status: ${response.status} - ${response.statusText}`);
+                    throw new Error(`Download failed with status ${response.status}`);
                 }
                 
+                // Get the file content
                 const blob = await response.blob();
                 
-                if (blob.size === 0) {
+                // Verify we got data
+                if (!blob || blob.size === 0) {
+                    console.error('Downloaded file is empty');
                     throw new Error('Downloaded file is empty');
                 }
                 
-                console.log(`File downloaded successfully, size: ${blob.size} bytes`);
+                console.log(`File downloaded successfully, size: ${blob.size} bytes, type: ${blob.type}`);
                 
-                const downloadUrl = window.URL.createObjectURL(blob);
+                // Create a download link
+                const downloadUrl = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = downloadUrl;
                 a.download = filename;
+                a.style.display = 'none';
+                
+                // Add to document, click, and clean up
                 document.body.appendChild(a);
                 a.click();
                 
                 // Clean up
                 setTimeout(() => {
-                    window.URL.revokeObjectURL(downloadUrl);
-                    a.remove();
+                    URL.revokeObjectURL(downloadUrl);
+                    document.body.removeChild(a);
+                    console.log(`Download of ${filename} complete and link removed`);
                 }, 100);
                 
-                console.log(`Download complete: ${filename}`);
                 return true;
             } catch (err) {
-                console.error('Download error:', err);
+                console.error(`Download error for ${filename}:`, err);
                 alert(`Error downloading ${filename}: ${err.message}`);
                 return false;
             }
@@ -725,41 +765,73 @@
         async function downloadAllFiles() {
             console.log("Download All clicked - processedFiles:", processedFiles);
             
+            // Get main download button
             const downloadButton = document.getElementById('mainDownloadAllBtn');
             const originalText = downloadButton.textContent;
-            let filesProcessed = 0;
-            let filesTotal = processedFiles.length;
             
-            if (filesTotal === 0) {
+            // Make sure we have files
+            if (!processedFiles || processedFiles.length === 0) {
                 alert('No files available to download');
                 return;
             }
             
+            let filesProcessed = 0;
+            let filesTotal = processedFiles.length;
+            let successCount = 0;
+            let failedFiles = [];
+            
             try {
+                // Update button state
                 downloadButton.disabled = true;
                 downloadButton.textContent = `Downloading (0/${filesTotal})...`;
                 
+                // Process files one at a time
                 for (let i = 0; i < processedFiles.length; i++) {
                     const file = processedFiles[i];
+                    
+                    if (!file || !file.downloadUrl || !file.newFilename) {
+                        console.error('Invalid file data:', file);
+                        failedFiles.push({name: file?.newFilename || 'Unknown file', reason: 'Invalid file data'});
+                        continue;
+                    }
+                    
                     console.log(`Downloading file ${i+1}/${filesTotal}: ${file.newFilename} from ${file.downloadUrl}`);
                     
                     try {
-                        await downloadFile(file.downloadUrl, file.newFilename);
-                        filesProcessed++;
-                        downloadButton.textContent = `Downloading (${filesProcessed}/${filesTotal})...`;
+                        const success = await downloadFile(file.downloadUrl, file.newFilename);
+                        if (success) {
+                            successCount++;
+                        } else {
+                            failedFiles.push({name: file.newFilename, reason: 'Download failed'});
+                        }
                     } catch (fileErr) {
                         console.error(`Error downloading file ${file.newFilename}:`, fileErr);
+                        failedFiles.push({name: file.newFilename, reason: fileErr.message});
                     }
+                    
+                    filesProcessed++;
+                    downloadButton.textContent = `Downloading (${filesProcessed}/${filesTotal})...`;
                     
                     // Add small delay between downloads
                     await new Promise(resolve => setTimeout(resolve, 500));
                 }
                 
-                downloadButton.textContent = `Downloaded ${filesProcessed}/${filesTotal} files`;
+                // Update the UI with final status
+                downloadButton.textContent = `Downloaded ${successCount}/${filesTotal} files`;
+                
+                if (failedFiles.length > 0) {
+                    console.error('Failed to download these files:', failedFiles);
+                    
+                    // Show a simple alert with failed files
+                    const failedList = failedFiles.map(f => `${f.name}: ${f.reason}`).join('\n');
+                    alert(`Some files failed to download:\n${failedList}`);
+                }
+                
+                // Reset button after a delay
                 setTimeout(() => {
                     downloadButton.disabled = false;
                     downloadButton.textContent = originalText;
-                }, 3000);
+                }, 5000);
             } catch (err) {
                 console.error('Batch download error:', err);
                 alert(`Error downloading files: ${err.message}`);

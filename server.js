@@ -368,8 +368,27 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                     // Make sure directory exists
                     await fs.mkdir(path.dirname(newPath), { recursive: true });
                     
-                    // Write the file
-                    await fs.writeFile(newPath, req.file.buffer);
+                    // Write the file using fs.copyFile if possible, or fs.writeFile as fallback
+                    try {
+                        // Try to copy from the upload dir if the file exists there
+                        const originalPath = path.join(UPLOAD_DIR, req.file.filename || req.file.originalname);
+                        
+                        // Check if source file exists
+                        try {
+                            await fs.access(originalPath);
+                            // Source file exists, use copyFile
+                            await fs.copyFile(originalPath, newPath);
+                            console.log(`Copied file from ${originalPath} to ${newPath}`);
+                        } catch (accessErr) {
+                            // Source file doesn't exist, use writeFile with buffer
+                            await fs.writeFile(newPath, req.file.buffer);
+                            console.log(`Created file with buffer: ${newPath}`);
+                        }
+                    } catch (writeErr) {
+                        console.error(`Error writing file with primary method, trying fallback: ${writeErr.message}`);
+                        // Last resort - try writeFile with buffer
+                        await fs.writeFile(newPath, req.file.buffer);
+                    }
                     
                     // Verify file was created
                     const stats = await fs.stat(newPath);
@@ -396,8 +415,27 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                 // Make sure directory exists
                 await fs.mkdir(path.dirname(newPath), { recursive: true });
                 
-                // Write the file
-                await fs.writeFile(newPath, req.file.buffer);
+                // Write the file - try multiple methods
+                try {
+                    // Try to copy from the upload dir if the file exists there
+                    const originalPath = path.join(UPLOAD_DIR, req.file.filename || req.file.originalname);
+                    
+                    // Check if source file exists
+                    try {
+                        await fs.access(originalPath);
+                        // Source file exists, use copyFile
+                        await fs.copyFile(originalPath, newPath);
+                        console.log(`Copied NOSAIL file from ${originalPath} to ${newPath}`);
+                    } catch (accessErr) {
+                        // Source file doesn't exist, use writeFile with buffer
+                        await fs.writeFile(newPath, req.file.buffer);
+                        console.log(`Created NOSAIL file with buffer: ${newPath}`);
+                    }
+                } catch (writeErr) {
+                    console.error(`Error writing NOSAIL file with primary method, trying fallback: ${writeErr.message}`);
+                    // Last resort - try writeFile with buffer
+                    await fs.writeFile(newPath, req.file.buffer);
+                }
                 
                 // Verify file was created
                 const stats = await fs.stat(newPath);
@@ -903,7 +941,20 @@ app.post('/api/cleanup', async (req, res) => {
 // Add automatic cleanup on server startup
 app.listen(port, async () => {
     console.log(`Server running on port ${port}`);
-    await cleanupDirectories();
+    
+    // Ensure upload and processed directories exist
+    try {
+        await fs.mkdir(UPLOAD_DIR, { recursive: true });
+        console.log(`Created/verified upload directory: ${UPLOAD_DIR}`);
+        
+        await fs.mkdir(PROCESSED_DIR, { recursive: true });
+        console.log(`Created/verified processed directory: ${PROCESSED_DIR}`);
+        
+        // Run initial cleanup
+        await cleanupDirectories();
+    } catch (err) {
+        console.error('Error creating directories:', err);
+    }
 });
 
 // Fix the download endpoint
@@ -913,7 +964,22 @@ app.get('/download/:filename', async (req, res) => {
         const filePath = path.join(PROCESSED_DIR, filename);
         
         console.log(`Download request for: ${filename}`);
+        console.log(`Looking in directory: ${PROCESSED_DIR}`);
         console.log(`Full path: ${filePath}`);
+        
+        // List files in directory to debug
+        try {
+            const files = await fs.readdir(PROCESSED_DIR);
+            console.log(`Files in ${PROCESSED_DIR}:`, files);
+            
+            if (files.includes(filename)) {
+                console.log(`File ${filename} found in directory listing`);
+            } else {
+                console.log(`File ${filename} NOT found in directory listing`);
+            }
+        } catch (dirErr) {
+            console.error(`Error reading directory ${PROCESSED_DIR}:`, dirErr);
+        }
         
         // Check if file exists before trying to download
         try {
@@ -925,7 +991,8 @@ app.get('/download/:filename', async (req, res) => {
                 return res.status(500).send('File exists but is empty');
             }
             
-            res.download(filePath, filename, (err) => {
+            // Use sendFile instead of download for more reliable behavior
+            res.sendFile(filePath, (err) => {
                 if (err) {
                     console.error(`Error during download: ${err.message}`);
                     // Only send error if headers not sent yet
