@@ -415,16 +415,13 @@
                 text-align: center;
                 border: 1px solid #dee2e6;
             ">
-                <button onclick="downloadAllFiles()" 
+                <button id="mainDownloadAllBtn" onclick="downloadAllFiles()" 
                         class="download-all-btn"
                         style="padding: 15px 40px; font-size: 1.2em;">
                     Download All Renamed Files
                 </button>
-                <div class="processed-count" style="margin-top: 10px; color: #666;">
-                    Processed ${data.processedFiles.length} file(s)
-                    ${data.processedFiles.length > 0 ? 
-                        `<br>Success: ${data.processedFiles.length}, Failed: 0` : 
-                        '<br>Success: 0, Failed: 1'}
+                <div id="processedCount" class="processed-count" style="margin-top: 10px; color: #666;">
+                    No files processed yet
                 </div>
             </div>
         </div>
@@ -607,10 +604,6 @@
                                 <div class="file-item" style="margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 5px;">
                                     <div><strong>${file.sailNumber === 'NOSAIL' ? 'No Sail' : 'Sail #' + file.sailNumber}</strong> ${file.sailorName !== 'NONAME' ? '- ' + file.sailorName : ''}</div>
                                     <div style="color: #666; margin: 5px 0;">${file.newFilename}</div>
-                                    <button onclick="downloadFile('${file.downloadUrl}', '${file.newFilename}')" 
-                                            style="background: #0066cc; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">
-                                        Download File
-                                    </button>
                                 </div>
                             `).join('')}
                         </div>
@@ -630,15 +623,9 @@
                     });
                     
                     console.log(`Added ${data.processedFiles.length} files to download queue. Total: ${processedFiles.length}`);
-                }
-
-                // Also update the "Download All" counter in the UI
-                const processedCount = document.querySelector('.processed-count');
-                if (processedCount) {
-                    processedCount.innerHTML = `
-                        Processed ${totalFiles} file(s)<br>
-                        Success: ${processedFiles.length}, Failed: ${totalFiles - processedFiles.length}
-                    `;
+                    
+                    // Update the processed count display
+                    updateBatchSummary();
                 }
 
             } catch (err) {
@@ -657,13 +644,23 @@
 
         function updateBatchSummary() {
             const summary = batchActions.querySelector('.batch-summary');
+            const processedCount = document.getElementById('processedCount');
             const successCount = processedFiles.length;
             const failedCount = totalFiles - successCount;
             
-            summary.innerHTML = `
-                <div>Processed ${totalFiles} file(s)</div>
-                <div>Success: ${successCount}, Failed: ${failedCount}</div>
-            `;
+            if (summary) {
+                summary.innerHTML = `
+                    <div>Processed ${totalFiles} file(s)</div>
+                    <div>Success: ${successCount}, Failed: ${failedCount}</div>
+                `;
+            }
+            
+            if (processedCount) {
+                processedCount.innerHTML = `
+                    Processed ${totalFiles} file(s)<br>
+                    Success: ${successCount}, Failed: ${failedCount}
+                `;
+            }
         }
 
         async function downloadFile(url, filename) {
@@ -695,7 +692,7 @@
         }
 
         async function downloadAllFiles() {
-            const downloadButton = document.querySelector('.download-all-btn');
+            const downloadButton = document.getElementById('mainDownloadAllBtn');
             const originalText = downloadButton.textContent;
             let filesProcessed = 0;
             let filesTotal = processedFiles.length;
