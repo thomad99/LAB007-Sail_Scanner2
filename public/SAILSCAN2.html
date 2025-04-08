@@ -6,26 +6,28 @@
     <style>
         .header {
             text-align: center;
-            padding: 20px;
+            padding: 0; /* Remove padding to allow image to span full width */
             margin-bottom: 30px;
             background: #f0f0f0; /* Lighter grey background */
             border: 2px solid #dee2e6; /* Add border frame */
             border-radius: 8px; /* Rounded corners */
             box-shadow: 0 2px 5px rgba(0,0,0,0.1); /* Subtle shadow */
+            overflow: hidden; /* Ensure image doesn't break out of border radius */
         }
 
         .logo {
-            max-height: 200px;
-            width: auto;
-            margin: 0 auto;
+            width: 100%; /* Make image fill the full width */
+            height: auto;
             display: block;
+            margin: 0;
+            max-height: none; /* Remove max-height constraint */
         }
 
         body {
             font-family: Arial, sans-serif;
             max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 0; /* Update to 0 */
             min-height: 100vh;
             display: flex;
             flex-direction: column;
@@ -335,12 +337,31 @@
 
         .content-wrapper {
             flex: 1;
+            padding: 0 20px; /* Add padding to content wrapper */
+        }
+
+        @media (max-width: 768px) {
+            /* Adjustments for mobile/tablet */
+            .header {
+                border-radius: 0; /* Remove border radius on small screens */
+                margin-left: -20px; /* Extend beyond the body padding */
+                margin-right: -20px;
+                width: calc(100% + 40px); /* Account for body padding */
+            }
+            
+            body {
+                padding: 0; /* Remove padding on small screens */
+            }
+            
+            .content-wrapper {
+                padding: 0 20px; /* Add padding to content instead */
+            }
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <img src="LOGO BLUE.JPEG" alt="LoveSailing Logo" class="logo">
+        <img src="lovesailing-header.jpg" alt="LoveSailing Header" class="logo">
     </div>
 
     <div class="content-wrapper">
