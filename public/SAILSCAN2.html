@@ -4,30 +4,29 @@
     <title>LAB007 - LOVESAILING PHOTO SCANNER</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
         .header {
-            text-align: center;
-            padding: 0; /* Remove padding to allow image to span full width */
-            margin-bottom: 30px;
-            background: #f0f0f0; /* Lighter grey background */
-            border: 2px solid #dee2e6; /* Add border frame */
-            border-radius: 8px; /* Rounded corners */
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1); /* Subtle shadow */
-            overflow: hidden; /* Ensure image doesn't break out of border radius */
+            width: 100%;
+            margin: 0 0 30px 0;
+            padding: 0;
+            position: relative;
+            background: #f0f0f0;
         }
 
         .logo {
-            width: 100%; /* Make image fill the full width */
+            width: 100%;
             height: auto;
             display: block;
-            margin: 0;
-            max-height: none; /* Remove max-height constraint */
+            object-fit: cover;
         }
 
         body {
             font-family: Arial, sans-serif;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0; /* Update to 0 */
             min-height: 100vh;
             display: flex;
             flex-direction: column;
@@ -312,9 +311,13 @@
             color: #721c24;
         }
         .main-container {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 0 20px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
         }
         .debug-toggle {
             margin: 10px 0;
@@ -324,7 +327,7 @@
             text-align: center;
             padding: 20px;
             margin-top: 40px;
-            background: #f8f9fa;
+            background: #ffffff;
             border-top: 1px solid #dee2e6;
         }
 
@@ -342,19 +345,8 @@
 
         @media (max-width: 768px) {
             /* Adjustments for mobile/tablet */
-            .header {
-                border-radius: 0; /* Remove border radius on small screens */
-                margin-left: -20px; /* Extend beyond the body padding */
-                margin-right: -20px;
-                width: calc(100% + 40px); /* Account for body padding */
-            }
-            
-            body {
-                padding: 0; /* Remove padding on small screens */
-            }
-            
             .content-wrapper {
-                padding: 0 20px; /* Add padding to content instead */
+                padding: 0 15px; /* Reduced padding for smaller screens */
             }
         }
     </style>
@@ -364,94 +356,97 @@
         <img src="lovesailing-header.jpg" alt="LoveSailing Header" class="logo">
     </div>
 
-    <div class="content-wrapper">
-        <h1>LAB007-Sail-Photo-Scan</h1>
-        <div class="upload-section">
-            <h2>Upload Sail Photos</h2>
-            <input type="file" id="imageInput" accept="image/*" multiple>
-            <p>Select one or more images to analyze</p>
-        </div>
-
-        <div id="topResultsBox" class="sail-number-display">
-            <h2>Results</h2>
-            <div class="results-list"></div>
-        </div>
-
-        <div id="batchActions" class="batch-actions" style="display: none;">
-            <button id="downloadAllBtn" class="download-all-btn">Download All Renamed Files</button>
-            <div class="batch-summary"></div>
-        </div>
-
-        <img id="preview" style="display: none;">
-        <div id="loading" class="loading">Analyzing image...</div>
-
-        <div id="results"></div>
-        <div id="sailNumberBox" class="sail-number-display" style="display: none;">
-            <h2>Detected Sail Number</h2>
-            <div class="sail-number-value">--</div>
-            <div class="sail-number-confidence"></div>
-        </div>
-
-        <div id="debugPanel" class="debug-panel">
-            <div class="debug-header">
-                <h3>Debug Information</h3>
-                <label>
-                    <input type="checkbox" id="debugToggle" checked> Show Debug Info
-                </label>
+    <div class="main-container">
+        <div class="content-wrapper">
+            <div class="upload-section">
+                <h2>Upload Sail Photos</h2>
+                <input type="file" id="imageInput" accept="image/*" multiple>
+                <p>Select one or more images to analyze</p>
             </div>
-            <div class="debug-content">
-                <div class="debug-section">
-                    <h4>Azure Vision Processing Status</h4>
-                    <div id="processingStatus" class="processing-status">Waiting to start...</div>
-                    <pre id="azureDebug">Waiting for scan...</pre>
+
+            <div id="topResultsBox" class="sail-number-display">
+                <h2>Results</h2>
+                <div class="results-list"></div>
+            </div>
+
+            <div id="batchActions" class="batch-actions" style="display: none;">
+                <button id="downloadAllBtn" class="download-all-btn">Download All Renamed Files</button>
+                <div class="batch-summary"></div>
+            </div>
+
+            <img id="preview" style="display: none;">
+            <div id="loading" class="loading">Analyzing image...</div>
+
+            <div id="results"></div>
+            <div id="sailNumberBox" class="sail-number-display" style="display: none;">
+                <h2>Detected Sail Number</h2>
+                <div class="sail-number-value">--</div>
+                <div class="sail-number-confidence"></div>
+            </div>
+
+            <div id="debugPanel" class="debug-panel">
+                <div class="debug-header">
+                    <h3>Debug Information</h3>
+                    <label>
+                        <input type="checkbox" id="debugToggle" checked> Show Debug Info
+                    </label>
                 </div>
-                <div class="debug-section">
-                    <h4>Raw Text Detected</h4>
-                    <pre id="rawTextDebug">Waiting for scan...</pre>
+                <div class="debug-content">
+                    <div class="debug-section">
+                        <h4>Azure Vision Processing Status</h4>
+                        <div id="processingStatus" class="processing-status">Waiting to start...</div>
+                        <pre id="azureDebug">Waiting for scan...</pre>
+                    </div>
+                    <div class="debug-section">
+                        <h4>Raw Text Detected</h4>
+                        <pre id="rawTextDebug">Waiting for scan...</pre>
+                    </div>
+                    <div class="debug-section">
+                        <h4>Number Processing</h4>
+                        <pre id="numberDebug">Waiting for scan...</pre>
+                    </div>
                 </div>
-                <div class="debug-section">
-                    <h4>Number Processing</h4>
-                    <pre id="numberDebug">Waiting for scan...</pre>
+            </div>
+
+            <div id="batchProgress" class="batch-progress" style="display: none;">
+                <div class="progress-header">
+                    <span class="progress-title">Processing Files</span>
+                    <span class="progress-count">0/0 files complete</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill"></div>
                 </div>
             </div>
-        </div>
 
-        <div id="batchProgress" class="batch-progress" style="display: none;">
-            <div class="progress-header">
-                <span class="progress-title">Processing Files</span>
-                <span class="progress-count">0/0 files complete</span>
-            </div>
-            <div class="progress-bar">
-                <div class="progress-fill"></div>
-            </div>
-        </div>
+            <div class="results-container">
+                <!-- Sail numbers and file listings here -->
 
-        <div class="results-container">
-            <!-- Sail numbers and file listings here -->
-
-            <!-- Always show the Download All section -->
-            <div class="batch-download" style="
-                margin-top: 30px;
-                padding: 20px;
-                background: #f8f9fa;
-                border-radius: 8px;
-                text-align: center;
-                border: 1px solid #dee2e6;
-            ">
-                <button id="mainDownloadAllBtn" onclick="downloadAllFiles()" 
-                        class="download-all-btn"
-                        style="padding: 15px 40px; font-size: 1.2em;">
-                    Download All Renamed Files
-                </button>
-                <div id="processedCount" class="processed-count" style="margin-top: 10px; color: #666;">
-                    No files processed yet
+                <!-- Always show the Download All section -->
+                <div class="batch-download" style="
+                    margin-top: 30px;
+                    padding: 20px;
+                    background: #f8f9fa;
+                    border-radius: 8px;
+                    text-align: center;
+                    border: 1px solid #dee2e6;
+                ">
+                    <button id="mainDownloadAllBtn" onclick="downloadAllFiles()" 
+                            class="download-all-btn"
+                            style="padding: 15px 40px; font-size: 1.2em;">
+                        Download All Renamed Files
+                    </button>
+                    <div id="processedCount" class="processed-count" style="margin-top: 10px; color: #666;">
+                        No files processed yet
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="footer">
-        <img src="LAB007-FOOTER.JPG" alt="LAB007 Footer">
+        <a href="https://thomad99.wixstudio.com/lab007" target="_blank">
+            <img src="LAB007-FOOTER.JPG" alt="LAB007 Footer">
+        </a>
     </div>
 
     <script>
