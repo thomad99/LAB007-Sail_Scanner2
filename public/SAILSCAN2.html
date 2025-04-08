@@ -448,7 +448,7 @@
         const batchActions = document.getElementById('batchActions');
         const downloadAllBtn = document.getElementById('downloadAllBtn');
         const resultsContainer = document.querySelector('.results-list');
-        let processedFiles = [];
+        window.processedFiles = [];
         const batchProgress = document.getElementById('batchProgress');
         let totalFiles = 0;
         let completedFiles = 0;
@@ -477,8 +477,8 @@
         async function handleFiles(e) {
             const files = Array.from(e.target.files);
             
-            // Reset everything
-            processedFiles = [];
+            // Reset everything for a new batch
+            window.processedFiles = [];
             resultsContainer.innerHTML = '';
             totalFiles = files.length;
             completedFiles = 0;
@@ -502,6 +502,13 @@
                     if (processedCount) {
                         processedCount.innerHTML = `Processing ${totalFiles} file(s)...`;
                     }
+                    
+                    // Update download button text to indicate processing
+                    const downloadButton = document.getElementById('mainDownloadAllBtn');
+                    if (downloadButton) {
+                        downloadButton.disabled = true;
+                        downloadButton.textContent = `Processing ${totalFiles} file(s)...`;
+                    }
 
                     // Create result cards for all files first
                     files.forEach(file => {
@@ -516,9 +523,11 @@
                         updateBatchProgress();
                     }
 
-                    updateBatchSummary();
+                    console.log('All files processed.');
+                    console.log('Final processedFiles array length:', window.processedFiles.length);
+                    console.log('Files:', window.processedFiles.map(f => f.newFilename));
                     
-                    console.log('All files processed. Total files in processedFiles array:', processedFiles.length);
+                    updateBatchSummary();
                 } catch (err) {
                     console.error('Error during file processing:', err);
                     alert('An error occurred while processing files. Please try again.');
@@ -568,8 +577,19 @@
                 try {
                     data = await response.json();
                     console.log('Received data from server:', data);
+                    
+                    // Detailed logging of processedFiles from server
+                    if (data && data.processedFiles) {
+                        console.log(`Server returned ${data.processedFiles.length} processed files:`);
+                        data.processedFiles.forEach((file, i) => {
+                            console.log(`  ${i+1}. ${file.newFilename} (${file.downloadUrl})`);
+                        });
+                    } else {
+                        console.warn('Server response missing processedFiles array');
+                    }
                 } catch (parseErr) {
                     console.error('Failed to parse server response:', parseErr);
+                    console.error('Raw response text:', await response.text());
                     throw new Error('Invalid response from server');
                 }
                 
@@ -587,10 +607,10 @@
                 // Always consider the scan "successful" even if we have errors
                 // Extract data safely with defaults
                 const sailNumbers = data.sailNumbers?.numbers || [];
-                const processedFiles = data.processedFiles || [];
+                const dataProcessedFiles = data.processedFiles || [];
                 
                 console.log('Sail numbers:', sailNumbers);
-                console.log('Processed files:', processedFiles);
+                console.log('Processed files:', dataProcessedFiles);
 
                 if (sailNumbers.length > 0) {
                     contentDiv.innerHTML = `
@@ -623,11 +643,11 @@
                 }
 
                 // Add files section separately (always show if files exist)
-                if (processedFiles && processedFiles.length > 0) {
+                if (dataProcessedFiles && dataProcessedFiles.length > 0) {
                     contentDiv.innerHTML += `
                         <div class="generated-files" style="margin-top: 20px;">
                             <h4>Generated Files:</h4>
-                            ${processedFiles.map(file => `
+                            ${dataProcessedFiles.map(file => `
                                 <div class="file-item" style="margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 5px;">
                                     <div style="font-weight: bold;">
                                         ${file.sailNumber === 'NOSAIL' ? 'No Sail' : 'Sail #' + file.sailNumber}
@@ -648,37 +668,38 @@
 
                 // Always mark as complete, never as error
                 statusDiv.className = 'processing-status status-complete';
-                statusDiv.textContent = processedFiles.length > 0 
+                statusDiv.textContent = dataProcessedFiles.length > 0 
                     ? 'Analysis complete' 
                     : 'Processed with fallback';
                 
-                // Add files to the global processedFiles array
-                if (processedFiles && processedFiles.length > 0) {
-                    console.log(`Server returned ${processedFiles.length} processed files`);
+                // Add files to the global processedFiles array - FIXED
+                if (data.processedFiles && data.processedFiles.length > 0) {
+                    console.log(`Server returned ${data.processedFiles.length} processed files`);
                     
-                    // Handle duplicates
-                    for (const newFile of processedFiles) {
+                    // Process each file from the server response
+                    for (const newFile of data.processedFiles) {
                         if (!newFile || !newFile.newFilename || !newFile.downloadUrl) {
                             console.warn('Skipping invalid file entry:', newFile);
                             continue;
                         }
                         
-                        const existingIndex = processedFiles.findIndex(f => 
+                        // Check if this file already exists in our global array
+                        const existingIndex = window.processedFiles.findIndex(f => 
                             f.newFilename === newFile.newFilename);
                         
                         if (existingIndex !== -1) {
-                            // Replace existing file
-                            console.log(`Replacing existing file: ${newFile.newFilename}`);
-                            processedFiles[existingIndex] = newFile;
+                            // Replace existing file with updated version
+                            console.log(`Replacing existing file in global array: ${newFile.newFilename}`);
+                            window.processedFiles[existingIndex] = newFile;
                         } else {
-                            // Add new file
-                            console.log(`Adding new file: ${newFile.newFilename}`);
-                            processedFiles.push(newFile);
+                            // Add new file to global array
+                            console.log(`Adding new file to global array: ${newFile.newFilename}`);
+                            window.processedFiles.push(newFile);
                         }
                     }
                     
-                    console.log(`Global processedFiles now has ${processedFiles.length} files`);
-                    console.log('Files:', processedFiles.map(f => f.newFilename));
+                    console.log(`AFTER UPDATE: Global processedFiles array now has ${window.processedFiles.length} files`);
+                    console.log('Current processedFiles:', window.processedFiles.map(f => f.newFilename));
                     
                     // Update the UI with new file count
                     updateBatchSummary();
@@ -704,12 +725,16 @@
         }
 
         function updateBatchSummary() {
+            console.log('Updating batch summary...');
+            console.log('Total completed files:', completedFiles);
+            console.log('Current processedFiles length:', window.processedFiles.length);
+            
             const summary = batchActions.querySelector('.batch-summary');
             const processedCount = document.getElementById('processedCount');
             const totalFiles = completedFiles; // Use the global completedFiles count
-            const successCount = processedFiles.length;
+            const successCount = window.processedFiles.length;
             
-            // No longer need to display failures, as we always create fallback files
+            console.log(`Updating UI: ${successCount} files ready for download`);
             
             if (summary) {
                 summary.innerHTML = `
@@ -726,6 +751,7 @@
                 // Update the download button state
                 const downloadButton = document.getElementById('mainDownloadAllBtn');
                 if (downloadButton) {
+                    console.log(`Updating download button: ${successCount} files available`);
                     downloadButton.disabled = successCount === 0;
                     if (successCount === 0) {
                         downloadButton.textContent = 'No files to download';
@@ -803,20 +829,22 @@
         }
 
         async function downloadAllFiles() {
-            console.log("Download All clicked - processedFiles:", processedFiles);
+            console.log("Download All clicked - processedFiles:", window.processedFiles);
+            console.log("Current count:", window.processedFiles?.length || 0);
             
             // Get main download button
             const downloadButton = document.getElementById('mainDownloadAllBtn');
             const originalText = downloadButton.textContent;
             
             // Make sure we have files
-            if (!processedFiles || processedFiles.length === 0) {
+            if (!window.processedFiles || window.processedFiles.length === 0) {
+                console.warn('No files available to download');
                 alert('No files available to download');
                 return;
             }
             
             let filesProcessed = 0;
-            let filesTotal = processedFiles.length;
+            let filesTotal = window.processedFiles.length;
             let successCount = 0;
             let retryQueue = [];  // For files that fail on first attempt
             
@@ -825,9 +853,15 @@
                 downloadButton.disabled = true;
                 downloadButton.textContent = `Preparing downloads (0/${filesTotal})...`;
                 
+                // Display what we're about to download
+                console.log(`Starting download of ${filesTotal} files:`);
+                window.processedFiles.forEach((f, i) => {
+                    console.log(`${i+1}. ${f.newFilename} (${f.downloadUrl})`);
+                });
+                
                 // Process files one at a time
-                for (let i = 0; i < processedFiles.length; i++) {
-                    const file = processedFiles[i];
+                for (let i = 0; i < window.processedFiles.length; i++) {
+                    const file = window.processedFiles[i];
                     
                     if (!file || !file.downloadUrl || !file.newFilename) {
                         console.warn('Invalid file data, skipping:', file);
