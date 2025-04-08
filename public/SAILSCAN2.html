@@ -663,6 +663,26 @@
             `;
         }
 
+        async function downloadFile(url, filename) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                
+                const blob = await response.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(downloadUrl);
+                a.remove();
+            } catch (err) {
+                console.error('Download error:', err);
+                alert('Error downloading file. Please try again.');
+            }
+        }
+
         async function downloadAllFiles() {
             const downloadButton = document.querySelector('.batch-download button');
             const originalText = downloadButton.textContent;
@@ -671,33 +691,18 @@
                 downloadButton.disabled = true;
                 downloadButton.textContent = 'Downloading...';
                 
-                const response = await fetch('/api/download-all');
-                const files = await response.json();
-                
-                for (const file of files.processedFiles) {
+                for (const file of processedFiles) {
                     await downloadFile(file.downloadUrl, file.newFilename);
                     // Add small delay between downloads
                     await new Promise(resolve => setTimeout(resolve, 500));
                 }
             } catch (err) {
                 console.error('Download error:', err);
+                alert('Error downloading files. Please try again.');
             } finally {
                 downloadButton.disabled = false;
                 downloadButton.textContent = originalText;
             }
-        }
-
-        function downloadFile(url, filename) {
-            return fetch(url)
-                .then(response => response.blob())
-                .then(blob => {
-                    const link = document.createElement('a');
-                    link.href = window.URL.createObjectURL(blob);
-                    link.download = filename;
-                    link.click();
-                    window.URL.revokeObjectURL(link.href);
-                })
-                .catch(console.error);
         }
 
         // Add a function to handle manual cleanup if needed

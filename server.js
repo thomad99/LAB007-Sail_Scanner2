@@ -18,8 +18,8 @@ const validSailNumbers = [13, 118, 9610, 5318, 8008]; // Valid sail numbers
 // Add these constants at the top of your file
 const RATE_LIMIT_DELAY = 30000; // 30 seconds
 let lastAzureCallTime = 0;
-const UPLOAD_DIR = './uploads';    // or whatever your upload directory is
-const PROCESSED_DIR = './processed'; // or whatever your processed files directory is
+const UPLOAD_DIR = path.join(__dirname, 'uploads');
+const PROCESSED_DIR = path.join(__dirname, 'processed');
 
 // Add these constants at the top
 const MAX_RETRIES = 3;
@@ -61,6 +61,7 @@ pool.connect()
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
+app.use('/download', express.static(PROCESSED_DIR));
 
 // Define multer storage configurations
 const trainUpload = multer({ 
@@ -698,21 +699,12 @@ async function waitForRateLimit() {
 async function processImage(file) {
     console.log('=== Starting New Scan ===');
     console.log('Processing file:', file.originalname);
-    
-    const processingSteps = {
-        rawText: [],
-        sailNumbers: {
-            numbers: []
-        },
-        processedFiles: [], // Initialize the array
-        debug: {
-            azureResponse: null,
-            processingTime: null,
-            databaseLookups: []
-        }
-    };
 
     try {
+        // Ensure directories exist
+        await fs.mkdir(UPLOAD_DIR, { recursive: true });
+        await fs.mkdir(PROCESSED_DIR, { recursive: true });
+
         // Wrap Azure API call in retry logic
         const azureResults = await processWithRetry(
             () => computerVisionClient.readInStream(
@@ -751,50 +743,32 @@ async function processImage(file) {
             'Azure Results Polling'
         );
 
-        processingSteps.debug.azureResponse = results;
-        
-        // Extract sail numbers from results
-        const foundNumbers = extractSailNumbers(results);
-        
-        // Sort by confidence but keep all numbers
-        const sortedNumbers = foundNumbers.sort((a, b) => b.confidence - a.confidence);
-            
-        processingSteps.sailNumbers.numbers = sortedNumbers;
-        
-        // Look up sailor information for each number
-        for (const num of processingSteps.sailNumbers.numbers) {
+        const processedFiles = [];
+
+        // Process each detected sail number
+        for (const sailData of results.analyzeResult.readResults) {
             try {
-                const sailorInfo = await lookupSailorInDatabase(num.number);
-                if (sailorInfo) {
-                    num.skipperInfo = sailorInfo;
+                let sailorName = 'NONAME';
+                if (sailData.lines.length > 0) {
+                    const text = sailData.lines[0].text.trim();
+                    if (isValidSailNumber(text)) {
+                        sailorName = text.substring(0, 30);
+                    }
                 }
-            } catch (err) {
-                console.error(`Error looking up sailor for number ${num.number}:`, err);
-            }
-        }
 
-        // Create directory if it doesn't exist
-        await fs.mkdir(PROCESSED_DIR, { recursive: true });
+                const newFilename = `${sailData.number}_${sailorName}_${file.originalname}`;
+                const originalPath = path.join(UPLOAD_DIR, file.filename);
+                const newPath = path.join(PROCESSED_DIR, newFilename);
 
-        // Process each sail number
-        for (const sailData of processingSteps.sailNumbers.numbers) {
-            // Get sailor name
-            const sailorName = sailData.skipperInfo ? 
-                sailData.skipperInfo.sailorName.replace(/[^a-zA-Z0-9]/g, '') : 
-                'NONAME';
+                // Log paths for debugging
+                console.log('Original path:', originalPath);
+                console.log('New path:', newPath);
 
-            // Create filename
-            const newFilename = `${sailData.number}_${sailorName}_${file.originalname}`;
-            const originalPath = path.join(UPLOAD_DIR, file.filename);
-            const newPath = path.join(PROCESSED_DIR, newFilename);
-
-            try {
                 // Copy file
                 await fs.copyFile(originalPath, newPath);
-                console.log(`Created file: ${newFilename}`);
+                console.log(`Successfully created file: ${newFilename}`);
 
-                // Add to processed files
-                processingSteps.processedFiles.push({
+                processedFiles.push({
                     originalFilename: file.originalname,
                     newFilename: newFilename,
                     downloadUrl: `/download/${newFilename}`,
@@ -802,35 +776,22 @@ async function processImage(file) {
                     sailorName: sailorName
                 });
             } catch (fileErr) {
-                console.error(`Error creating file ${newFilename}:`, fileErr);
-            }
-        }
-
-        // If no sail numbers found, create NOSAIL version
-        if (processingSteps.sailNumbers.numbers.length === 0) {
-            const newFilename = `NOSAIL_${file.originalname}`;
-            const originalPath = path.join(UPLOAD_DIR, file.filename);
-            const newPath = path.join(PROCESSED_DIR, newFilename);
-
-            try {
-                await fs.copyFile(originalPath, newPath);
-                processingSteps.processedFiles.push({
-                    originalFilename: file.originalname,
-                    newFilename: newFilename,
-                    downloadUrl: `/download/${newFilename}`,
-                    sailNumber: null,
-                    sailorName: null
-                });
-            } catch (fileErr) {
-                console.error(`Error creating NOSAIL file:`, fileErr);
+                console.error(`Error creating file for sail number ${sailData.number}:`, fileErr);
             }
         }
 
         return {
             success: true,
-            sailNumbers: processingSteps.sailNumbers.numbers,
-            processedFiles: processingSteps.processedFiles,
-            debug: processingSteps.debug
+            sailNumbers: results.analyzeResult.readResults.map(r => ({
+                number: r.number,
+                confidence: r.confidence,
+                boundingBox: r.boundingBox
+            })),
+            processedFiles: processedFiles,
+            debug: {
+                azureResponse: results.analyzeResult,
+                processingTime: `${results.analyzeResult.readResults.length} seconds`
+            }
         };
 
     } catch (err) {
@@ -901,12 +862,20 @@ app.listen(port, async () => {
 
 // Add this endpoint to handle file downloads
 app.get('/download/:filename', (req, res) => {
-    const filename = req.params.filename;
-    const filePath = path.join(PROCESSED_DIR, filename);
-    res.download(filePath, filename, (err) => {
-        if (err) {
-            console.error(`Download error for ${filename}:`, err);
-            res.status(500).send('Error downloading file');
+    try {
+        const filename = req.params.filename;
+        const filePath = path.join(PROCESSED_DIR, filename);
+        
+        // Check if file exists
+        if (fs.existsSync(filePath)) {
+            console.log(`Sending file: ${filePath}`);
+            res.download(filePath);
+        } else {
+            console.error(`File not found: ${filePath}`);
+            res.status(404).send('File not found');
         }
-    });
+    } catch (err) {
+        console.error('Download error:', err);
+        res.status(500).send('Error downloading file');
+    }
 }); 
