@@ -416,7 +416,7 @@
                 border: 1px solid #dee2e6;
             ">
                 <button onclick="downloadAllFiles()" 
-                        class="btn btn-success btn-lg"
+                        class="download-all-btn"
                         style="padding: 15px 40px; font-size: 1.2em;">
                     Download All Renamed Files
                 </button>
@@ -431,7 +431,7 @@
     </div>
 
     <div class="footer">
-        <img src="LAB007-FOOTER.jpeg" alt="LAB007 Footer">
+        <img src="LAB007-FOOTER.JPG" alt="LAB007 Footer">
     </div>
 
     <script>
@@ -591,51 +591,54 @@
                                 </div>
                             `).join('')}
                         </div>
+                    `;
+                } else {
+                    contentDiv.innerHTML = `
+                        <div class="no-numbers" style="color: #dc3545;">No sail numbers detected</div>
+                    `;
+                }
+
+                // Add files section separately (always show if files exist)
+                if (processedFiles && processedFiles.length > 0) {
+                    contentDiv.innerHTML += `
                         <div class="generated-files" style="margin-top: 20px;">
                             <h4>Generated Files:</h4>
                             ${processedFiles.map(file => `
-                                <div class="file-item" style="margin: 10px 0;">
-                                    <p>${file.newFilename}</p>
-                                    <button onclick="downloadFile('${file.downloadUrl}', '${file.newFilename}')" class="btn btn-primary">
+                                <div class="file-item" style="margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+                                    <div><strong>${file.sailNumber === 'NOSAIL' ? 'No Sail' : 'Sail #' + file.sailNumber}</strong> ${file.sailorName !== 'NONAME' ? '- ' + file.sailorName : ''}</div>
+                                    <div style="color: #666; margin: 5px 0;">${file.newFilename}</div>
+                                    <button onclick="downloadFile('${file.downloadUrl}', '${file.newFilename}')" 
+                                            style="background: #0066cc; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">
                                         Download File
                                     </button>
                                 </div>
                             `).join('')}
                         </div>
-                        ${processedFiles.length > 1 ? `
-                            <div class="batch-download" style="margin-top: 20px;">
-                                <button class="btn btn-success" onclick="downloadAllVersions(${JSON.stringify(processedFiles)})">
-                                    Download All Versions
-                                </button>
-                            </div>
-                        ` : ''}
-                        
-                        <label class="debug-toggle">
-                            <input type="checkbox" onclick="toggleDebug(this)" id="debugToggle"> Show Debug Information
-                        </label>
-                        <div class="debug-panel" id="debugPanel">
-                            <pre>${JSON.stringify(data.debug, null, 2)}</pre>
-                        </div>
-                    `;
-                } else {
-                    contentDiv.innerHTML = `
-                        <div class="no-numbers" style="color: #dc3545;">No sail numbers detected</div>
-                        ${processedFiles.length > 0 ? `
-                            <div class="file-info" style="margin-top: 15px;">
-                                <p><strong>Generated File:</strong> ${processedFiles[0].newFilename}</p>
-                                <button class="btn btn-primary" onclick="downloadFile('${processedFiles[0].downloadUrl}', '${processedFiles[0].newFilename}')">
-                                    Download File
-                                </button>
-                            </div>
-                        ` : ''}
                     `;
                 }
 
                 statusDiv.className = 'processing-status status-complete';
                 statusDiv.textContent = 'Analysis complete';
                 
-                if (data.processedFiles) {
-                    processedFiles = data.processedFiles;
+                if (data.processedFiles && data.processedFiles.length > 0) {
+                    // Add these files to the global processedFiles array for the "Download All" button
+                    data.processedFiles.forEach(file => {
+                        // Add to global array only if not already present
+                        if (!processedFiles.some(existing => existing.newFilename === file.newFilename)) {
+                            processedFiles.push(file);
+                        }
+                    });
+                    
+                    console.log(`Added ${data.processedFiles.length} files to download queue. Total: ${processedFiles.length}`);
+                }
+
+                // Also update the "Download All" counter in the UI
+                const processedCount = document.querySelector('.processed-count');
+                if (processedCount) {
+                    processedCount.innerHTML = `
+                        Processed ${totalFiles} file(s)<br>
+                        Success: ${processedFiles.length}, Failed: ${totalFiles - processedFiles.length}
+                    `;
                 }
 
             } catch (err) {
@@ -665,10 +668,17 @@
 
         async function downloadFile(url, filename) {
             try {
+                console.log(`Downloading file: ${url}`);
                 const response = await fetch(url);
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                
+                if (!response.ok) {
+                    console.error(`Download failed with status: ${response.status}`);
+                    throw new Error(`Download failed: ${response.statusText}`);
+                }
                 
                 const blob = await response.blob();
+                console.log(`File downloaded, size: ${blob.size} bytes`);
+                
                 const downloadUrl = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = downloadUrl;
@@ -677,29 +687,44 @@
                 a.click();
                 window.URL.revokeObjectURL(downloadUrl);
                 a.remove();
+                console.log(`Download complete: ${filename}`);
             } catch (err) {
                 console.error('Download error:', err);
-                alert('Error downloading file. Please try again.');
+                alert(`Error downloading file: ${err.message}. Please try again.`);
             }
         }
 
         async function downloadAllFiles() {
-            const downloadButton = document.querySelector('.batch-download button');
+            const downloadButton = document.querySelector('.download-all-btn');
             const originalText = downloadButton.textContent;
+            let filesProcessed = 0;
+            let filesTotal = processedFiles.length;
+            
+            if (filesTotal === 0) {
+                alert('No files available to download');
+                return;
+            }
             
             try {
                 downloadButton.disabled = true;
-                downloadButton.textContent = 'Downloading...';
+                downloadButton.textContent = `Downloading (0/${filesTotal})...`;
                 
                 for (const file of processedFiles) {
                     await downloadFile(file.downloadUrl, file.newFilename);
+                    filesProcessed++;
+                    downloadButton.textContent = `Downloading (${filesProcessed}/${filesTotal})...`;
                     // Add small delay between downloads
                     await new Promise(resolve => setTimeout(resolve, 500));
                 }
+                
+                downloadButton.textContent = `Downloaded ${filesTotal} files`;
+                setTimeout(() => {
+                    downloadButton.disabled = false;
+                    downloadButton.textContent = originalText;
+                }, 3000);
             } catch (err) {
-                console.error('Download error:', err);
-                alert('Error downloading files. Please try again.');
-            } finally {
+                console.error('Batch download error:', err);
+                alert(`Error downloading files: ${err.message}`);
                 downloadButton.disabled = false;
                 downloadButton.textContent = originalText;
             }

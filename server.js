@@ -345,29 +345,61 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             }
         }
 
-        // Generate new filename incorporating all sail numbers and sailor names
-        let filenameParts = [];
-        
+        // Ensure processed directory exists
+        await fs.mkdir(PROCESSED_DIR, { recursive: true });
+        const processedFiles = [];
+
+        // Process each detected sail number and create files
         if (processingSteps.sailNumbers.numbers.length > 0) {
-            // Add each sail number and sailor name to the filename
             for (const sailData of processingSteps.sailNumbers.numbers) {
-                const sailorName = sailData.skipperInfo ? 
-                    sanitizeForFilename(sailData.skipperInfo.sailorName) : 
-                    'NONAME';
-                filenameParts.push(`${sailData.number}_${sailorName}`);
+                // Default to NONAME if no sailor info found
+                let sailorName = 'NONAME';
+                
+                // If we have sailor info, use it
+                if (sailData.skipperInfo && sailData.skipperInfo.sailorName) {
+                    sailorName = sanitizeForFilename(sailData.skipperInfo.sailorName);
+                }
+                
+                // Create new filename
+                const newFilename = `${sailData.number}_${sailorName}_${req.file.originalname}`;
+                
+                try {
+                    // Copy file to processed directory
+                    const originalBuffer = req.file.buffer;
+                    const newPath = path.join(PROCESSED_DIR, newFilename);
+                    
+                    await fs.writeFile(newPath, originalBuffer);
+                    console.log(`Created file: ${newFilename}`);
+                    
+                    processedFiles.push({
+                        originalFilename: req.file.originalname,
+                        newFilename: newFilename,
+                        downloadUrl: `/download/${newFilename}`,
+                        sailNumber: sailData.number,
+                        sailorName: sailorName
+                    });
+                } catch (fileErr) {
+                    console.error(`Error creating file for sail number ${sailData.number}:`, fileErr);
+                }
             }
         } else {
-            filenameParts.push('NOSAIL');
+            // No sail numbers found - create NOSAIL version
+            const newFilename = `NOSAIL_${req.file.originalname}`;
+            try {
+                await fs.writeFile(path.join(PROCESSED_DIR, newFilename), req.file.buffer);
+                console.log(`Created NOSAIL file: ${newFilename}`);
+                
+                processedFiles.push({
+                    originalFilename: req.file.originalname,
+                    newFilename: newFilename,
+                    downloadUrl: `/download/${newFilename}`,
+                    sailNumber: 'NOSAIL',
+                    sailorName: 'NONAME'
+                });
+            } catch (fileErr) {
+                console.error('Error creating NOSAIL file:', fileErr);
+            }
         }
-
-        // Construct the final filename
-        const newFilename = `${filenameParts.join('_')}_${filenameWithoutExt}${fileExtension}`;
-
-        // Save the file
-        const uploadsDir = path.join('public', 'uploads');
-        await fs.mkdir(uploadsDir, { recursive: true });
-        const newFilePath = path.join(uploadsDir, newFilename);
-        await fs.writeFile(newFilePath, req.file.buffer);
 
         // Prepare debug info
         const debugInfo = {
@@ -389,11 +421,7 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
         res.json({
             success: true,
             sailNumbers: processingSteps.sailNumbers,
-            fileInfo: {
-                originalFilename,
-                newFilename,
-                downloadUrl: `/uploads/${newFilename}`
-            },
+            processedFiles: processedFiles,
             debug: debugInfo
         });
 
@@ -860,17 +888,18 @@ app.listen(port, async () => {
     await cleanupDirectories();
 });
 
-// Add this endpoint to handle file downloads
-app.get('/download/:filename', (req, res) => {
+// Add or update the download endpoint
+app.get('/download/:filename', async (req, res) => {
     try {
         const filename = req.params.filename;
         const filePath = path.join(PROCESSED_DIR, filename);
         
         // Check if file exists
-        if (fs.existsSync(filePath)) {
+        try {
+            await fs.access(filePath);
             console.log(`Sending file: ${filePath}`);
-            res.download(filePath);
-        } else {
+            res.download(filePath, filename);
+        } catch (err) {
             console.error(`File not found: ${filePath}`);
             res.status(404).send('File not found');
         }
