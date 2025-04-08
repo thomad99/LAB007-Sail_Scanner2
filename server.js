@@ -362,15 +362,20 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                 
                 // Create new filename
                 const newFilename = `${sailData.number}_${sailorName}_${req.file.originalname}`;
+                const newPath = path.join(PROCESSED_DIR, newFilename);
                 
                 try {
-                    // Copy file to processed directory
-                    const originalBuffer = req.file.buffer;
-                    const newPath = path.join(PROCESSED_DIR, newFilename);
+                    // Make sure directory exists
+                    await fs.mkdir(path.dirname(newPath), { recursive: true });
                     
-                    await fs.writeFile(newPath, originalBuffer);
-                    console.log(`Created file: ${newFilename}`);
+                    // Write the file
+                    await fs.writeFile(newPath, req.file.buffer);
                     
+                    // Verify file was created
+                    const stats = await fs.stat(newPath);
+                    console.log(`Created file: ${newFilename} (${stats.size} bytes)`);
+                    
+                    // Add to processed files list
                     processedFiles.push({
                         originalFilename: req.file.originalname,
                         newFilename: newFilename,
@@ -385,9 +390,18 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
         } else {
             // No sail numbers found - create NOSAIL version
             const newFilename = `NOSAIL_${req.file.originalname}`;
+            const newPath = path.join(PROCESSED_DIR, newFilename);
+            
             try {
-                await fs.writeFile(path.join(PROCESSED_DIR, newFilename), req.file.buffer);
-                console.log(`Created NOSAIL file: ${newFilename}`);
+                // Make sure directory exists
+                await fs.mkdir(path.dirname(newPath), { recursive: true });
+                
+                // Write the file
+                await fs.writeFile(newPath, req.file.buffer);
+                
+                // Verify file was created
+                const stats = await fs.stat(newPath);
+                console.log(`Created NOSAIL file: ${newFilename} (${stats.size} bytes)`);
                 
                 processedFiles.push({
                     originalFilename: req.file.originalname,
@@ -417,11 +431,15 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             }
         };
 
-        // Send response
+        // Send the API response with comprehensive information
         res.json({
             success: true,
             sailNumbers: processingSteps.sailNumbers,
             processedFiles: processedFiles,
+            stats: {
+                totalFiles: processedFiles.length,
+                filesWithSailNumbers: processingSteps.sailNumbers.numbers.length
+            },
             debug: debugInfo
         });
 
@@ -888,23 +906,43 @@ app.listen(port, async () => {
     await cleanupDirectories();
 });
 
-// Add or update the download endpoint
+// Fix the download endpoint
 app.get('/download/:filename', async (req, res) => {
     try {
         const filename = req.params.filename;
         const filePath = path.join(PROCESSED_DIR, filename);
         
-        // Check if file exists
+        console.log(`Download request for: ${filename}`);
+        console.log(`Full path: ${filePath}`);
+        
+        // Check if file exists before trying to download
         try {
-            await fs.access(filePath);
-            console.log(`Sending file: ${filePath}`);
-            res.download(filePath, filename);
+            const stats = await fs.stat(filePath);
+            console.log(`File found. Size: ${stats.size} bytes`);
+            
+            if (stats.size === 0) {
+                console.error('File exists but is empty');
+                return res.status(500).send('File exists but is empty');
+            }
+            
+            res.download(filePath, filename, (err) => {
+                if (err) {
+                    console.error(`Error during download: ${err.message}`);
+                    // Only send error if headers not sent yet
+                    if (!res.headersSent) {
+                        res.status(500).send(`Error downloading file: ${err.message}`);
+                    }
+                } else {
+                    console.log(`File ${filename} sent successfully`);
+                }
+            });
         } catch (err) {
             console.error(`File not found: ${filePath}`);
-            res.status(404).send('File not found');
+            console.error(`Error details: ${err.message}`);
+            res.status(404).send(`File not found: ${filename}`);
         }
     } catch (err) {
         console.error('Download error:', err);
-        res.status(500).send('Error downloading file');
+        res.status(500).send(`Error processing download request: ${err.message}`);
     }
 }); 
