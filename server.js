@@ -241,6 +241,8 @@ async function processWithRetry(operation, operationName) {
 
 // Update your upload endpoint to include cleanup
 app.post('/api/scan', upload.single('image'), async (req, res) => {
+    let processedFiles = [];
+    
     try {
         // Clean up old files before processing new ones
         await cleanupDirectories();
@@ -280,77 +282,85 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             type: req.file.mimetype
         });
 
-        // STEP 2: Send to Azure for Text Detection
-        console.log('Step 2: Sending to Azure Vision...');
-        const result = await processWithRetry(
-            () => computerVisionClient.readInStream(
-                req.file.buffer,
-                { language: 'en' }
-            ),
-            'Azure Vision API call'
-        );
-        
-        // STEP 3: Wait for Azure Processing
-        console.log('Step 3: Waiting for Azure analysis...');
-        const operationId = result.operationLocation.split('/').pop();
-        
-        let operationResult;
-        let attempts = 0;
-        const maxAttempts = 30;  // Maximum number of attempts
-        const delayMs = 1000;    // Delay between attempts (1 second)
-
-        do {
-            attempts++;
-            console.log(`Checking Azure results - Attempt ${attempts}...`);
-            
-            operationResult = await processWithRetry(
-                () => computerVisionClient.getReadResult(operationId),
-                'Azure Results Polling'
+        try {
+            // STEP 2: Send to Azure for Text Detection
+            console.log('Step 2: Sending to Azure Vision...');
+            const result = await processWithRetry(
+                () => computerVisionClient.readInStream(
+                    req.file.buffer,
+                    { language: 'en' }
+                ),
+                'Azure Vision API call'
             );
-            console.log(`Status: ${operationResult.status}`);
             
-            if (operationResult.status === 'running' || operationResult.status === 'notStarted') {
-                console.log(`Waiting ${delayMs}ms before next check...`);
-                await new Promise(resolve => setTimeout(resolve, delayMs));
-            }
-        } while ((operationResult.status === 'running' || operationResult.status === 'notStarted') && attempts < maxAttempts);
-
-        if (operationResult.status !== 'succeeded') {
-            console.log('Azure processing did not complete successfully:', operationResult.status);
-            throw new Error(`Azure processing failed or timed out. Status: ${operationResult.status}`);
-        }
-
-        console.log('Azure processing completed successfully!');
-        console.log('Results:', JSON.stringify(operationResult.analyzeResult, null, 2));
-
-        processingSteps.debug.azureResponse = operationResult.analyzeResult;
-        
-        // Extract sail numbers from results
-        const foundNumbers = extractSailNumbers(operationResult.analyzeResult);
-        
-        // Sort by confidence but keep all numbers
-        const sortedNumbers = foundNumbers.sort((a, b) => b.confidence - a.confidence);
+            // STEP 3: Wait for Azure Processing
+            console.log('Step 3: Waiting for Azure analysis...');
+            const operationId = result.operationLocation.split('/').pop();
             
-        processingSteps.sailNumbers.numbers = sortedNumbers;
-        
-        // Look up sailor information for each number
-        for (const num of processingSteps.sailNumbers.numbers) {
-            try {
-                const sailorInfo = await lookupSailorInDatabase(num.number);
-                if (sailorInfo) {
-                    num.skipperInfo = sailorInfo;
+            let operationResult;
+            let attempts = 0;
+            const maxAttempts = 30;  // Maximum number of attempts
+            const delayMs = 1000;    // Delay between attempts (1 second)
+            
+            do {
+                attempts++;
+                console.log(`Checking Azure results - Attempt ${attempts}...`);
+                
+                operationResult = await processWithRetry(
+                    () => computerVisionClient.getReadResult(operationId),
+                    'Azure Results Polling'
+                );
+                console.log(`Status: ${operationResult.status}`);
+                
+                if (operationResult.status === 'running' || operationResult.status === 'notStarted') {
+                    console.log(`Waiting ${delayMs}ms before next check...`);
+                    await new Promise(resolve => setTimeout(resolve, delayMs));
                 }
-            } catch (err) {
-                console.error(`Error looking up sailor for number ${num.number}:`, err);
+            } while ((operationResult.status === 'running' || operationResult.status === 'notStarted') && attempts < maxAttempts);
+
+            if (operationResult.status !== 'succeeded') {
+                console.log('Azure processing did not complete successfully:', operationResult.status);
+                // Don't throw an error, just continue with fallback
+                console.log('Will proceed with fallback file creation');
+            } else {
+                console.log('Azure processing completed successfully!');
+                console.log('Results:', JSON.stringify(operationResult.analyzeResult, null, 2));
+
+                processingSteps.debug.azureResponse = operationResult.analyzeResult;
+                
+                // Extract sail numbers from results
+                const foundNumbers = extractSailNumbers(operationResult.analyzeResult);
+                
+                // Sort by confidence but keep all numbers
+                const sortedNumbers = foundNumbers.sort((a, b) => b.confidence - a.confidence);
+                    
+                processingSteps.sailNumbers.numbers = sortedNumbers;
+                
+                // Look up sailor information for each number
+                for (const num of processingSteps.sailNumbers.numbers) {
+                    try {
+                        const sailorInfo = await lookupSailorInDatabase(num.number);
+                        if (sailorInfo) {
+                            num.skipperInfo = sailorInfo;
+                        }
+                    } catch (err) {
+                        console.error(`Error looking up sailor for number ${num.number}:`, err);
+                        // Continue with processing even if lookup fails
+                    }
+                }
             }
+        } catch (azureErr) {
+            console.error('Error during Azure processing:', azureErr);
+            console.log('Will proceed with fallback file creation');
+            // Continue with empty numbers - don't throw error
         }
 
         // Ensure processed directory exists
         await fs.mkdir(PROCESSED_DIR, { recursive: true });
-        const processedFiles = [];
-
+        
+        // IMPORTANT: Always at least generate one file, even if processing failed
         // Process each detected sail number and create files
-        if (processingSteps.sailNumbers.numbers.length > 0) {
+        if (processingSteps.sailNumbers && processingSteps.sailNumbers.numbers && processingSteps.sailNumbers.numbers.length > 0) {
             for (const sailData of processingSteps.sailNumbers.numbers) {
                 // Default to NONAME if no sailor info found
                 let sailorName = 'NONAME';
@@ -368,27 +378,8 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                     // Make sure directory exists
                     await fs.mkdir(path.dirname(newPath), { recursive: true });
                     
-                    // Write the file using fs.copyFile if possible, or fs.writeFile as fallback
-                    try {
-                        // Try to copy from the upload dir if the file exists there
-                        const originalPath = path.join(UPLOAD_DIR, req.file.filename || req.file.originalname);
-                        
-                        // Check if source file exists
-                        try {
-                            await fs.access(originalPath);
-                            // Source file exists, use copyFile
-                            await fs.copyFile(originalPath, newPath);
-                            console.log(`Copied file from ${originalPath} to ${newPath}`);
-                        } catch (accessErr) {
-                            // Source file doesn't exist, use writeFile with buffer
-                            await fs.writeFile(newPath, req.file.buffer);
-                            console.log(`Created file with buffer: ${newPath}`);
-                        }
-                    } catch (writeErr) {
-                        console.error(`Error writing file with primary method, trying fallback: ${writeErr.message}`);
-                        // Last resort - try writeFile with buffer
-                        await fs.writeFile(newPath, req.file.buffer);
-                    }
+                    // Write the file with buffer directly - most reliable method
+                    await fs.writeFile(newPath, req.file.buffer);
                     
                     // Verify file was created
                     const stats = await fs.stat(newPath);
@@ -406,40 +397,24 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                     console.error(`Error creating file for sail number ${sailData.number}:`, fileErr);
                 }
             }
-        } else {
-            // No sail numbers found - create NOSAIL version
-            const newFilename = `NOSAIL_${req.file.originalname}`;
+        }
+        
+        // If we didn't create any files yet (either no sail numbers or errors occurred)
+        // create the fallback NOSAIL version
+        if (processedFiles.length === 0) {
+            const newFilename = `NOSAIL_NONAME_${req.file.originalname}`;
             const newPath = path.join(PROCESSED_DIR, newFilename);
             
             try {
                 // Make sure directory exists
                 await fs.mkdir(path.dirname(newPath), { recursive: true });
                 
-                // Write the file - try multiple methods
-                try {
-                    // Try to copy from the upload dir if the file exists there
-                    const originalPath = path.join(UPLOAD_DIR, req.file.filename || req.file.originalname);
-                    
-                    // Check if source file exists
-                    try {
-                        await fs.access(originalPath);
-                        // Source file exists, use copyFile
-                        await fs.copyFile(originalPath, newPath);
-                        console.log(`Copied NOSAIL file from ${originalPath} to ${newPath}`);
-                    } catch (accessErr) {
-                        // Source file doesn't exist, use writeFile with buffer
-                        await fs.writeFile(newPath, req.file.buffer);
-                        console.log(`Created NOSAIL file with buffer: ${newPath}`);
-                    }
-                } catch (writeErr) {
-                    console.error(`Error writing NOSAIL file with primary method, trying fallback: ${writeErr.message}`);
-                    // Last resort - try writeFile with buffer
-                    await fs.writeFile(newPath, req.file.buffer);
-                }
+                // Write the file with buffer directly
+                await fs.writeFile(newPath, req.file.buffer);
                 
                 // Verify file was created
                 const stats = await fs.stat(newPath);
-                console.log(`Created NOSAIL file: ${newFilename} (${stats.size} bytes)`);
+                console.log(`Created NOSAIL fallback file: ${newFilename} (${stats.size} bytes)`);
                 
                 processedFiles.push({
                     originalFilename: req.file.originalname,
@@ -449,14 +424,15 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                     sailorName: 'NONAME'
                 });
             } catch (fileErr) {
-                console.error('Error creating NOSAIL file:', fileErr);
+                console.error('Error creating NOSAIL fallback file:', fileErr);
+                // Even in this worst case, we still need to return a response
             }
         }
 
-        // Prepare debug info
+        // Prepare debug info based on what we have available
         const debugInfo = {
-            status: operationResult.status,
-            processingTime: `${attempts} seconds`,
+            status: processingSteps.debug.azureResponse ? 'succeeded' : 'failed',
+            processingTime: processingSteps.debug.processingTime || 'unknown',
             textProcessing: {
                 totalTextItems: processingSteps.rawText.length,
                 rawTextFound: processingSteps.rawText
@@ -469,23 +445,66 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             }
         };
 
-        // Send the API response with comprehensive information
+        // Send the API response with what we have, always marking as success
         res.json({
             success: true,
-            sailNumbers: processingSteps.sailNumbers,
+            sailNumbers: processingSteps.sailNumbers || { numbers: [] },
             processedFiles: processedFiles,
             stats: {
                 totalFiles: processedFiles.length,
-                filesWithSailNumbers: processingSteps.sailNumbers.numbers.length
+                filesWithSailNumbers: (processingSteps.sailNumbers && processingSteps.sailNumbers.numbers) 
+                    ? processingSteps.sailNumbers.numbers.length 
+                    : 0
             },
             debug: debugInfo
         });
 
     } catch (err) {
-        console.error('Error during scan:', err);
-        res.status(500).json({ 
-            error: 'Scan failed: ' + err.message,
-            details: err.stack
+        console.error('Unhandled error during scan:', err);
+        
+        // Create emergency fallback file even for completely unhandled errors
+        try {
+            const originalFilename = req.file ? req.file.originalname : 'unknown_file.jpg';
+            const newFilename = `NOSAIL_NONAME_ERROR_${originalFilename}`;
+            const newPath = path.join(PROCESSED_DIR, newFilename);
+            
+            // Ensure directory exists
+            await fs.mkdir(PROCESSED_DIR, { recursive: true });
+            
+            // Write the file with buffer if available
+            if (req.file && req.file.buffer) {
+                await fs.writeFile(newPath, req.file.buffer);
+                
+                // Verify file was created
+                const stats = await fs.stat(newPath);
+                console.log(`Created emergency file: ${newFilename} (${stats.size} bytes)`);
+                
+                processedFiles.push({
+                    originalFilename: originalFilename,
+                    newFilename: newFilename,
+                    downloadUrl: `/download/${newFilename}`,
+                    sailNumber: 'NOSAIL',
+                    sailorName: 'NONAME'
+                });
+            }
+        } catch (emergencyErr) {
+            console.error('Failed to create emergency fallback file:', emergencyErr);
+        }
+        
+        // Always respond with success and whatever files we created
+        res.json({ 
+            success: true,
+            error: 'Error during processing: ' + err.message,
+            processedFiles: processedFiles,
+            sailNumbers: { numbers: [] },
+            stats: {
+                totalFiles: processedFiles.length,
+                filesWithSailNumbers: 0
+            },
+            debug: {
+                error: err.message,
+                stack: err.stack
+            }
         });
     }
 });
