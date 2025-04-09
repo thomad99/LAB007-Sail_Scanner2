@@ -1062,9 +1062,26 @@
                     }
                 };
 
-                // Request camera access
-                stream = await navigator.mediaDevices.getUserMedia(constraints);
-                console.log('Camera access granted');
+                // Request camera access with better error handling
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    console.log('Camera access granted');
+                } catch (mediaErr) {
+                    console.error('Error accessing camera:', mediaErr);
+                    
+                    // Try again with simpler constraints if the first attempt fails
+                    const fallbackConstraints = {
+                        video: true // Most basic video constraint
+                    };
+                    
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+                        console.log('Camera access granted with fallback constraints');
+                    } catch (fallbackErr) {
+                        console.error('Fallback camera access failed:', fallbackErr);
+                        throw fallbackErr;
+                    }
+                }
 
                 // Set video source
                 video.srcObject = stream;
@@ -1074,7 +1091,15 @@
                 video.setAttribute('webkit-playsinline', '');
                 
                 // Play the video
-                await video.play();
+                try {
+                    await video.play();
+                } catch (playErr) {
+                    console.error('Error playing video:', playErr);
+                    // Try to handle the error and continue
+                    video.play().catch(() => {
+                        console.log('Video play failed, but continuing with scanning');
+                    });
+                }
                 
                 // Update button states
                 startCameraBtn.disabled = true;
@@ -1096,11 +1121,17 @@
                     errorMessage += 'Camera is already in use by another application.';
                 } else if (err.name === 'OverconstrainedError') {
                     errorMessage += 'Camera does not support the requested constraints.';
+                } else if (err.name === 'TypeError') {
+                    errorMessage += 'Camera access is not supported in this browser.';
                 } else {
                     errorMessage += err.message;
                 }
                 
                 alert(errorMessage);
+                
+                // Reset button states on error
+                startCameraBtn.disabled = false;
+                stopCameraBtn.disabled = true;
             }
         });
 
