@@ -1052,15 +1052,35 @@
         // Start camera
         startCameraBtn.addEventListener('click', async () => {
             try {
-                stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
+                // First check if we're on a mobile device
+                const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                console.log('Device type:', isMobile ? 'Mobile' : 'Desktop');
+
+                // Configure camera constraints based on device
+                const constraints = {
+                    video: {
                         facingMode: 'environment', // Prefer back camera on mobile
                         width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    } 
-                });
+                        height: { ideal: 720 },
+                        // Add these for better mobile support
+                        aspectRatio: { ideal: 1.7777777778 }, // 16:9
+                        frameRate: { ideal: 30 }
+                    }
+                };
+
+                // Request camera access
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                console.log('Camera access granted');
+
+                // Set video source
                 video.srcObject = stream;
-                video.play();
+                
+                // Add playsinline attribute for iOS
+                video.setAttribute('playsinline', '');
+                video.setAttribute('webkit-playsinline', '');
+                
+                // Play the video
+                await video.play();
                 
                 // Update button states
                 startCameraBtn.disabled = true;
@@ -1071,7 +1091,21 @@
                 console.log('Camera started successfully');
             } catch (err) {
                 console.error('Error accessing camera:', err);
-                alert('Could not access the camera. Please ensure you have granted camera permission.');
+                let errorMessage = 'Could not access the camera. ';
+                
+                if (err.name === 'NotAllowedError') {
+                    errorMessage += 'Please ensure you have granted camera permission.';
+                } else if (err.name === 'NotFoundError') {
+                    errorMessage += 'No camera found on this device.';
+                } else if (err.name === 'NotReadableError') {
+                    errorMessage += 'Camera is already in use by another application.';
+                } else if (err.name === 'OverconstrainedError') {
+                    errorMessage += 'Camera does not support the requested constraints.';
+                } else {
+                    errorMessage += err.message;
+                }
+                
+                alert(errorMessage);
             }
         });
 
