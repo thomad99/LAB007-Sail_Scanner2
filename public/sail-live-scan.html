@@ -369,7 +369,8 @@
         let isScanning = false;
         let videoStream = null;
         let processingCanvas, snapshotCanvas, video, resultDiv, debugDiv;
-        let processingContext, snapshotContext;  // Add these as global variables
+        let processingContext, snapshotContext;
+        let imageCounter = 0;  // Add counter for images taken
 
         // Initialize the application
         async function init() {
@@ -385,6 +386,10 @@
                 resultDiv = document.getElementById('result');
                 const debugCheckbox = document.getElementById('debugMode');
                 debugDiv = document.getElementById('debug');
+
+                // Make debug window visible by default
+                debugDiv.style.display = 'block';
+                debugCheckbox.checked = true;
 
                 // Verify all required elements exist
                 const requiredElements = {
@@ -469,8 +474,9 @@
 
         async function startScanning() {
             try {
+                imageCounter = 0;  // Reset counter when starting new scan session
                 resultDiv.textContent = 'Starting camera...';
-                console.log('Requesting camera access...');
+                addDebugMessage('Initializing camera...', '📸');
 
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                     throw new Error('Camera API is not supported in this browser');
@@ -484,28 +490,29 @@
                     }
                 };
 
-                console.log('Camera constraints:', constraints);
+                addDebugMessage('Requesting camera access with constraints: ' + JSON.stringify(constraints), '🎥');
                 videoStream = await navigator.mediaDevices.getUserMedia(constraints);
-                console.log('Camera access granted');
+                addDebugMessage('Camera access granted', '✅');
 
                 video.srcObject = videoStream;
 
                 await new Promise((resolve) => {
                     video.onloadedmetadata = () => {
-                        console.log('Video metadata loaded');
+                        addDebugMessage('Video metadata loaded - Resolution: ' + video.videoWidth + 'x' + video.videoHeight, '📊');
                         video.play();
                         resolve();
                     };
                 });
 
-                resultDiv.textContent = 'Camera started. Waiting 3 seconds to stabilize...';
-                await new Promise(resolve => setTimeout(resolve, 3000));
+                resultDiv.textContent = 'Camera started. Taking first image in 2 seconds...';
+                addDebugMessage('Waiting 2 seconds before first capture...', '⏲️');
+                await new Promise(resolve => setTimeout(resolve, 2000));
 
                 isScanning = true;
-                resultDiv.textContent = 'Starting first scan...';
                 scanFrame();
             } catch (err) {
                 console.error('Error accessing camera:', err);
+                addDebugMessage('Camera access error: ' + err.message, '❌');
                 resultDiv.textContent = 'Error accessing camera: ' + err.message +
                     '. Please ensure you have granted camera permissions.';
             }
@@ -518,6 +525,7 @@
             }
             video.srcObject = null;
             resultDiv.textContent = 'Scanning stopped';
+            addDebugMessage('Scanning stopped. Total images processed: ' + imageCounter, '🛑');
         }
 
         function addDebugMessage(message, status = '') {
@@ -541,25 +549,18 @@
 
         async function scanFrame() {
             if (!isScanning) {
-                console.log('Scanning stopped, exiting scanFrame');
+                addDebugMessage('Scanning stopped, exiting scanFrame', '🛑');
                 return;
             }
 
-            console.log('Starting new scan frame');
-            addDebugMessage('Starting new scan frame', '🔄');
+            imageCounter++;  // Increment counter for each new image
+            addDebugMessage(`Starting scan #${imageCounter}`, '🔄');
+            console.log('Processing image #' + imageCounter);
 
             try {
                 // Verify all required elements and contexts exist
                 if (!video || !processingCanvas || !snapshotCanvas || !processingContext || !snapshotContext) {
-                    throw new Error('Required elements or contexts not found: ' +
-                        JSON.stringify({
-                            video: !!video,
-                            processingCanvas: !!processingCanvas,
-                            snapshotCanvas: !!snapshotCanvas,
-                            processingContext: !!processingContext,
-                            snapshotContext: !!snapshotContext
-                        })
-                    );
+                    throw new Error('Required elements or contexts not found');
                 }
 
                 // Verify video is playing and has valid dimensions
@@ -581,10 +582,10 @@
                 processingContext.drawImage(video, 0, 0, processingCanvas.width, processingCanvas.height);
                 snapshotContext.drawImage(video, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
 
-                addDebugMessage('Frame captured successfully', '📸');
-                resultDiv.textContent = 'Capturing image and sending to server...';
+                addDebugMessage(`Frame #${imageCounter} captured successfully`, '📸');
+                resultDiv.textContent = `Processing image #${imageCounter}...`;
 
-                // Convert processing canvas to blob for sending to server
+                // Convert processing canvas to blob
                 const blob = await new Promise(resolve => {
                     processingCanvas.toBlob(resolve, 'image/jpeg', 0.95);
                 });
@@ -593,15 +594,15 @@
                     throw new Error('Failed to create image blob');
                 }
 
-                // Create a file from the blob with a timestamp
+                // Create a file from the blob with a timestamp and counter
                 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                const file = new File([blob], `scan-${timestamp}.jpg`, { type: 'image/jpeg' });
+                const file = new File([blob], `scan-${imageCounter}-${timestamp}.jpg`, { type: 'image/jpeg' });
 
                 // Send to backend for processing
                 const formData = new FormData();
                 formData.append('image', file);
 
-                addDebugMessage('Sending image to Azure Vision...', '🚀');
+                addDebugMessage(`Sending image #${imageCounter} to Azure Vision...`, '🚀');
                 const response = await fetch('/api/scan', {
                     method: 'POST',
                     body: formData
@@ -611,20 +612,19 @@
                     throw new Error(`Server error: ${response.status}`);
                 }
 
-                addDebugMessage('Waiting for Azure feedback...', '⏳');
-                resultDiv.textContent = 'Processing results...';
+                addDebugMessage('Waiting for Azure Vision response...', '⏳');
                 const data = await response.json();
 
                 if (!data.success) {
                     throw new Error(data.error || 'Failed to process image');
                 }
 
-                addDebugMessage('Results received from Azure', '✅');
+                addDebugMessage(`Results received for image #${imageCounter}`, '✅');
 
-                // Update top results box with numbers and skipper info
+                // Update top results box
                 const topResultsBox = document.getElementById('topResultsBox');
                 if (data.sailNumbers && data.sailNumbers.numbers && data.sailNumbers.numbers.length > 0) {
-                    addDebugMessage(`Found ${data.sailNumbers.numbers.length} sail numbers`, '🔍');
+                    addDebugMessage(`Found ${data.sailNumbers.numbers.length} sail numbers in image #${imageCounter}`, '🔍');
                     topResultsBox.querySelector('.top-results-content').innerHTML =
                         data.sailNumbers.numbers.map(result => `
                             <div class="top-result-item">
@@ -641,34 +641,34 @@
                             </div>
                         `).join('');
                 } else {
-                    addDebugMessage('No sail numbers detected', '❌');
+                    addDebugMessage(`No sail numbers detected in image #${imageCounter}`, '❌');
                     topResultsBox.querySelector('.top-results-content').textContent = 'No numbers detected';
                 }
 
-                // Show detailed debug information if enabled
-                if (debugCheckbox.checked) {
-                    addDebugMessage('Full Azure Response:', '📊');
-                    addDebugMessage(JSON.stringify(data.debug, null, 2));
+                // Show detailed debug information
+                addDebugMessage('Full Azure Response:', '📊');
+                addDebugMessage(JSON.stringify(data.debug, null, 2));
+
+                resultDiv.textContent = `Scan #${imageCounter} complete. Starting next scan...`;
+                addDebugMessage('Starting next scan cycle...', '🔄');
+
+                // Start next scan immediately
+                if (isScanning) {
+                    scanFrame();
                 }
 
-                resultDiv.textContent = 'Scan complete. Waiting for next scan...';
-                addDebugMessage('Waiting for next scan...', '⏲️');
-
             } catch (err) {
-                const errorMsg = `Scan error: ${err.message}\nStack: ${err.stack}`;
+                const errorMsg = `Scan #${imageCounter} error: ${err.message}`;
                 console.error(errorMsg);
                 addDebugMessage(errorMsg, '❌');
-                if (resultDiv) resultDiv.textContent = 'Scan error: ' + err.message;
-            }
+                if (resultDiv) resultDiv.textContent = errorMsg;
 
-            // Wait 15 seconds before next scan
-            if (isScanning) {
-                const message = 'Waiting 15 seconds before next scan...';
-                console.log(message);
-                addDebugMessage(message, '⏲️');
-                if (resultDiv) resultDiv.textContent += '\n' + message;
-                await new Promise(resolve => setTimeout(resolve, 15000));
-                scanFrame();
+                // Retry scan after error
+                if (isScanning) {
+                    addDebugMessage('Retrying scan in 2 seconds...', '🔄');
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    scanFrame();
+                }
             }
         }
 
