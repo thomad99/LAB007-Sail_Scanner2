@@ -368,23 +368,30 @@
     <script>
         let isScanning = false;
         let videoStream = null;
+        let processingCanvas, snapshotCanvas, video, resultDiv, debugDiv;
 
         // Initialize the application
         async function init() {
-            const video = document.getElementById('video');
-            const processingCanvas = document.getElementById('processingCanvas');
-            const snapshotCanvas = document.getElementById('snapshotCanvas');
+            video = document.getElementById('video');
+            processingCanvas = document.getElementById('processingCanvas');
+            snapshotCanvas = document.getElementById('snapshotCanvas');
             const startBtn = document.getElementById('startBtn');
             const stopBtn = document.getElementById('stopBtn');
-            const resultDiv = document.getElementById('result');
+            resultDiv = document.getElementById('result');
             const debugCheckbox = document.getElementById('debugMode');
-            const debugDiv = document.getElementById('debug');
+            debugDiv = document.getElementById('debug');
+
+            // Initialize canvas contexts
+            if (!processingCanvas || !snapshotCanvas) {
+                console.error('Canvas elements not found');
+                return;
+            }
 
             startBtn.addEventListener('click', startScanning);
             stopBtn.addEventListener('click', stopScanning);
 
             debugCheckbox.addEventListener('change', (e) => {
-                debugDiv.classList.toggle('visible', e.target.checked);
+                debugDiv.style.display = e.target.checked ? 'block' : 'none';
             });
 
             video.addEventListener('play', () => {
@@ -450,7 +457,7 @@
             }
 
             function addDebugMessage(message, status = '') {
-                const debugDiv = document.getElementById('debug');
+                if (!debugDiv) return;
                 const timestamp = new Date().toLocaleTimeString();
                 const messageDiv = document.createElement('div');
                 messageDiv.className = 'debug-message';
@@ -472,15 +479,7 @@
                 if (!isScanning) return;
 
                 try {
-                    // Get both canvases
-                    const processingCanvas = document.getElementById('processingCanvas');
-                    const snapshotCanvas = document.getElementById('snapshotCanvas');
-
-                    if (!processingCanvas || !snapshotCanvas) {
-                        throw new Error('Canvas elements not found');
-                    }
-
-                    // Setup contexts
+                    // Get contexts
                     const processingContext = processingCanvas.getContext('2d');
                     const snapshotContext = snapshotCanvas.getContext('2d');
 
