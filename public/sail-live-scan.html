@@ -372,6 +372,9 @@
 
         // Initialize the application
         async function init() {
+            console.log('Initializing application...');
+            addDebugMessage('Starting initialization...', '🚀');
+
             video = document.getElementById('video');
             processingCanvas = document.getElementById('processingCanvas');
             snapshotCanvas = document.getElementById('snapshotCanvas');
@@ -381,9 +384,55 @@
             const debugCheckbox = document.getElementById('debugMode');
             debugDiv = document.getElementById('debug');
 
+            // Log element initialization status
+            console.log('Element initialization status:', {
+                video: !!video,
+                processingCanvas: !!processingCanvas,
+                snapshotCanvas: !!snapshotCanvas,
+                startBtn: !!startBtn,
+                stopBtn: !!stopBtn,
+                resultDiv: !!resultDiv,
+                debugDiv: !!debugDiv
+            });
+
+            addDebugMessage('DOM elements initialization status:', '🔍');
+            addDebugMessage(JSON.stringify({
+                video: !!video,
+                processingCanvas: !!processingCanvas,
+                snapshotCanvas: !!snapshotCanvas,
+                resultDiv: !!resultDiv,
+                debugDiv: !!debugDiv
+            }, null, 2));
+
             // Initialize canvas contexts
             if (!processingCanvas || !snapshotCanvas) {
-                console.error('Canvas elements not found');
+                const error = 'Canvas elements not found';
+                console.error(error);
+                addDebugMessage(error, '❌');
+                if (resultDiv) resultDiv.textContent = error;
+                return;
+            }
+
+            // Test canvas contexts immediately
+            try {
+                const pCtx = processingCanvas.getContext('2d');
+                const sCtx = snapshotCanvas.getContext('2d');
+
+                console.log('Canvas contexts initialization:', {
+                    processingContext: !!pCtx,
+                    snapshotContext: !!sCtx,
+                    processingCanvasWidth: processingCanvas.width,
+                    processingCanvasHeight: processingCanvas.height,
+                    snapshotCanvasWidth: snapshotCanvas.width,
+                    snapshotCanvasHeight: snapshotCanvas.height
+                });
+
+                addDebugMessage('Canvas contexts initialized successfully', '✅');
+            } catch (e) {
+                const error = `Failed to get canvas contexts: ${e.message}`;
+                console.error(error);
+                addDebugMessage(error, '❌');
+                if (resultDiv) resultDiv.textContent = error;
                 return;
             }
 
@@ -476,16 +525,59 @@
             }
 
             async function scanFrame() {
-                if (!isScanning) return;
+                if (!isScanning) {
+                    console.log('Scanning stopped, exiting scanFrame');
+                    return;
+                }
+
+                console.log('Starting new scan frame');
+                addDebugMessage('Starting new scan frame', '🔄');
 
                 try {
-                    // Get contexts
+                    // Verify elements exist
+                    if (!video || !processingCanvas || !snapshotCanvas) {
+                        throw new Error('Required elements not found: ' +
+                            JSON.stringify({
+                                video: !!video,
+                                processingCanvas: !!processingCanvas,
+                                snapshotCanvas: !!snapshotCanvas
+                            })
+                        );
+                    }
+
+                    // Log video state
+                    console.log('Video state:', {
+                        videoWidth: video.videoWidth,
+                        videoHeight: video.videoHeight,
+                        readyState: video.readyState,
+                        paused: video.paused,
+                        ended: video.ended
+                    });
+
+                    // Get contexts with error checking
                     const processingContext = processingCanvas.getContext('2d');
                     const snapshotContext = snapshotCanvas.getContext('2d');
 
                     if (!processingContext || !snapshotContext) {
-                        throw new Error('Could not get canvas contexts');
+                        throw new Error('Failed to get canvas contexts: ' +
+                            JSON.stringify({
+                                processingContext: !!processingContext,
+                                snapshotContext: !!snapshotContext
+                            })
+                        );
                     }
+
+                    // Log canvas dimensions before setting
+                    console.log('Pre-resize canvas dimensions:', {
+                        processingCanvas: {
+                            width: processingCanvas.width,
+                            height: processingCanvas.height
+                        },
+                        snapshotCanvas: {
+                            width: snapshotCanvas.width,
+                            height: snapshotCanvas.height
+                        }
+                    });
 
                     // Set dimensions for both canvases
                     processingCanvas.width = video.videoWidth;
@@ -493,11 +585,23 @@
                     snapshotCanvas.width = video.videoWidth;
                     snapshotCanvas.height = video.videoHeight;
 
+                    // Log canvas dimensions after setting
+                    console.log('Post-resize canvas dimensions:', {
+                        processingCanvas: {
+                            width: processingCanvas.width,
+                            height: processingCanvas.height
+                        },
+                        snapshotCanvas: {
+                            width: snapshotCanvas.width,
+                            height: snapshotCanvas.height
+                        }
+                    });
+
                     // Draw the current frame to both canvases
                     processingContext.drawImage(video, 0, 0, processingCanvas.width, processingCanvas.height);
                     snapshotContext.drawImage(video, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
 
-                    addDebugMessage('Capture taken', '📸');
+                    addDebugMessage('Successfully captured frame to both canvases', '📸');
                     resultDiv.textContent = 'Capturing image and sending to server...';
 
                     // Convert processing canvas to blob for sending to server
@@ -571,14 +675,18 @@
                     addDebugMessage('Waiting for next scan...', '⏲️');
 
                 } catch (err) {
-                    console.error('Scan error:', err);
-                    addDebugMessage(`Error: ${err.message}`, '❌');
-                    resultDiv.textContent = 'Scan error: ' + err.message;
+                    const errorMsg = `Scan error: ${err.message}\nStack: ${err.stack}`;
+                    console.error(errorMsg);
+                    addDebugMessage(errorMsg, '❌');
+                    if (resultDiv) resultDiv.textContent = 'Scan error: ' + err.message;
                 }
 
                 // Wait 15 seconds before next scan
                 if (isScanning) {
-                    resultDiv.textContent += '\nWaiting 15 seconds before next scan...';
+                    const message = 'Waiting 15 seconds before next scan...';
+                    console.log(message);
+                    addDebugMessage(message, '⏲️');
+                    if (resultDiv) resultDiv.textContent += '\n' + message;
                     await new Promise(resolve => setTimeout(resolve, 15000));
                     scanFrame();
                 }
