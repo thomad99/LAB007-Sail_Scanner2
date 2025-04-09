@@ -94,6 +94,7 @@
             padding: 15px;
             border-radius: 5px;
             margin: 20px 0;
+            transition: all 0.3s ease;
         }
 
         #debug {
@@ -130,6 +131,34 @@
         .status-error {
             background: #ffe6e6;
             border-left: 4px solid #cc0000;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .error-message {
+            color: #721c24;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .error-message::before {
+            content: "⚠️";
+            font-size: 20px;
+        }
+
+        .retry-countdown {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
         }
 
         .confidence-high {
@@ -252,12 +281,12 @@
         <div class="button-group">
             <button id="startBtn">Start Scanning</button>
             <button id="stopBtn">Stop</button>
-            <label>
+            <label class="debug-toggle">
                 <input type="checkbox" id="debugMode"> Show Debug Info
             </label>
         </div>
 
-        <div id="topResultsBox" class="sail-number-display" style="display: block;">
+        <div id="topResultsBox" class="sail-number-display">
             <h2>Top Results</h2>
             <div class="top-results-content">Awaiting scan...</div>
         </div>
@@ -282,6 +311,193 @@
             <button onclick="document.getElementById('trainingModal').style.display='none'">Close</button>
         </div>
     </div>
+
+    <script>
+        let isScanning = false;
+        let videoStream = null;
+
+        // Initialize the application
+        async function init() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const resultDiv = document.getElementById('result');
+            const debugCheckbox = document.getElementById('debugMode');
+            const debugDiv = document.getElementById('debug');
+
+            startBtn.addEventListener('click', startScanning);
+            stopBtn.addEventListener('click', stopScanning);
+
+            debugCheckbox.addEventListener('change', (e) => {
+                debugDiv.classList.toggle('visible', e.target.checked);
+            });
+
+            video.addEventListener('play', () => {
+                console.log('Video started playing');
+            });
+
+            video.addEventListener('error', (e) => {
+                console.error('Video error:', e);
+                resultDiv.textContent = 'Video error: ' + (video.error ? video.error.message : 'unknown error');
+            });
+
+            async function startScanning() {
+                try {
+                    resultDiv.textContent = 'Starting camera...';
+                    console.log('Requesting camera access...');
+
+                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                        throw new Error('Camera API is not supported in this browser');
+                    }
+
+                    const constraints = {
+                        video: {
+                            facingMode: "environment",
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        }
+                    };
+
+                    console.log('Camera constraints:', constraints);
+                    videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+                    console.log('Camera access granted');
+
+                    video.srcObject = videoStream;
+
+                    await new Promise((resolve) => {
+                        video.onloadedmetadata = () => {
+                            console.log('Video metadata loaded');
+                            video.play();
+                            resolve();
+                        };
+                    });
+
+                    resultDiv.textContent = 'Camera started. Waiting 3 seconds to stabilize...';
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+
+                    isScanning = true;
+                    resultDiv.textContent = 'Starting first scan...';
+                    scanFrame();
+                } catch (err) {
+                    console.error('Error accessing camera:', err);
+                    resultDiv.textContent = 'Error accessing camera: ' + err.message +
+                        '. Please ensure you have granted camera permissions.';
+                }
+            }
+
+            function stopScanning() {
+                isScanning = false;
+                if (videoStream) {
+                    videoStream.getTracks().forEach(track => track.stop());
+                }
+                video.srcObject = null;
+                resultDiv.textContent = 'Scanning stopped';
+            }
+
+            async function scanFrame() {
+                if (!isScanning) return;
+
+                try {
+                    const context = canvas.getContext('2d');
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                    resultDiv.textContent = 'Capturing image and sending to server...';
+                    debugDiv.textContent = 'Starting scan...';
+
+                    // Convert canvas to blob
+                    const blob = await new Promise(resolve => {
+                        canvas.toBlob(resolve, 'image/jpeg', 0.95);
+                    });
+
+                    // Create a file from the blob with a timestamp
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                    const file = new File([blob], `scan-${timestamp}.jpg`, { type: 'image/jpeg' });
+
+                    // Send to backend for processing
+                    const formData = new FormData();
+                    formData.append('image', file);
+
+                    debugDiv.textContent += '\nSending image to server...';
+                    const response = await fetch('/api/scan', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Server error: ${response.status}`);
+                    }
+
+                    resultDiv.textContent = 'Processing results...';
+                    const data = await response.json();
+
+                    if (!data.success) {
+                        throw new Error(data.error || 'Failed to process image');
+                    }
+
+                    // Update top results box with numbers and skipper info
+                    const topResultsBox = document.getElementById('topResultsBox');
+                    if (data.sailNumbers && data.sailNumbers.numbers && data.sailNumbers.numbers.length > 0) {
+                        topResultsBox.querySelector('.top-results-content').innerHTML =
+                            data.sailNumbers.numbers.map(result => `
+                                <div class="top-result-item">
+                                    <div class="result-info">
+                                        <span class="top-result-number">${result.number}</span>
+                                        ${result.skipperInfo ?
+                                    `<span class="skipper-info">${result.skipperInfo.sailorName || ''}</span>` :
+                                    '<span class="no-match">(No Sailor Match)</span>'
+                                }
+                                    </div>
+                                    <span class="top-result-confidence ${getConfidenceClass(result.confidence)}">
+                                        ${(result.confidence * 100).toFixed(1)}%
+                                    </span>
+                                </div>
+                            `).join('');
+                    } else {
+                        topResultsBox.querySelector('.top-results-content').textContent = 'No numbers detected';
+                    }
+
+                    // Show debug information if enabled
+                    if (debugCheckbox.checked) {
+                        debugDiv.innerHTML = `
+                            === Scan Results ===
+                            Time: ${new Date().toLocaleString()}
+                            Status: ${data.success ? 'Success' : 'Failed'}
+                            Numbers Found: ${data.sailNumbers?.numbers?.length || 0}
+                            ${data.debug ? `\nDebug Info: ${JSON.stringify(data.debug, null, 2)}` : ''}
+                        `;
+                    }
+
+                    resultDiv.textContent = 'Scan complete. Waiting for next scan...';
+
+                } catch (err) {
+                    console.error('Scan error:', err);
+                    resultDiv.textContent = 'Scan error: ' + err.message;
+                    if (debugCheckbox.checked) {
+                        debugDiv.textContent += '\nError: ' + err.message;
+                    }
+                }
+
+                // Wait 15 seconds before next scan
+                if (isScanning) {
+                    resultDiv.textContent += '\nWaiting 15 seconds before next scan...';
+                    await new Promise(resolve => setTimeout(resolve, 15000));
+                    scanFrame();
+                }
+            }
+        }
+
+        function getConfidenceClass(confidence) {
+            if (confidence >= 0.9) return 'confidence-high';
+            if (confidence >= 0.7) return 'confidence-medium';
+            return 'confidence-low';
+        }
+
+        // Start the application when the page loads
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
 </body>
 
 </html>
