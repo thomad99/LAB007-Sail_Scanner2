@@ -1031,4 +1031,28 @@ app.get('/download/:filename', async (req, res) => {
         console.error('Download error:', err);
         res.status(500).send(`Error processing download request: ${err.message}`);
     }
+});
+
+// Add endpoint to clear sail numbers
+app.post('/api/numbers/clear', async (req, res) => {
+    try {
+        console.log('Request to clear sail numbers from database received');
+        
+        // Delete all records from the sail_numbers table
+        const result = await pool.query('DELETE FROM sail_numbers');
+        
+        console.log(`Cleared ${result.rowCount} sail number records from database`);
+        
+        res.json({ 
+            success: true, 
+            message: 'All sail numbers cleared successfully',
+            recordsDeleted: result.rowCount 
+        });
+    } catch (err) {
+        console.error('Error clearing sail numbers from database:', err);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Failed to clear sail numbers from database' 
+        });
+    }
 }); 
