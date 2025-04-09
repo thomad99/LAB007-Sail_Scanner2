@@ -369,327 +369,306 @@
         let isScanning = false;
         let videoStream = null;
         let processingCanvas, snapshotCanvas, video, resultDiv, debugDiv;
+        let processingContext, snapshotContext;  // Add these as global variables
 
         // Initialize the application
         async function init() {
-            console.log('Initializing application...');
-            addDebugMessage('Starting initialization...', '🚀');
-
-            video = document.getElementById('video');
-            processingCanvas = document.getElementById('processingCanvas');
-            snapshotCanvas = document.getElementById('snapshotCanvas');
-            const startBtn = document.getElementById('startBtn');
-            const stopBtn = document.getElementById('stopBtn');
-            resultDiv = document.getElementById('result');
-            const debugCheckbox = document.getElementById('debugMode');
-            debugDiv = document.getElementById('debug');
-
-            // Log element initialization status
-            console.log('Element initialization status:', {
-                video: !!video,
-                processingCanvas: !!processingCanvas,
-                snapshotCanvas: !!snapshotCanvas,
-                startBtn: !!startBtn,
-                stopBtn: !!stopBtn,
-                resultDiv: !!resultDiv,
-                debugDiv: !!debugDiv
-            });
-
-            addDebugMessage('DOM elements initialization status:', '🔍');
-            addDebugMessage(JSON.stringify({
-                video: !!video,
-                processingCanvas: !!processingCanvas,
-                snapshotCanvas: !!snapshotCanvas,
-                resultDiv: !!resultDiv,
-                debugDiv: !!debugDiv
-            }, null, 2));
-
-            // Initialize canvas contexts
-            if (!processingCanvas || !snapshotCanvas) {
-                const error = 'Canvas elements not found';
-                console.error(error);
-                addDebugMessage(error, '❌');
-                if (resultDiv) resultDiv.textContent = error;
-                return;
-            }
-
-            // Test canvas contexts immediately
             try {
-                const pCtx = processingCanvas.getContext('2d');
-                const sCtx = snapshotCanvas.getContext('2d');
+                console.log('Initializing application...');
 
-                console.log('Canvas contexts initialization:', {
-                    processingContext: !!pCtx,
-                    snapshotContext: !!sCtx,
-                    processingCanvasWidth: processingCanvas.width,
-                    processingCanvasHeight: processingCanvas.height,
-                    snapshotCanvasWidth: snapshotCanvas.width,
-                    snapshotCanvasHeight: snapshotCanvas.height
-                });
+                // Initialize DOM elements
+                video = document.getElementById('video');
+                processingCanvas = document.getElementById('processingCanvas');
+                snapshotCanvas = document.getElementById('snapshotCanvas');
+                const startBtn = document.getElementById('startBtn');
+                const stopBtn = document.getElementById('stopBtn');
+                resultDiv = document.getElementById('result');
+                const debugCheckbox = document.getElementById('debugMode');
+                debugDiv = document.getElementById('debug');
 
-                addDebugMessage('Canvas contexts initialized successfully', '✅');
-            } catch (e) {
-                const error = `Failed to get canvas contexts: ${e.message}`;
-                console.error(error);
-                addDebugMessage(error, '❌');
-                if (resultDiv) resultDiv.textContent = error;
-                return;
-            }
+                // Verify all required elements exist
+                const requiredElements = {
+                    video,
+                    processingCanvas,
+                    snapshotCanvas,
+                    startBtn,
+                    stopBtn,
+                    resultDiv,
+                    debugDiv
+                };
 
-            startBtn.addEventListener('click', startScanning);
-            stopBtn.addEventListener('click', stopScanning);
-
-            debugCheckbox.addEventListener('change', (e) => {
-                debugDiv.style.display = e.target.checked ? 'block' : 'none';
-            });
-
-            video.addEventListener('play', () => {
-                console.log('Video started playing');
-            });
-
-            video.addEventListener('error', (e) => {
-                console.error('Video error:', e);
-                resultDiv.textContent = 'Video error: ' + (video.error ? video.error.message : 'unknown error');
-            });
-
-            async function startScanning() {
-                try {
-                    resultDiv.textContent = 'Starting camera...';
-                    console.log('Requesting camera access...');
-
-                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                        throw new Error('Camera API is not supported in this browser');
+                for (const [name, element] of Object.entries(requiredElements)) {
+                    if (!element) {
+                        throw new Error(`Required element ${name} not found`);
                     }
-
-                    const constraints = {
-                        video: {
-                            facingMode: "environment",
-                            width: { ideal: 1280 },
-                            height: { ideal: 720 }
-                        }
-                    };
-
-                    console.log('Camera constraints:', constraints);
-                    videoStream = await navigator.mediaDevices.getUserMedia(constraints);
-                    console.log('Camera access granted');
-
-                    video.srcObject = videoStream;
-
-                    await new Promise((resolve) => {
-                        video.onloadedmetadata = () => {
-                            console.log('Video metadata loaded');
-                            video.play();
-                            resolve();
-                        };
-                    });
-
-                    resultDiv.textContent = 'Camera started. Waiting 3 seconds to stabilize...';
-                    await new Promise(resolve => setTimeout(resolve, 3000));
-
-                    isScanning = true;
-                    resultDiv.textContent = 'Starting first scan...';
-                    scanFrame();
-                } catch (err) {
-                    console.error('Error accessing camera:', err);
-                    resultDiv.textContent = 'Error accessing camera: ' + err.message +
-                        '. Please ensure you have granted camera permissions.';
-                }
-            }
-
-            function stopScanning() {
-                isScanning = false;
-                if (videoStream) {
-                    videoStream.getTracks().forEach(track => track.stop());
-                }
-                video.srcObject = null;
-                resultDiv.textContent = 'Scanning stopped';
-            }
-
-            function addDebugMessage(message, status = '') {
-                if (!debugDiv) return;
-                const timestamp = new Date().toLocaleTimeString();
-                const messageDiv = document.createElement('div');
-                messageDiv.className = 'debug-message';
-                messageDiv.innerHTML = `
-                    <span class="debug-timestamp">[${timestamp}]</span>
-                    <span class="debug-status">${status}</span>
-                    ${message}
-                `;
-                debugDiv.insertBefore(messageDiv, debugDiv.firstChild);
-
-                // Keep only last 50 messages
-                const messages = debugDiv.getElementsByClassName('debug-message');
-                while (messages.length > 50) {
-                    debugDiv.removeChild(messages[messages.length - 1]);
-                }
-            }
-
-            async function scanFrame() {
-                if (!isScanning) {
-                    console.log('Scanning stopped, exiting scanFrame');
-                    return;
                 }
 
-                console.log('Starting new scan frame');
-                addDebugMessage('Starting new scan frame', '🔄');
-
+                // Initialize canvas contexts immediately
                 try {
-                    // Verify elements exist
-                    if (!video || !processingCanvas || !snapshotCanvas) {
-                        throw new Error('Required elements not found: ' +
-                            JSON.stringify({
-                                video: !!video,
-                                processingCanvas: !!processingCanvas,
-                                snapshotCanvas: !!snapshotCanvas
-                            })
-                        );
-                    }
-
-                    // Log video state
-                    console.log('Video state:', {
-                        videoWidth: video.videoWidth,
-                        videoHeight: video.videoHeight,
-                        readyState: video.readyState,
-                        paused: video.paused,
-                        ended: video.ended
-                    });
-
-                    // Get contexts with error checking
-                    const processingContext = processingCanvas.getContext('2d');
-                    const snapshotContext = snapshotCanvas.getContext('2d');
+                    processingContext = processingCanvas.getContext('2d', { willReadFrequently: true });
+                    snapshotContext = snapshotCanvas.getContext('2d', { willReadFrequently: true });
 
                     if (!processingContext || !snapshotContext) {
-                        throw new Error('Failed to get canvas contexts: ' +
-                            JSON.stringify({
-                                processingContext: !!processingContext,
-                                snapshotContext: !!snapshotContext
-                            })
-                        );
+                        throw new Error('Failed to get canvas contexts');
                     }
 
-                    // Log canvas dimensions before setting
-                    console.log('Pre-resize canvas dimensions:', {
+                    // Set initial canvas dimensions
+                    processingCanvas.width = 640;  // Set default width
+                    processingCanvas.height = 480; // Set default height
+                    snapshotCanvas.width = 640;    // Set default width
+                    snapshotCanvas.height = 480;   // Set default height
+
+                    console.log('Canvas initialization successful:', {
                         processingCanvas: {
                             width: processingCanvas.width,
-                            height: processingCanvas.height
+                            height: processingCanvas.height,
+                            context: !!processingContext
                         },
                         snapshotCanvas: {
                             width: snapshotCanvas.width,
-                            height: snapshotCanvas.height
+                            height: snapshotCanvas.height,
+                            context: !!snapshotContext
                         }
                     });
+                } catch (e) {
+                    console.error('Canvas initialization error:', e);
+                    throw new Error(`Canvas initialization failed: ${e.message}`);
+                }
 
-                    // Set dimensions for both canvases
-                    processingCanvas.width = video.videoWidth;
-                    processingCanvas.height = video.videoHeight;
-                    snapshotCanvas.width = video.videoWidth;
-                    snapshotCanvas.height = video.videoHeight;
+                // Add event listeners
+                startBtn.addEventListener('click', startScanning);
+                stopBtn.addEventListener('click', stopScanning);
+                debugCheckbox.addEventListener('change', (e) => {
+                    debugDiv.style.display = e.target.checked ? 'block' : 'none';
+                });
 
-                    // Log canvas dimensions after setting
-                    console.log('Post-resize canvas dimensions:', {
-                        processingCanvas: {
-                            width: processingCanvas.width,
-                            height: processingCanvas.height
-                        },
-                        snapshotCanvas: {
-                            width: snapshotCanvas.width,
-                            height: snapshotCanvas.height
-                        }
-                    });
+                // Initialize video event listeners
+                video.addEventListener('play', () => {
+                    console.log('Video started playing');
+                    addDebugMessage('Video playback started', '▶️');
+                });
 
-                    // Draw the current frame to both canvases
-                    processingContext.drawImage(video, 0, 0, processingCanvas.width, processingCanvas.height);
-                    snapshotContext.drawImage(video, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
+                video.addEventListener('error', (e) => {
+                    const errorMessage = `Video error: ${video.error ? video.error.message : 'unknown error'}`;
+                    console.error(errorMessage, e);
+                    addDebugMessage(errorMessage, '❌');
+                    resultDiv.textContent = errorMessage;
+                });
 
-                    addDebugMessage('Successfully captured frame to both canvases', '📸');
-                    resultDiv.textContent = 'Capturing image and sending to server...';
+                console.log('Initialization complete');
+                addDebugMessage('Application initialized successfully', '✅');
+            } catch (error) {
+                console.error('Initialization error:', error);
+                addDebugMessage(`Initialization failed: ${error.message}`, '❌');
+                if (resultDiv) {
+                    resultDiv.textContent = `Initialization error: ${error.message}`;
+                }
+                throw error;
+            }
+        }
 
-                    // Convert processing canvas to blob for sending to server
-                    const blob = await new Promise(resolve => {
-                        processingCanvas.toBlob(resolve, 'image/jpeg', 0.95);
-                    });
+        async function startScanning() {
+            try {
+                resultDiv.textContent = 'Starting camera...';
+                console.log('Requesting camera access...');
 
-                    if (!blob) {
-                        throw new Error('Failed to create image blob');
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Camera API is not supported in this browser');
+                }
+
+                const constraints = {
+                    video: {
+                        facingMode: "environment",
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
                     }
+                };
 
-                    // Create a file from the blob with a timestamp
-                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                    const file = new File([blob], `scan-${timestamp}.jpg`, { type: 'image/jpeg' });
+                console.log('Camera constraints:', constraints);
+                videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+                console.log('Camera access granted');
 
-                    // Send to backend for processing
-                    const formData = new FormData();
-                    formData.append('image', file);
+                video.srcObject = videoStream;
 
-                    addDebugMessage('Sending image to Azure Vision...', '🚀');
-                    const response = await fetch('/api/scan', {
-                        method: 'POST',
-                        body: formData
-                    });
+                await new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        console.log('Video metadata loaded');
+                        video.play();
+                        resolve();
+                    };
+                });
 
-                    if (!response.ok) {
-                        throw new Error(`Server error: ${response.status}`);
-                    }
+                resultDiv.textContent = 'Camera started. Waiting 3 seconds to stabilize...';
+                await new Promise(resolve => setTimeout(resolve, 3000));
 
-                    addDebugMessage('Waiting for Azure feedback...', '⏳');
-                    resultDiv.textContent = 'Processing results...';
-                    const data = await response.json();
+                isScanning = true;
+                resultDiv.textContent = 'Starting first scan...';
+                scanFrame();
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+                resultDiv.textContent = 'Error accessing camera: ' + err.message +
+                    '. Please ensure you have granted camera permissions.';
+            }
+        }
 
-                    if (!data.success) {
-                        throw new Error(data.error || 'Failed to process image');
-                    }
+        function stopScanning() {
+            isScanning = false;
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+            }
+            video.srcObject = null;
+            resultDiv.textContent = 'Scanning stopped';
+        }
 
-                    addDebugMessage('Results received from Azure', '✅');
+        function addDebugMessage(message, status = '') {
+            if (!debugDiv) return;
+            const timestamp = new Date().toLocaleTimeString();
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'debug-message';
+            messageDiv.innerHTML = `
+                <span class="debug-timestamp">[${timestamp}]</span>
+                <span class="debug-status">${status}</span>
+                ${message}
+            `;
+            debugDiv.insertBefore(messageDiv, debugDiv.firstChild);
 
-                    // Update top results box with numbers and skipper info
-                    const topResultsBox = document.getElementById('topResultsBox');
-                    if (data.sailNumbers && data.sailNumbers.numbers && data.sailNumbers.numbers.length > 0) {
-                        addDebugMessage(`Found ${data.sailNumbers.numbers.length} sail numbers`, '🔍');
-                        topResultsBox.querySelector('.top-results-content').innerHTML =
-                            data.sailNumbers.numbers.map(result => `
-                                <div class="top-result-item">
-                                    <div class="result-info">
-                                        <span class="top-result-number">${result.number}</span>
-                                        ${result.skipperInfo ?
-                                    `<span class="skipper-info">${result.skipperInfo.sailorName || ''}</span>` :
-                                    '<span class="no-match">(No Sailor Match)</span>'
-                                }
-                                    </div>
-                                    <span class="top-result-confidence ${getConfidenceClass(result.confidence)}">
-                                        ${(result.confidence * 100).toFixed(1)}%
-                                    </span>
+            // Keep only last 50 messages
+            const messages = debugDiv.getElementsByClassName('debug-message');
+            while (messages.length > 50) {
+                debugDiv.removeChild(messages[messages.length - 1]);
+            }
+        }
+
+        async function scanFrame() {
+            if (!isScanning) {
+                console.log('Scanning stopped, exiting scanFrame');
+                return;
+            }
+
+            console.log('Starting new scan frame');
+            addDebugMessage('Starting new scan frame', '🔄');
+
+            try {
+                // Verify all required elements and contexts exist
+                if (!video || !processingCanvas || !snapshotCanvas || !processingContext || !snapshotContext) {
+                    throw new Error('Required elements or contexts not found: ' +
+                        JSON.stringify({
+                            video: !!video,
+                            processingCanvas: !!processingCanvas,
+                            snapshotCanvas: !!snapshotCanvas,
+                            processingContext: !!processingContext,
+                            snapshotContext: !!snapshotContext
+                        })
+                    );
+                }
+
+                // Verify video is playing and has valid dimensions
+                if (video.readyState !== 4 || video.videoWidth === 0 || video.videoHeight === 0) {
+                    throw new Error('Video not ready or has invalid dimensions');
+                }
+
+                // Update canvas dimensions to match video
+                processingCanvas.width = video.videoWidth;
+                processingCanvas.height = video.videoHeight;
+                snapshotCanvas.width = video.videoWidth;
+                snapshotCanvas.height = video.videoHeight;
+
+                // Clear canvases before drawing
+                processingContext.clearRect(0, 0, processingCanvas.width, processingCanvas.height);
+                snapshotContext.clearRect(0, 0, snapshotCanvas.width, snapshotCanvas.height);
+
+                // Draw the current frame to both canvases
+                processingContext.drawImage(video, 0, 0, processingCanvas.width, processingCanvas.height);
+                snapshotContext.drawImage(video, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
+
+                addDebugMessage('Frame captured successfully', '📸');
+                resultDiv.textContent = 'Capturing image and sending to server...';
+
+                // Convert processing canvas to blob for sending to server
+                const blob = await new Promise(resolve => {
+                    processingCanvas.toBlob(resolve, 'image/jpeg', 0.95);
+                });
+
+                if (!blob) {
+                    throw new Error('Failed to create image blob');
+                }
+
+                // Create a file from the blob with a timestamp
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const file = new File([blob], `scan-${timestamp}.jpg`, { type: 'image/jpeg' });
+
+                // Send to backend for processing
+                const formData = new FormData();
+                formData.append('image', file);
+
+                addDebugMessage('Sending image to Azure Vision...', '🚀');
+                const response = await fetch('/api/scan', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+
+                addDebugMessage('Waiting for Azure feedback...', '⏳');
+                resultDiv.textContent = 'Processing results...';
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to process image');
+                }
+
+                addDebugMessage('Results received from Azure', '✅');
+
+                // Update top results box with numbers and skipper info
+                const topResultsBox = document.getElementById('topResultsBox');
+                if (data.sailNumbers && data.sailNumbers.numbers && data.sailNumbers.numbers.length > 0) {
+                    addDebugMessage(`Found ${data.sailNumbers.numbers.length} sail numbers`, '🔍');
+                    topResultsBox.querySelector('.top-results-content').innerHTML =
+                        data.sailNumbers.numbers.map(result => `
+                            <div class="top-result-item">
+                                <div class="result-info">
+                                    <span class="top-result-number">${result.number}</span>
+                                    ${result.skipperInfo ?
+                                `<span class="skipper-info">${result.skipperInfo.sailorName || ''}</span>` :
+                                '<span class="no-match">(No Sailor Match)</span>'
+                            }
                                 </div>
-                            `).join('');
-                    } else {
-                        addDebugMessage('No sail numbers detected', '❌');
-                        topResultsBox.querySelector('.top-results-content').textContent = 'No numbers detected';
-                    }
-
-                    // Show detailed debug information if enabled
-                    if (debugCheckbox.checked) {
-                        addDebugMessage('Full Azure Response:', '📊');
-                        addDebugMessage(JSON.stringify(data.debug, null, 2));
-                    }
-
-                    resultDiv.textContent = 'Scan complete. Waiting for next scan...';
-                    addDebugMessage('Waiting for next scan...', '⏲️');
-
-                } catch (err) {
-                    const errorMsg = `Scan error: ${err.message}\nStack: ${err.stack}`;
-                    console.error(errorMsg);
-                    addDebugMessage(errorMsg, '❌');
-                    if (resultDiv) resultDiv.textContent = 'Scan error: ' + err.message;
+                                <span class="top-result-confidence ${getConfidenceClass(result.confidence)}">
+                                    ${(result.confidence * 100).toFixed(1)}%
+                                </span>
+                            </div>
+                        `).join('');
+                } else {
+                    addDebugMessage('No sail numbers detected', '❌');
+                    topResultsBox.querySelector('.top-results-content').textContent = 'No numbers detected';
                 }
 
-                // Wait 15 seconds before next scan
-                if (isScanning) {
-                    const message = 'Waiting 15 seconds before next scan...';
-                    console.log(message);
-                    addDebugMessage(message, '⏲️');
-                    if (resultDiv) resultDiv.textContent += '\n' + message;
-                    await new Promise(resolve => setTimeout(resolve, 15000));
-                    scanFrame();
+                // Show detailed debug information if enabled
+                if (debugCheckbox.checked) {
+                    addDebugMessage('Full Azure Response:', '📊');
+                    addDebugMessage(JSON.stringify(data.debug, null, 2));
                 }
+
+                resultDiv.textContent = 'Scan complete. Waiting for next scan...';
+                addDebugMessage('Waiting for next scan...', '⏲️');
+
+            } catch (err) {
+                const errorMsg = `Scan error: ${err.message}\nStack: ${err.stack}`;
+                console.error(errorMsg);
+                addDebugMessage(errorMsg, '❌');
+                if (resultDiv) resultDiv.textContent = 'Scan error: ' + err.message;
+            }
+
+            // Wait 15 seconds before next scan
+            if (isScanning) {
+                const message = 'Waiting 15 seconds before next scan...';
+                console.log(message);
+                addDebugMessage(message, '⏲️');
+                if (resultDiv) resultDiv.textContent += '\n' + message;
+                await new Promise(resolve => setTimeout(resolve, 15000));
+                scanFrame();
             }
         }
 
