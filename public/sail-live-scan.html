@@ -139,6 +139,8 @@
             margin-top: 20px;
             border-left: 4px solid #0066cc;
             line-height: 1.5;
+            max-height: 400px;
+            overflow-y: auto;
         }
 
         .debug-message {
@@ -154,6 +156,7 @@
 
         .debug-status {
             font-weight: bold;
+            margin-right: 5px;
         }
 
         .status-box {
@@ -206,15 +209,18 @@
         }
 
         .confidence-high {
-            color: #2d8a2d;
+            background: #d4edda;
+            color: #155724;
         }
 
         .confidence-medium {
-            color: #b37400;
+            background: #fff3cd;
+            color: #856404;
         }
 
         .confidence-low {
-            color: #cc0000;
+            background: #f8d7da;
+            color: #721c24;
         }
 
         .sail-number-display {
@@ -276,22 +282,19 @@
         }
 
         .top-result-item {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 8px;
-            border-bottom: 1px solid #eee;
-            margin: 5px 0;
         }
 
         .top-result-number {
-            font-size: 32px;
+            font-size: 24px;
             font-weight: bold;
-        }
-
-        .top-result-confidence {
-            font-size: 16px;
-            color: #666;
+            margin-right: 10px;
         }
 
         .result-info {
@@ -302,13 +305,33 @@
 
         .skipper-info {
             color: #0066cc;
-            font-size: 18px;
+            font-size: 14px;
+        }
+
+        .top-result-confidence {
+            border-radius: 4px;
+            padding: 3px 6px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .counter-badge {
+            background: #0066cc;
+            color: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 10px;
+            font-size: 12px;
         }
 
         .no-match {
             color: #666;
-            font-size: 16px;
             font-style: italic;
+            font-size: 12px;
         }
     </style>
 </head>
@@ -624,64 +647,4 @@
                 // Update top results box
                 const topResultsBox = document.getElementById('topResultsBox');
                 if (data.sailNumbers && data.sailNumbers.numbers && data.sailNumbers.numbers.length > 0) {
-                    addDebugMessage(`Found ${data.sailNumbers.numbers.length} sail numbers in image #${imageCounter}`, '🔍');
-                    topResultsBox.querySelector('.top-results-content').innerHTML =
-                        data.sailNumbers.numbers.map(result => `
-                            <div class="top-result-item">
-                                <div class="result-info">
-                                    <span class="top-result-number">${result.number}</span>
-                                    ${result.skipperInfo ?
-                                `<span class="skipper-info">${result.skipperInfo.sailorName || ''}</span>` :
-                                '<span class="no-match">(No Sailor Match)</span>'
-                            }
-                                </div>
-                                <span class="top-result-confidence ${getConfidenceClass(result.confidence)}">
-                                    ${(result.confidence * 100).toFixed(1)}%
-                                </span>
-                            </div>
-                        `).join('');
-                } else {
-                    addDebugMessage(`No sail numbers detected in image #${imageCounter}`, '❌');
-                    topResultsBox.querySelector('.top-results-content').textContent = 'No numbers detected';
-                }
-
-                // Show detailed debug information
-                addDebugMessage('Full Azure Response:', '📊');
-                addDebugMessage(JSON.stringify(data.debug, null, 2));
-
-                resultDiv.textContent = `Scan #${imageCounter} complete. Starting next scan...`;
-                addDebugMessage('Starting next scan immediately...', '🔄');
-
-                // Start next scan immediately
-                if (isScanning) {
-                    // Use requestAnimationFrame to prevent potential stack overflow
-                    requestAnimationFrame(() => scanFrame());
-                }
-
-            } catch (err) {
-                const errorMsg = `Scan #${imageCounter} error: ${err.message}`;
-                console.error(errorMsg);
-                addDebugMessage(errorMsg, '❌');
-                if (resultDiv) resultDiv.textContent = errorMsg;
-
-                // On error, try again immediately
-                if (isScanning) {
-                    addDebugMessage('Retrying scan immediately...', '🔄');
-                    // Use requestAnimationFrame to prevent potential stack overflow
-                    requestAnimationFrame(() => scanFrame());
-                }
-            }
-        }
-
-        function getConfidenceClass(confidence) {
-            if (confidence >= 0.9) return 'confidence-high';
-            if (confidence >= 0.7) return 'confidence-medium';
-            return 'confidence-low';
-        }
-
-        // Start the application when the page loads
-        document.addEventListener('DOMContentLoaded', init);
-    </script>
-</body>
-
-</html>
+                    addDebugMessage(`

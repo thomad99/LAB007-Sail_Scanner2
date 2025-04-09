@@ -281,14 +281,17 @@ async function scanFrame() {
         // Update top results box with numbers and skipper info
         const topResultsBox = document.getElementById('topResultsBox');
         if (topResultsBox && data.sailNumbers && data.sailNumbers.numbers && data.sailNumbers.numbers.length > 0) {
-            addDebugMessage(`Found ${data.sailNumbers.numbers.length} sail numbers in image #${imageCounter}`, '🔍');
+            const foundNumbers = data.sailNumbers.numbers;
+            addDebugMessage(`Found ${foundNumbers.length} sail numbers in image #${imageCounter}`, '🔍');
+
+            // Display in the top results box
             topResultsBox.querySelector('.top-results-content').innerHTML =
-                data.sailNumbers.numbers.map(result => `
+                foundNumbers.map(result => `
                     <div class="top-result-item">
                         <div class="result-info">
                             <span class="top-result-number">${result.number}</span>
                             ${result.skipperInfo ?
-                        `<span class="skipper-info">${result.skipperInfo.sailorName || ''}</span>` :
+                        `<span class="skipper-info">${result.skipperInfo.sailorName || result.skipperInfo.boat_name || ''}</span>` :
                         '<span class="no-match">(No Sailor Match)</span>'
                     }
                         </div>
@@ -297,6 +300,14 @@ async function scanFrame() {
                         </span>
                     </div>
                 `).join('');
+
+            // Log the found numbers
+            foundNumbers.forEach(result => {
+                addDebugMessage(`Detected sail number: ${result.number} (${(result.confidence * 100).toFixed(1)}% confidence)`, '🔢');
+            });
+
+            // Save sail numbers to database
+            saveSailNumbersToDatabase(foundNumbers);
         } else if (topResultsBox) {
             addDebugMessage(`No sail numbers detected in image #${imageCounter}`, '❓');
             topResultsBox.querySelector('.top-results-content').textContent = 'No numbers detected';
@@ -315,7 +326,7 @@ async function scanFrame() {
                     data.sailNumbers.numbers.map(num =>
                         `• ${num.number} (${(num.confidence * 100).toFixed(1)}% confident)
                      ${num.skipperInfo ?
-                            `Skipper: ${num.skipperInfo.sailorName || 'Unknown'}
+                            `Skipper: ${num.skipperInfo.sailorName || num.skipperInfo.boat_name || 'Unknown'}
                          Boat: ${num.skipperInfo.boat_name || 'Unknown'}
                          Club: ${num.skipperInfo.yacht_club || 'Unknown'}`
                             : 'No sailor match'
@@ -330,7 +341,7 @@ async function scanFrame() {
             addDebugMessage(debugInfo);
         }
 
-        if (resultDiv) resultDiv.textContent = `Scan #${imageCounter} complete. Total images: ${imageCounter}`;
+        if (resultDiv) resultDiv.textContent = `Scan #${imageCounter} complete. Found ${data.sailNumbers?.numbers?.length || 0} sail numbers. Total images: ${imageCounter}`;
         addDebugMessage(`Scan #${imageCounter} complete. Waiting 30 seconds for next scan...`, '⏱️');
 
         // Next scan will be triggered by timeout due to throttling
@@ -358,6 +369,35 @@ function getConfidenceClass(confidence) {
     if (confidence >= 0.9) return 'confidence-high';
     if (confidence >= 0.7) return 'confidence-medium';
     return 'confidence-low';
+}
+
+// Add this new function to save sail numbers to the database
+async function saveSailNumbersToDatabase(sailNumbers) {
+    try {
+        // Extract just the number values for saving
+        const numbers = sailNumbers.map(num => num.number);
+
+        addDebugMessage(`Saving ${numbers.length} sail numbers to database: ${numbers.join(', ')}`, '💾');
+
+        const response = await fetch('/api/numbers', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ numbers })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to save numbers: ${response.status}`);
+        }
+
+        const result = await response.json();
+        addDebugMessage('Sail numbers saved to database successfully', '✅');
+        return result;
+    } catch (err) {
+        console.error('Error saving sail numbers to database:', err);
+        addDebugMessage(`Failed to save sail numbers: ${err.message}`, '❌');
+    }
 }
 
 // Start the application when the page loads
