@@ -31,26 +31,26 @@ async function init() {
         try {
             resultDiv.textContent = 'Starting camera...';
             console.log('Requesting camera access...');
-            
+
             // Check if getUserMedia is supported
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 throw new Error('Camera API is not supported in this browser');
             }
 
             const constraints = {
-                video: { 
+                video: {
                     facingMode: "environment",
                     width: { ideal: 1280 },
                     height: { ideal: 720 }
                 }
             };
-            
+
             console.log('Camera constraints:', constraints);
             videoStream = await navigator.mediaDevices.getUserMedia(constraints);
             console.log('Camera access granted');
-            
+
             video.srcObject = videoStream;
-            
+
             // Wait for video to be ready
             await new Promise((resolve) => {
                 video.onloadedmetadata = () => {
@@ -63,13 +63,13 @@ async function init() {
             // Wait additional 3 seconds for camera to stabilize
             resultDiv.textContent = 'Camera started. Waiting 3 seconds to stabilize...';
             await new Promise(resolve => setTimeout(resolve, 3000));
-            
+
             isScanning = true;
             resultDiv.textContent = 'Starting first scan...';
             scanFrame();
         } catch (err) {
             console.error('Error accessing camera:', err);
-            resultDiv.textContent = 'Error accessing camera: ' + err.message + 
+            resultDiv.textContent = 'Error accessing camera: ' + err.message +
                 '. Please ensure you have granted camera permissions.';
         }
     }
@@ -93,7 +93,7 @@ async function init() {
 
             resultDiv.textContent = 'Capturing image and sending to Azure...';
             debugDiv.textContent = 'Starting scan...';
-            
+
             // Convert canvas to blob
             const blob = await new Promise(resolve => {
                 canvas.toBlob(resolve, 'image/jpeg', 0.95);
@@ -119,15 +119,15 @@ async function init() {
             // Update top results box with numbers and skipper info
             const topResultsBox = document.getElementById('topResultsBox');
             if (data.numbersWithSkippers && data.numbersWithSkippers.length > 0) {
-                topResultsBox.querySelector('.top-results-content').innerHTML = 
+                topResultsBox.querySelector('.top-results-content').innerHTML =
                     data.numbersWithSkippers.map(result => `
                         <div class="top-result-item">
                             <div class="result-info">
                                 <span class="top-result-number">${result.number}</span>
-                                ${result.skipperInfo ? 
-                                    `<span class="skipper-info">${result.skipperInfo.skipper_name || result.skipperInfo.boat_name || ''}</span>` : 
-                                    '<span class="no-match">(No Sailor Match)</span>'
-                                }
+                                ${result.skipperInfo ?
+                            `<span class="skipper-info">${result.skipperInfo.skipper_name || result.skipperInfo.boat_name || ''}</span>` :
+                            '<span class="no-match">(No Sailor Match)</span>'
+                        }
                             </div>
                             <span class="top-result-confidence ${getConfidenceClass(result.confidence)}">
                                 ${(result.confidence * 100).toFixed(1)}%
@@ -146,20 +146,20 @@ async function init() {
                     Status: ${data.status}
 
                     === Detected Numbers ===
-                    ${data.numbersWithSkippers?.map(num => 
-                        `• ${num.number} (${(num.confidence * 100).toFixed(1)}% confident)
-                         ${num.skipperInfo ? 
-                            `Skipper: ${num.skipperInfo.skipper_name || 'Unknown'}
+                    ${data.numbersWithSkippers?.map(num =>
+                    `• ${num.number} (${(num.confidence * 100).toFixed(1)}% confident)
+                         ${num.skipperInfo ?
+                        `Skipper: ${num.skipperInfo.skipper_name || 'Unknown'}
                              Boat: ${num.skipperInfo.boat_name || 'Unknown'}
                              Club: ${num.skipperInfo.yacht_club || 'Unknown'}`
-                            : 'No sailor match'
-                         }`
-                    ).join('\n') || 'No numbers detected'}
+                        : 'No sailor match'
+                    }`
+                ).join('\n') || 'No numbers detected'}
 
                     === Raw Text ===
-                    ${data.rawText.map(item => 
-                        `• "${item.text}" (${(item.confidence * 100).toFixed(1)}% confident)`
-                    ).join('\n')}
+                    ${data.rawText.map(item =>
+                    `• "${item.text}" (${(item.confidence * 100).toFixed(1)}% confident)`
+                ).join('\n')}
                 `;
             }
 
@@ -173,11 +173,11 @@ async function init() {
             }
         }
 
-        // Wait 15 seconds before next scan
+        // Continue scanning immediately after processing
         if (isScanning) {
-            resultDiv.textContent += '\nWaiting 15 seconds before next scan...';
-            await new Promise(resolve => setTimeout(resolve, 15000));
-            scanFrame();
+            resultDiv.textContent += '\nStarting next scan immediately...';
+            // Use requestAnimationFrame to prevent stack overflow with immediate recursion
+            requestAnimationFrame(() => scanFrame());
         }
     }
 
@@ -188,7 +188,7 @@ async function init() {
     async function submitTraining() {
         const imageFile = document.getElementById('trainImage').files[0];
         const correctNumber = document.getElementById('correctNumber').value;
-        
+
         if (!imageFile || !correctNumber) {
             alert('Please select an image and enter the correct number');
             return;
@@ -196,7 +196,7 @@ async function init() {
 
         const trainCanvas = document.getElementById('trainCanvas');
         const context = trainCanvas.getContext('2d');
-        
+
         // Load and process image
         const img = new Image();
         img.onload = async () => {
@@ -207,17 +207,17 @@ async function init() {
             // Apply same processing as live scan
             const imageData = context.getImageData(0, 0, trainCanvas.width, trainCanvas.height);
             const data = imageData.data;
-            
+
             const threshold = 160;
             const contrast = 1.2;
-            
+
             for (let i = 0; i < data.length; i += 4) {
                 const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
                 const adjusted = ((avg - 128) * contrast) + 128;
-                const value = adjusted > threshold ? 255 : 
-                             adjusted < threshold - 30 ? 0 : 
-                             adjusted;
-                
+                const value = adjusted > threshold ? 255 :
+                    adjusted < threshold - 30 ? 0 :
+                        adjusted;
+
                 data[i] = data[i + 1] = data[i + 2] = value;
             }
             context.putImageData(imageData, 0, 0);
@@ -259,7 +259,7 @@ async function saveNumbers(numbers) {
             },
             body: JSON.stringify({ numbers })
         });
-        
+
         if (!response.ok) {
             throw new Error('Failed to save numbers');
         }
@@ -288,7 +288,7 @@ function getConfidenceClass(confidence) {
 function updateTopResults(rawText) {
     const topResultsBox = document.getElementById('topResultsBox');
     const topResultsContent = topResultsBox.querySelector('.top-results-content');
-    
+
     if (rawText && rawText.length > 0) {
         // Filter and process text items that could be sail numbers
         const potentialNumbers = rawText
@@ -302,10 +302,10 @@ function updateTopResults(rawText) {
             })
             .filter(item => {
                 const num = parseInt(item.number);
-                return item.number.length >= 1 && 
-                       item.number.length <= 6 && 
-                       num >= 1 && 
-                       num <= 999999;
+                return item.number.length >= 1 &&
+                    item.number.length <= 6 &&
+                    num >= 1 &&
+                    num <= 999999;
             })
             .sort((a, b) => b.confidence - a.confidence)
             .slice(0, 3); // Take top 3 results
