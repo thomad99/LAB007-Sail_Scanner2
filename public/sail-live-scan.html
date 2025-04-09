@@ -553,11 +553,11 @@
                 return;
             }
 
-            imageCounter++;  // Increment counter for each new image
-            addDebugMessage(`Starting scan #${imageCounter}`, '🔄');
-            console.log('Processing image #' + imageCounter);
-
             try {
+                imageCounter++;  // Increment counter for each new image
+                addDebugMessage(`Starting scan #${imageCounter}`, '🔄');
+                console.log('Processing image #' + imageCounter);
+
                 // Verify all required elements and contexts exist
                 if (!video || !processingCanvas || !snapshotCanvas || !processingContext || !snapshotContext) {
                     throw new Error('Required elements or contexts not found');
@@ -650,11 +650,12 @@
                 addDebugMessage(JSON.stringify(data.debug, null, 2));
 
                 resultDiv.textContent = `Scan #${imageCounter} complete. Starting next scan...`;
-                addDebugMessage('Starting next scan cycle...', '🔄');
+                addDebugMessage('Starting next scan immediately...', '🔄');
 
                 // Start next scan immediately
                 if (isScanning) {
-                    scanFrame();
+                    // Use requestAnimationFrame to prevent potential stack overflow
+                    requestAnimationFrame(() => scanFrame());
                 }
 
             } catch (err) {
@@ -663,11 +664,11 @@
                 addDebugMessage(errorMsg, '❌');
                 if (resultDiv) resultDiv.textContent = errorMsg;
 
-                // Retry scan after error
+                // On error, try again immediately
                 if (isScanning) {
-                    addDebugMessage('Retrying scan in 2 seconds...', '🔄');
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                    scanFrame();
+                    addDebugMessage('Retrying scan immediately...', '🔄');
+                    // Use requestAnimationFrame to prevent potential stack overflow
+                    requestAnimationFrame(() => scanFrame());
                 }
             }
         }
