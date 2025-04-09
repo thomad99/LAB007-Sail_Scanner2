@@ -323,6 +323,7 @@
             <div class="camera-feed">
                 <div class="preview-header">Live Camera Feed</div>
                 <video id="video" playsinline></video>
+                <canvas id="processingCanvas" style="display: none;"></canvas>
             </div>
             <div class="snapshot-preview">
                 <div class="preview-header">Last Snapshot</div>
@@ -371,7 +372,8 @@
         // Initialize the application
         async function init() {
             const video = document.getElementById('video');
-            const canvas = document.getElementById('canvas');
+            const processingCanvas = document.getElementById('processingCanvas');
+            const snapshotCanvas = document.getElementById('snapshotCanvas');
             const startBtn = document.getElementById('startBtn');
             const stopBtn = document.getElementById('stopBtn');
             const resultDiv = document.getElementById('result');
@@ -470,28 +472,43 @@
                 if (!isScanning) return;
 
                 try {
-                    // Setup canvases
-                    const context = canvas.getContext('2d');
+                    // Get both canvases
+                    const processingCanvas = document.getElementById('processingCanvas');
                     const snapshotCanvas = document.getElementById('snapshotCanvas');
+
+                    if (!processingCanvas || !snapshotCanvas) {
+                        throw new Error('Canvas elements not found');
+                    }
+
+                    // Setup contexts
+                    const processingContext = processingCanvas.getContext('2d');
                     const snapshotContext = snapshotCanvas.getContext('2d');
 
-                    // Set dimensions
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
+                    if (!processingContext || !snapshotContext) {
+                        throw new Error('Could not get canvas contexts');
+                    }
+
+                    // Set dimensions for both canvases
+                    processingCanvas.width = video.videoWidth;
+                    processingCanvas.height = video.videoHeight;
                     snapshotCanvas.width = video.videoWidth;
                     snapshotCanvas.height = video.videoHeight;
 
-                    // Capture frame
-                    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    snapshotContext.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    // Draw the current frame to both canvases
+                    processingContext.drawImage(video, 0, 0, processingCanvas.width, processingCanvas.height);
+                    snapshotContext.drawImage(video, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
 
                     addDebugMessage('Capture taken', '📸');
                     resultDiv.textContent = 'Capturing image and sending to server...';
 
-                    // Convert canvas to blob
+                    // Convert processing canvas to blob for sending to server
                     const blob = await new Promise(resolve => {
-                        canvas.toBlob(resolve, 'image/jpeg', 0.95);
+                        processingCanvas.toBlob(resolve, 'image/jpeg', 0.95);
                     });
+
+                    if (!blob) {
+                        throw new Error('Failed to create image blob');
+                    }
 
                     // Create a file from the blob with a timestamp
                     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
