@@ -647,4 +647,89 @@
                 // Update top results box
                 const topResultsBox = document.getElementById('topResultsBox');
                 if (data.sailNumbers && data.sailNumbers.numbers && data.sailNumbers.numbers.length > 0) {
-                    addDebugMessage(`
+                    addDebugMessage(`Found ${data.sailNumbers.numbers.length} sail numbers in image #${imageCounter}`, '🔍');
+
+                    // Update top results display
+                    topResultsBox.querySelector('.top-results-content').innerHTML =
+                        data.sailNumbers.numbers.map(result => `
+                            <div class="top-result-item">
+                                <div class="result-info">
+                                    <span class="top-result-number">${result.number}</span>
+                                    ${result.skipperInfo ?
+                                `<span class="skipper-info">${result.skipperInfo.sailorName || result.skipperInfo.boat_name || ''}</span>` :
+                                '<span class="no-match">(No Sailor Match)</span>'
+                            }
+                                </div>
+                                <span class="top-result-confidence ${getConfidenceClass(result.confidence)}">
+                                    ${(result.confidence * 100).toFixed(1)}%
+                                </span>
+                            </div>
+                        `).join('');
+
+                    // Save sail numbers to database
+                    saveSailNumbers(data.sailNumbers.numbers);
+                } else {
+                    addDebugMessage(`No sail numbers detected in image #${imageCounter}`, '❓');
+                    topResultsBox.querySelector('.top-results-content').textContent = 'No numbers detected';
+                }
+
+                // Show detailed debug information
+                addDebugMessage('Full Azure Response:', '📊');
+                addDebugMessage(JSON.stringify(data.debug, null, 2));
+
+                resultDiv.textContent = `Scan #${imageCounter} complete. ${data.sailNumbers?.numbers?.length || 0} sail numbers found. Starting next scan in 30 seconds...`;
+
+            } catch (err) {
+                const errorMsg = `Scan #${imageCounter} error: ${err.message}`;
+                console.error(errorMsg);
+                addDebugMessage(errorMsg, '❌');
+                if (resultDiv) resultDiv.textContent = errorMsg + '. Will retry in 30 seconds.';
+            }
+
+            // Schedule next scan if still scanning
+            if (isScanning) {
+                addDebugMessage('Scheduling next scan in 30 seconds...', '⏲️');
+                setTimeout(() => {
+                    if (isScanning) { // Check again in case user stopped during the wait
+                        scanFrame();
+                    }
+                }, 30000);
+            }
+        }
+
+        // Save sail numbers to database
+        async function saveSailNumbers(sailNumbers) {
+            try {
+                // Extract just the number values
+                const numbers = sailNumbers.map(num => num.number);
+                addDebugMessage(`Saving ${numbers.length} sail numbers to database: ${numbers.join(', ')}`, '💾');
+
+                const response = await fetch('/api/numbers', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ numbers })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+
+                const result = await response.json();
+                addDebugMessage('Sail numbers saved successfully to database', '✅');
+            } catch (error) {
+                console.error('Error saving sail numbers:', error);
+                addDebugMessage(`Failed to save sail numbers: ${error.message}`, '❌');
+            }
+        }
+
+        function getConfidenceClass(confidence) {
+            if (confidence >= 0.9) return 'confidence-high';
+            if (confidence >= 0.7) return 'confidence-medium';
+            return 'confidence-low';
+        }
+    </script>
+</body>
+
+</html>
