@@ -119,6 +119,18 @@
             gap: 10px;
         }
 
+        .scan-interval-control {
+            display: flex;
+            align-items: center;
+            margin: 0 10px;
+            font-size: 14px;
+        }
+
+        .small-btn {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
         #result {
             white-space: pre-wrap;
             font-family: monospace;
@@ -333,6 +345,23 @@
             font-style: italic;
             font-size: 12px;
         }
+
+        .view-results-btn {
+            background: #28a745;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .view-results-btn:hover {
+            background: #218838;
+            text-decoration: none;
+            color: white;
+        }
     </style>
 </head>
 
@@ -357,9 +386,15 @@
         <div class="button-group">
             <button id="startBtn">Start Scanning</button>
             <button id="stopBtn">Stop</button>
+            <div class="scan-interval-control">
+                <label for="scanInterval">Scan Interval (seconds):</label>
+                <input type="number" id="scanInterval" min="5" max="300" value="30" style="width: 60px; margin: 0 5px;">
+                <button id="updateIntervalBtn" class="small-btn">Update</button>
+            </div>
             <label class="debug-toggle">
                 <input type="checkbox" id="debugMode"> Show Debug Info
             </label>
+            <a href="results.html" class="view-results-btn">View Results</a>
         </div>
 
         <div id="topResultsBox" class="sail-number-display">
@@ -394,6 +429,7 @@
         let processingCanvas, snapshotCanvas, video, resultDiv, debugDiv;
         let processingContext, snapshotContext;
         let imageCounter = 0;  // Add counter for images taken
+        let scanIntervalSeconds = 30; // Default scan interval in seconds
 
         // Initialize the application
         async function init() {
@@ -409,10 +445,34 @@
                 resultDiv = document.getElementById('result');
                 const debugCheckbox = document.getElementById('debugMode');
                 debugDiv = document.getElementById('debug');
+                const scanIntervalInput = document.getElementById('scanInterval');
+                const updateIntervalBtn = document.getElementById('updateIntervalBtn');
 
                 // Make debug window visible by default
                 debugDiv.style.display = 'block';
                 debugCheckbox.checked = true;
+
+                // Initialize scan interval value
+                scanIntervalInput.value = scanIntervalSeconds;
+
+                // Add event listener for updating scan interval
+                updateIntervalBtn.addEventListener('click', () => {
+                    const newInterval = parseInt(scanIntervalInput.value, 10);
+                    if (newInterval >= 5 && newInterval <= 300) {
+                        scanIntervalSeconds = newInterval;
+                        addDebugMessage(`Scan interval updated to ${scanIntervalSeconds} seconds`, '⏱️');
+                    } else {
+                        addDebugMessage(`Invalid interval: ${newInterval}. Must be between 5-300 seconds`, '❌');
+                        scanIntervalInput.value = scanIntervalSeconds; // Reset to current value
+                    }
+                });
+
+                // Also update on Enter key press
+                scanIntervalInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        updateIntervalBtn.click();
+                    }
+                });
 
                 // Verify all required elements exist
                 const requiredElements = {
@@ -677,23 +737,35 @@
                 addDebugMessage('Full Azure Response:', '📊');
                 addDebugMessage(JSON.stringify(data.debug, null, 2));
 
-                resultDiv.textContent = `Scan #${imageCounter} complete. ${data.sailNumbers?.numbers?.length || 0} sail numbers found. Starting next scan in 30 seconds...`;
+                // Schedule next scan if still scanning
+                if (isScanning) {
+                    const nextScanMessage = `Scheduling next scan in ${scanIntervalSeconds} seconds...`;
+                    addDebugMessage(nextScanMessage, '⏲️');
+                    resultDiv.textContent = `Scan #${imageCounter} complete. ${data.sailNumbers?.numbers?.length || 0} sail numbers found. ${nextScanMessage}`;
 
+                    setTimeout(() => {
+                        if (isScanning) { // Check again in case user stopped during the wait
+                            scanFrame();
+                        }
+                    }, scanIntervalSeconds * 1000);
+                }
             } catch (err) {
                 const errorMsg = `Scan #${imageCounter} error: ${err.message}`;
                 console.error(errorMsg);
                 addDebugMessage(errorMsg, '❌');
-                if (resultDiv) resultDiv.textContent = errorMsg + '. Will retry in 30 seconds.';
-            }
 
-            // Schedule next scan if still scanning
-            if (isScanning) {
-                addDebugMessage('Scheduling next scan in 30 seconds...', '⏲️');
-                setTimeout(() => {
-                    if (isScanning) { // Check again in case user stopped during the wait
-                        scanFrame();
-                    }
-                }, 30000);
+                // Schedule next scan after error with the configurable interval
+                if (isScanning) {
+                    const retryMessage = `Will retry in ${scanIntervalSeconds} seconds`;
+                    if (resultDiv) resultDiv.textContent = errorMsg + '. ' + retryMessage;
+                    addDebugMessage(`Scheduling retry scan in ${scanIntervalSeconds} seconds...`, '⏲️');
+
+                    setTimeout(() => {
+                        if (isScanning) { // Check again in case user stopped during the wait
+                            scanFrame();
+                        }
+                    }, scanIntervalSeconds * 1000);
+                }
             }
         }
 
