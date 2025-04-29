@@ -1191,7 +1191,7 @@ app.get('/api/validate-files', async (req, res) => {
         let orphanedCount = 0;
 
         for (const photo of photos) {
-            const filePath = path.join(__dirname, 'public', 'Images', photo.filename);
+            const filePath = path.join(PROCESSED_DIR, photo.filename);
             try {
                 const stats = await fsPromises.stat(filePath);
 
@@ -1214,7 +1214,7 @@ app.get('/api/validate-files', async (req, res) => {
                     results.push({
                         filename: photo.filename,
                         status: 'error',
-                        message: 'File not found in Images directory'
+                        message: 'File not found in processed images directory'
                     });
                     orphanedCount++;
                 } else {
@@ -1246,7 +1246,7 @@ app.post('/api/clean-orphaned', async (req, res) => {
         let removedCount = 0;
 
         for (const photo of photos) {
-            const filePath = path.join(__dirname, 'public', 'Images', photo.filename);
+            const filePath = path.join(PROCESSED_DIR, photo.filename);
             try {
                 await fsPromises.stat(filePath);
             } catch (err) {
