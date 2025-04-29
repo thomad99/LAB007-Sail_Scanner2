@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>LAB007 - Sail Number Results</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+            font-family: Arial, sans-serif;
+        }
+
+        .header {
+            width: 100%;
+            margin: 0 0 30px 0;
+            padding: 0;
+            position: relative;
+            background: #f0f0f0;
+        }
+
+        .logo {
+            width: 100%;
+            height: auto;
+            display: block;
+            object-fit: cover;
+        }
+
+        .main-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 0 20px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            margin-top: 40px;
+            background: #ffffff;
+            border-top: 1px solid #dee2e6;
+        }
+
+        .footer img {
+            max-height: 100px;
+            width: auto;
+            margin: 0 auto;
+            display: block;
+        }
+
+        .results-banner {
+            background: #0066cc;
+            color: white;
+            text-align: center;
+            padding: 12px;
+            margin: 10px 0 20px 0;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 1.3em;
+        }
+
+        .results-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .action-button {
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .action-button.refresh {
+            background: #28a745;
+        }
+
+        .action-button.clear {
+            background: #dc3545;
+        }
+
+        .action-button.live-scan {
+            background: #0066cc;
+        }
+
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .results-table th {
+            background: #0066cc;
+            color: white;
+            padding: 12px 15px;
+            text-align: left;
+        }
+
+        .results-table tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+
+        .results-table tr:hover {
+            background-color: #e9f2ff;
+        }
+
+        .results-table td {
+            padding: 10px 15px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            color: #6c757d;
+            margin-top: 20px;
+        }
+
+        .results-count {
+            font-weight: bold;
+            color: #0066cc;
+        }
+
+        .confirm-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-title {
+            margin-top: 0;
+            color: #dc3545;
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .modal-buttons button {
+            padding: 8px 16px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .cancel-btn {
+            background: #6c757d;
+            color: white;
+        }
+
+        .confirm-btn {
+            background: #dc3545;
+            color: white;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        .sailor-info {
+            background: #e6f3ff;
+            padding: 5px 10px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-top: 3px;
+        }
+
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .loading-spinner::after {
+            content: "";
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #0066cc;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <img src="lovesailing-header.jpg" alt="LoveSailing Header" class="logo">
+    </div>
+
+    <div class="main-container">
+        <div class="results-banner">
+            SAIL NUMBER DETECTION RESULTS
+        </div>
+
+        <div class="results-controls">
+            <span class="results-count" id="resultsCount">Loading results...</span>
+            <div class="button-group">
+                <a href="sail-live-scan.html" class="action-button live-scan">Live Scan</a>
+                <button id="refreshBtn" class="action-button refresh">Refresh Results</button>
+                <button id="clearBtn" class="action-button clear">Clear All</button>
+            </div>
+        </div>
+
+        <div id="loadingSpinner" class="loading-spinner"></div>
+
+        <div id="resultsContainer">
+            <table id="resultsTable" class="results-table">
+                <thead>
+                    <tr>
+                        <th>Sail Number</th>
+                        <th>Confidence</th>
+                        <th>Date/Time</th>
+                        <th>Skipper</th>
+                        <th>Boat Name</th>
+                        <th>Yacht Club</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsBody">
+                    <!-- Results will be populated here -->
+                </tbody>
+            </table>
+            <div id="noResults" class="no-results" style="display: none;">
+                No sail numbers found in the database
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal for clearing database -->
+    <div id="confirmModal" class="confirm-modal">
+        <div class="modal-content">
+            <h3 class="modal-title">Clear Database?</h3>
+            <p>Are you sure you want to clear all sail number records from the database? This action cannot be undone.
+            </p>
+            <div class="modal-buttons">
+                <button id="cancelClear" class="cancel-btn">Cancel</button>
+                <button id="confirmClear" class="confirm-btn">Yes, Clear Database</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <a href="https://thomad99.wixstudio.com/lab007" target="_blank">
+            <img src="LAB007-FOOTER.JPG" alt="LAB007 Footer">
+        </a>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const resultsTable = document.getElementById('resultsTable');
+            const resultsBody = document.getElementById('resultsBody');
+            const resultsCount = document.getElementById('resultsCount');
+            const refreshBtn = document.getElementById('refreshBtn');
+            const clearBtn = document.getElementById('clearBtn');
+            const confirmModal = document.getElementById('confirmModal');
+            const confirmBtn = document.getElementById('confirmClear');
+            const cancelBtn = document.getElementById('cancelClear');
+            const noResults = document.getElementById('noResults');
+            const loadingSpinner = document.getElementById('loadingSpinner');
+
+            // Load results when page loads
+            loadResults();
+
+            // Add event listeners
+            refreshBtn.addEventListener('click', loadResults);
+
+            clearBtn.addEventListener('click', function () {
+                confirmModal.style.display = 'flex';
+            });
+
+            // Cancel clear
+            cancelBtn.addEventListener('click', function () {
+                confirmModal.style.display = 'none';
+            });
+
+            // Confirm clear
+            confirmBtn.addEventListener('click', clearDatabase);
+
+            // Also close modal when clicking outside
+            confirmModal.addEventListener('click', function (event) {
+                if (event.target === confirmModal) {
+                    confirmModal.style.display = 'none';
+                }
+            });
+
+            // Function to load results from the database
+            async function loadResults() {
+                try {
+                    // Show loading spinner
+                    noResults.style.display = 'none';
+                    resultsTable.style.display = 'none';
+                    loadingSpinner.style.display = 'block';
+
+                    const response = await fetch('/api/scans');
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+
+                    const data = await response.json();
+
+                    if (data.length === 0) {
+                        // No results found
+                        resultsCount.textContent = 'No results found';
+                        resultsTable.style.display = 'none';
+                        noResults.style.display = 'block';
+                    } else {
+                        // Update count
+                        resultsCount.textContent = `${data.length} results found`;
+
+                        // Clear existing rows
+                        resultsBody.innerHTML = '';
+
+                        // Add rows
+                        data.forEach(scan => {
+                            const row = document.createElement('tr');
+
+                            // Format date for better readability
+                            const scanDate = new Date(scan.scan_time);
+                            const formattedDate = scanDate.toLocaleString();
+
+                            // Format confidence as percentage
+                            const confidencePercent = (scan.confidence * 100).toFixed(1) + '%';
+
+                            row.innerHTML = `
+                                <td>${scan.sail_number}</td>
+                                <td>${confidencePercent}</td>
+                                <td>${formattedDate}</td>
+                                <td>${scan.skipper_name || 'Unknown'}</td>
+                                <td>${scan.boat_name || 'Unknown'}</td>
+                                <td>${scan.yacht_club || 'Unknown'}</td>
+                            `;
+
+                            resultsBody.appendChild(row);
+                        });
+
+                        // Show table
+                        resultsTable.style.display = 'table';
+                    }
+                } catch (error) {
+                    console.error('Error fetching results:', error);
+                    resultsCount.textContent = 'Error fetching results';
+                    noResults.style.display = 'block';
+                    resultsTable.style.display = 'none';
+                } finally {
+                    // Hide loading spinner
+                    loadingSpinner.style.display = 'none';
+                }
+            }
+
+            // Function to clear the database
+            async function clearDatabase() {
+                try {
+                    confirmModal.style.display = 'none';
+
+                    // Show loading spinner
+                    loadingSpinner.style.display = 'block';
+
+                    const response = await fetch('/api/numbers/clear', {
+                        method: 'POST'
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to clear database');
+                    }
+
+                    // Clear table and show no results
+                    resultsBody.innerHTML = '';
+                    resultsTable.style.display = 'none';
+                    noResults.style.display = 'block';
+                    resultsCount.textContent = 'No results found';
+
+                } catch (error) {
+                    console.error('Error clearing database:', error);
+                    alert('Error clearing database: ' + error.message);
+                } finally {
+                    // Hide loading spinner
+                    loadingSpinner.style.display = 'none';
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>

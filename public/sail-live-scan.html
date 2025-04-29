@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Live Sail Scanner</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js'></script>
+    <script src="script.js"></script>
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        .header {
+            width: 100%;
+            margin: 0 0 30px 0;
+            padding: 0;
+            position: relative;
+            background: #f0f0f0;
+        }
+
+        .logo {
+            width: 100%;
+            height: auto;
+            display: block;
+            object-fit: cover;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .camera-container {
+            display: flex;
+            gap: 20px;
+            margin: 20px 0;
+            justify-content: center;
+        }
+
+        .camera-feed,
+        .snapshot-preview {
+            flex: 1;
+            max-width: 500px;
+        }
+
+        .camera-feed {
+            border: 2px solid #0066cc;
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .snapshot-preview {
+            border: 2px solid #28a745;
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .preview-header {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        #video,
+        #snapshotCanvas {
+            width: 100%;
+            border-radius: 5px;
+        }
+
+        #canvas {
+            display: none;
+        }
+
+        .button-group {
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background: #0052a3;
+        }
+
+        #stopBtn {
+            background: #dc3545;
+        }
+
+        #stopBtn:hover {
+            background: #c82333;
+        }
+
+        .debug-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .scan-interval-control {
+            display: flex;
+            align-items: center;
+            margin: 0 10px;
+            font-size: 14px;
+        }
+
+        .small-btn {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
+        #result {
+            white-space: pre-wrap;
+            font-family: monospace;
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            transition: all 0.3s ease;
+        }
+
+        #debug {
+            display: none;
+            white-space: pre-wrap;
+            font-family: monospace;
+            background: #e6f3ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            border-left: 4px solid #0066cc;
+            line-height: 1.5;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .debug-message {
+            padding: 5px 0;
+            border-bottom: 1px solid #cce5ff;
+        }
+
+        .debug-timestamp {
+            color: #666;
+            font-size: 0.9em;
+            margin-right: 10px;
+        }
+
+        .debug-status {
+            font-weight: bold;
+            margin-right: 5px;
+        }
+
+        .status-box {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+
+        .status-scanning {
+            background: #e6f3ff;
+            border-left: 4px solid #0066cc;
+        }
+
+        .status-success {
+            background: #e6ffe6;
+            border-left: 4px solid #2d8a2d;
+        }
+
+        .status-error {
+            background: #ffe6e6;
+            border-left: 4px solid #cc0000;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .error-message {
+            color: #721c24;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .error-message::before {
+            content: "⚠️";
+            font-size: 20px;
+        }
+
+        .retry-countdown {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .confidence-high {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .confidence-medium {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .confidence-low {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .sail-number-display {
+            background: #fff;
+            border: 3px solid #0066cc;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .sail-number-display h2 {
+            margin: 0 0 10px 0;
+            color: #0066cc;
+        }
+
+        .sail-number-value {
+            font-size: 48px;
+            font-weight: bold;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+
+        .sail-number-confidence {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .confidence-indicator {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            margin-left: 5px;
+        }
+
+        .flash-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: white;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 1000;
+            transition: opacity 0.1s ease-out;
+        }
+
+        .flash-overlay.active {
+            opacity: 0.7;
+        }
+
+        .top-results-content {
+            font-size: 24px;
+            font-family: monospace;
+            margin: 15px 0;
+            padding: 10px;
+        }
+
+        .top-result-item {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .top-result-number {
+            font-size: 24px;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .result-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .skipper-info {
+            color: #0066cc;
+            font-size: 14px;
+        }
+
+        .top-result-confidence {
+            border-radius: 4px;
+            padding: 3px 6px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .counter-badge {
+            background: #0066cc;
+            color: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 10px;
+            font-size: 12px;
+        }
+
+        .no-match {
+            color: #666;
+            font-style: italic;
+            font-size: 12px;
+        }
+
+        .view-results-btn {
+            background: #28a745;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .view-results-btn:hover {
+            background: #218838;
+            text-decoration: none;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <img src="lovesailing-header.jpg" alt="LoveSailing Header" class="logo">
+    </div>
+
+    <div class="container">
+        <div class="camera-container">
+            <div class="camera-feed">
+                <div class="preview-header">Live Camera Feed</div>
+                <video id="video" playsinline></video>
+                <canvas id="processingCanvas" style="display: none;"></canvas>
+            </div>
+            <div class="snapshot-preview">
+                <div class="preview-header">Last Snapshot</div>
+                <canvas id="snapshotCanvas"></canvas>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button id="startBtn">Start Scanning</button>
+            <button id="stopBtn">Stop</button>
+            <div class="scan-interval-control">
+                <label for="scanInterval">Scan Interval (seconds):</label>
+                <input type="number" id="scanInterval" min="5" max="300" value="30" style="width: 60px; margin: 0 5px;">
+                <button id="updateIntervalBtn" class="small-btn">Update</button>
+            </div>
+            <label class="debug-toggle">
+                <input type="checkbox" id="debugMode"> Show Debug Info
+            </label>
+            <a href="results.html" class="view-results-btn">View Results</a>
+        </div>
+
+        <div id="topResultsBox" class="sail-number-display">
+            <h2>Top Results</h2>
+            <div class="top-results-content">Awaiting scan...</div>
+        </div>
+
+        <div id="result" class="status-box status-scanning">Waiting to start...</div>
+        <div id="debug"></div>
+    </div>
+
+    <!-- Training Modal -->
+    <div id="trainingModal" style="display: none;">
+        <div style="background: white; max-width: 600px; margin: 50px auto; padding: 20px; border-radius: 10px;">
+            <h2>Training Mode</h2>
+            <p>Upload an image and enter the correct sail number:</p>
+            <input type="file" id="trainImage" accept="image/*" style="margin: 10px 0;">
+            <br>
+            <input type="text" id="correctNumber" placeholder="Enter correct sail number"
+                style="margin: 10px 0; padding: 5px;">
+            <br>
+            <canvas id="trainCanvas" style="max-width: 100%; margin: 10px 0;"></canvas>
+            <br>
+            <button onclick="submitTraining()">Submit</button>
+            <button onclick="document.getElementById('trainingModal').style.display='none'">Close</button>
+        </div>
+    </div>
+
+    <script>
+        let isScanning = false;
+        let videoStream = null;
+        let processingCanvas, snapshotCanvas, video, resultDiv, debugDiv;
+        let processingContext, snapshotContext;
+        let imageCounter = 0;  // Add counter for images taken
+        let scanIntervalSeconds = 30; // Default scan interval in seconds
+
+        // Initialize the application
+        async function init() {
+            try {
+                console.log('Initializing application...');
+
+                // Initialize DOM elements
+                video = document.getElementById('video');
+                processingCanvas = document.getElementById('processingCanvas');
+                snapshotCanvas = document.getElementById('snapshotCanvas');
+                const startBtn = document.getElementById('startBtn');
+                const stopBtn = document.getElementById('stopBtn');
+                resultDiv = document.getElementById('result');
+                const debugCheckbox = document.getElementById('debugMode');
+                debugDiv = document.getElementById('debug');
+                const scanIntervalInput = document.getElementById('scanInterval');
+                const updateIntervalBtn = document.getElementById('updateIntervalBtn');
+
+                // Make debug window visible by default
+                debugDiv.style.display = 'block';
+                debugCheckbox.checked = true;
+
+                // Initialize scan interval value
+                scanIntervalInput.value = scanIntervalSeconds;
+
+                // Add event listener for updating scan interval
+                updateIntervalBtn.addEventListener('click', () => {
+                    const newInterval = parseInt(scanIntervalInput.value, 10);
+                    if (newInterval >= 5 && newInterval <= 300) {
+                        scanIntervalSeconds = newInterval;
+                        addDebugMessage(`Scan interval updated to ${scanIntervalSeconds} seconds`, '⏱️');
+                    } else {
+                        addDebugMessage(`Invalid interval: ${newInterval}. Must be between 5-300 seconds`, '❌');
+                        scanIntervalInput.value = scanIntervalSeconds; // Reset to current value
+                    }
+                });
+
+                // Also update on Enter key press
+                scanIntervalInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        updateIntervalBtn.click();
+                    }
+                });
+
+                // Verify all required elements exist
+                const requiredElements = {
+                    video,
+                    processingCanvas,
+                    snapshotCanvas,
+                    startBtn,
+                    stopBtn,
+                    resultDiv,
+                    debugDiv
+                };
+
+                for (const [name, element] of Object.entries(requiredElements)) {
+                    if (!element) {
+                        throw new Error(`Required element ${name} not found`);
+                    }
+                }
+
+                // Initialize canvas contexts immediately
+                try {
+                    processingContext = processingCanvas.getContext('2d', { willReadFrequently: true });
+                    snapshotContext = snapshotCanvas.getContext('2d', { willReadFrequently: true });
+
+                    if (!processingContext || !snapshotContext) {
+                        throw new Error('Failed to get canvas contexts');
+                    }
+
+                    // Set initial canvas dimensions
+                    processingCanvas.width = 640;  // Set default width
+                    processingCanvas.height = 480; // Set default height
+                    snapshotCanvas.width = 640;    // Set default width
+                    snapshotCanvas.height = 480;   // Set default height
+
+                    console.log('Canvas initialization successful:', {
+                        processingCanvas: {
+                            width: processingCanvas.width,
+                            height: processingCanvas.height,
+                            context: !!processingContext
+                        },
+                        snapshotCanvas: {
+                            width: snapshotCanvas.width,
+                            height: snapshotCanvas.height,
+                            context: !!snapshotContext
+                        }
+                    });
+                } catch (e) {
+                    console.error('Canvas initialization error:', e);
+                    throw new Error(`Canvas initialization failed: ${e.message}`);
+                }
+
+                // Add event listeners
+                startBtn.addEventListener('click', startScanning);
+                stopBtn.addEventListener('click', stopScanning);
+                debugCheckbox.addEventListener('change', (e) => {
+                    debugDiv.style.display = e.target.checked ? 'block' : 'none';
+                });
+
+                // Initialize video event listeners
+                video.addEventListener('play', () => {
+                    console.log('Video started playing');
+                    addDebugMessage('Video playback started', '▶️');
+                });
+
+                video.addEventListener('error', (e) => {
+                    const errorMessage = `Video error: ${video.error ? video.error.message : 'unknown error'}`;
+                    console.error(errorMessage, e);
+                    addDebugMessage(errorMessage, '❌');
+                    resultDiv.textContent = errorMessage;
+                });
+
+                console.log('Initialization complete');
+                addDebugMessage('Application initialized successfully', '✅');
+            } catch (error) {
+                console.error('Initialization error:', error);
+                addDebugMessage(`Initialization failed: ${error.message}`, '❌');
+                if (resultDiv) {
+                    resultDiv.textContent = `Initialization error: ${error.message}`;
+                }
+                throw error;
+            }
+        }
+
+        async function startScanning() {
+            try {
+                imageCounter = 0;  // Reset counter when starting new scan session
+                resultDiv.textContent = 'Starting camera...';
+                addDebugMessage('Initializing camera...', '📸');
+
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Camera API is not supported in this browser');
+                }
+
+                const constraints = {
+                    video: {
+                        facingMode: "environment",
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                };
+
+                addDebugMessage('Requesting camera access with constraints: ' + JSON.stringify(constraints), '🎥');
+                videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+                addDebugMessage('Camera access granted', '✅');
+
+                video.srcObject = videoStream;
+
+                await new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        addDebugMessage('Video metadata loaded - Resolution: ' + video.videoWidth + 'x' + video.videoHeight, '📊');
+                        video.play();
+                        resolve();
+                    };
+                });
+
+                resultDiv.textContent = 'Camera started. Taking first image in 2 seconds...';
+                addDebugMessage('Waiting 2 seconds before first capture...', '⏲️');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                isScanning = true;
+                scanFrame();
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+                addDebugMessage('Camera access error: ' + err.message, '❌');
+                resultDiv.textContent = 'Error accessing camera: ' + err.message +
+                    '. Please ensure you have granted camera permissions.';
+            }
+        }
+
+        function stopScanning() {
+            isScanning = false;
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+            }
+            video.srcObject = null;
+            resultDiv.textContent = 'Scanning stopped';
+            addDebugMessage('Scanning stopped. Total images processed: ' + imageCounter, '🛑');
+        }
+
+        function addDebugMessage(message, status = '') {
+            if (!debugDiv) return;
+            const timestamp = new Date().toLocaleTimeString();
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'debug-message';
+            messageDiv.innerHTML = `
+                <span class="debug-timestamp">[${timestamp}]</span>
+                <span class="debug-status">${status}</span>
+                ${message}
+            `;
+            debugDiv.insertBefore(messageDiv, debugDiv.firstChild);
+
+            // Keep only last 50 messages
+            const messages = debugDiv.getElementsByClassName('debug-message');
+            while (messages.length > 50) {
+                debugDiv.removeChild(messages[messages.length - 1]);
+            }
+        }
+
+        async function scanFrame() {
+            if (!isScanning) {
+                addDebugMessage('Scanning stopped, exiting scanFrame', '🛑');
+                return;
+            }
+
+            try {
+                imageCounter++;  // Increment counter for each new image
+                addDebugMessage(`Starting scan #${imageCounter}`, '🔄');
+                console.log('Processing image #' + imageCounter);
+
+                // Verify all required elements and contexts exist
+                if (!video || !processingCanvas || !snapshotCanvas || !processingContext || !snapshotContext) {
+                    throw new Error('Required elements or contexts not found');
+                }
+
+                // Verify video is playing and has valid dimensions
+                if (video.readyState !== 4 || video.videoWidth === 0 || video.videoHeight === 0) {
+                    throw new Error('Video not ready or has invalid dimensions');
+                }
+
+                // Update canvas dimensions to match video
+                processingCanvas.width = video.videoWidth;
+                processingCanvas.height = video.videoHeight;
+                snapshotCanvas.width = video.videoWidth;
+                snapshotCanvas.height = video.videoHeight;
+
+                // Clear canvases before drawing
+                processingContext.clearRect(0, 0, processingCanvas.width, processingCanvas.height);
+                snapshotContext.clearRect(0, 0, snapshotCanvas.width, snapshotCanvas.height);
+
+                // Draw the current frame to both canvases
+                processingContext.drawImage(video, 0, 0, processingCanvas.width, processingCanvas.height);
+                snapshotContext.drawImage(video, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
+
+                addDebugMessage(`Frame #${imageCounter} captured successfully`, '📸');
+                resultDiv.textContent = `Processing image #${imageCounter}...`;
+
+                // Convert processing canvas to blob
+                const blob = await new Promise(resolve => {
+                    processingCanvas.toBlob(resolve, 'image/jpeg', 0.95);
+                });
+
+                if (!blob) {
+                    throw new Error('Failed to create image blob');
+                }
+
+                // Create a file from the blob with a timestamp and counter
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const file = new File([blob], `scan-${imageCounter}-${timestamp}.jpg`, { type: 'image/jpeg' });
+
+                // Send to backend for processing
+                const formData = new FormData();
+                formData.append('image', file);
+
+                addDebugMessage(`Sending image #${imageCounter} to Azure Vision...`, '🚀');
+                const response = await fetch('/api/scan', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+
+                addDebugMessage('Waiting for Azure Vision response...', '⏳');
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to process image');
+                }
+
+                addDebugMessage(`Results received for image #${imageCounter}`, '✅');
+
+                // Update top results box
+                const topResultsBox = document.getElementById('topResultsBox');
+                if (data.sailNumbers && data.sailNumbers.numbers && data.sailNumbers.numbers.length > 0) {
+                    addDebugMessage(`Found ${data.sailNumbers.numbers.length} sail numbers in image #${imageCounter}`, '🔍');
+
+                    // Update top results display
+                    topResultsBox.querySelector('.top-results-content').innerHTML =
+                        data.sailNumbers.numbers.map(result => `
+                            <div class="top-result-item">
+                                <div class="result-info">
+                                    <span class="top-result-number">${result.number}</span>
+                                    ${result.skipperInfo ?
+                                `<span class="skipper-info">${result.skipperInfo.sailorName || result.skipperInfo.boat_name || ''}</span>` :
+                                '<span class="no-match">(No Sailor Match)</span>'
+                            }
+                                </div>
+                                <span class="top-result-confidence ${getConfidenceClass(result.confidence)}">
+                                    ${(result.confidence * 100).toFixed(1)}%
+                                </span>
+                            </div>
+                        `).join('');
+
+                    // Save sail numbers to database
+                    saveSailNumbers(data.sailNumbers.numbers);
+                } else {
+                    addDebugMessage(`No sail numbers detected in image #${imageCounter}`, '❓');
+                    topResultsBox.querySelector('.top-results-content').textContent = 'No numbers detected';
+                }
+
+                // Show detailed debug information
+                addDebugMessage('Full Azure Response:', '📊');
+                addDebugMessage(JSON.stringify(data.debug, null, 2));
+
+                // Schedule next scan if still scanning
+                if (isScanning) {
+                    const nextScanMessage = `Scheduling next scan in ${scanIntervalSeconds} seconds...`;
+                    addDebugMessage(nextScanMessage, '⏲️');
+                    resultDiv.textContent = `Scan #${imageCounter} complete. ${data.sailNumbers?.numbers?.length || 0} sail numbers found. ${nextScanMessage}`;
+
+                    setTimeout(() => {
+                        if (isScanning) { // Check again in case user stopped during the wait
+                            scanFrame();
+                        }
+                    }, scanIntervalSeconds * 1000);
+                }
+            } catch (err) {
+                const errorMsg = `Scan #${imageCounter} error: ${err.message}`;
+                console.error(errorMsg);
+                addDebugMessage(errorMsg, '❌');
+
+                // Schedule next scan after error with the configurable interval
+                if (isScanning) {
+                    const retryMessage = `Will retry in ${scanIntervalSeconds} seconds`;
+                    if (resultDiv) resultDiv.textContent = errorMsg + '. ' + retryMessage;
+                    addDebugMessage(`Scheduling retry scan in ${scanIntervalSeconds} seconds...`, '⏲️');
+
+                    setTimeout(() => {
+                        if (isScanning) { // Check again in case user stopped during the wait
+                            scanFrame();
+                        }
+                    }, scanIntervalSeconds * 1000);
+                }
+            }
+        }
+
+        // Save sail numbers to database
+        async function saveSailNumbers(sailNumbers) {
+            try {
+                // Extract just the number values
+                const numbers = sailNumbers.map(num => num.number);
+                addDebugMessage(`Saving ${numbers.length} sail numbers to database: ${numbers.join(', ')}`, '💾');
+
+                const response = await fetch('/api/numbers', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ numbers })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+
+                const result = await response.json();
+                addDebugMessage('Sail numbers saved successfully to database', '✅');
+            } catch (error) {
+                console.error('Error saving sail numbers:', error);
+                addDebugMessage(`Failed to save sail numbers: ${error.message}`, '❌');
+            }
+        }
+
+        function getConfidenceClass(confidence) {
+            if (confidence >= 0.9) return 'confidence-high';
+            if (confidence >= 0.7) return 'confidence-medium';
+            return 'confidence-low';
+        }
+    </script>
+</body>
+
+</html>

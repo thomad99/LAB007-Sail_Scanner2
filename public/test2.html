@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Upload and Analysis</title>
+    <style>
+        /* Add these styles to your existing CSS */
+        .results-container {
+            padding: 15px;
+        }
+
+        .result-item {
+            background: #f5f5f5;
+            padding: 10px;
+            margin: 5px 0;
+            border-left: 3px solid #0066cc;
+        }
+
+        .number {
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+
+        .confidence {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .file-info {
+            margin-top: 15px;
+            padding: 10px;
+            background: #e6f3ff;
+            border-radius: 5px;
+        }
+
+        .skipper {
+            color: #0066cc;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+
+        .error {
+            color: #cc0000;
+            padding: 10px;
+            background: #ffe6e6;
+            border-left: 3px solid #cc0000;
+        }
+
+        .loading {
+            color: #666;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .no-results {
+            color: #666;
+            text-align: center;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Image Upload and Analysis</h1>
+    <input type="file" id="imageInput" accept="image/*">
+    <img id="preview" style="display: none; max-width: 100%;">
+    <div id="topResultsBox">
+        <h2>Top Results</h2>
+        <div class="top-results-content"></div>
+    </div>
+    <div id="loading" style="display: none;">Loading...</div>
+
+    <script>
+        const imageInput = document.getElementById('imageInput');
+        const preview = document.getElementById('preview');
+        const topResultsBox = document.getElementById('topResultsBox');
+        const topResultsContent = topResultsBox.querySelector('.top-results-content');
+        const loading = document.getElementById('loading');
+
+        imageInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // Show preview
+            preview.src = URL.createObjectURL(file);
+            preview.style.display = 'block';
+            
+            // Show loading state
+            topResultsContent.innerHTML = '<div class="loading">Analyzing image...</div>';
+            loading.style.display = 'block';
+
+            try {
+                // Send to server
+                const formData = new FormData();
+                formData.append('image', file);
+
+                const response = await fetch('/api/scan', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                const data = await response.json();
+                console.log('Server response:', data);
+
+                // Update results display
+                let resultsHtml = '';
+
+                if (data.sailNumbers.found) {
+                    resultsHtml = `
+                        <div class="results-container">
+                            <div class="sail-numbers">
+                                ${data.sailNumbers.numbers.map(num => `
+                                    <div class="result-item">
+                                        <div class="number">Sail #${num.number}</div>
+                                        <div class="confidence">Confidence: ${(num.score * 100).toFixed(1)}%</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            ${data.fileInfo ? `
+                                <div class="file-info">
+                                    <div class="original">Original: ${data.fileInfo.originalFilename}</div>
+                                    <div class="renamed">Renamed to: ${data.fileInfo.newFilename}</div>
+                                    ${data.fileInfo.skipperName ? `
+                                        <div class="skipper">Skipper: ${data.fileInfo.skipperName}</div>
+                                    ` : ''}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                } else {
+                    resultsHtml = `
+                        <div class="no-results">
+                            No sail numbers detected
+                            ${data.fileInfo ? `
+                                <div class="file-info">
+                                    File saved as: ${data.fileInfo.newFilename}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                }
+
+                topResultsContent.innerHTML = resultsHtml;
+
+            } catch (err) {
+                console.error('Error:', err);
+                topResultsContent.innerHTML = `
+                    <div class="error">
+                        Error: ${err.message}
+                    </div>
+                `;
+            } finally {
+                loading.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
