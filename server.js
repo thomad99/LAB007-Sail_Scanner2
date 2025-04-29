@@ -11,7 +11,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // Add these near the top of server.js
-const LOCAL_SAVE_PATH = process.env.LOCAL_SAVE_PATH || path.join(process.cwd(), 'saved_photos');
+const LOCAL_SAVE_PATH = process.env.LOCAL_SAVE_PATH || path.join(process.cwd(), 'local_saves');
 const SAVE_TO_SERVER = true; // Set to false if you don't want server copies
 const IGNORED_NUMBERS = ['420']; // Numbers to ignore (boat class markings)
 const validSailNumbers = [13, 118, 9610, 5318, 8008]; // Valid sail numbers
@@ -20,7 +20,7 @@ const validSailNumbers = [13, 118, 9610, 5318, 8008]; // Valid sail numbers
 const RATE_LIMIT_DELAY = 30000; // 30 seconds
 let lastAzureCallTime = 0;
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
-const PROCESSED_DIR = path.join(__dirname, 'public', 'Images');
+const PROCESSED_DIR = path.join(__dirname, 'processed_images');
 
 // Add these constants at the top
 const MAX_RETRIES = 3;
@@ -61,8 +61,7 @@ pool.connect()
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
-app.use('/download', express.static(PROCESSED_DIR));
+app.use('/uploads', express.static(UPLOAD_DIR));
 app.use('/Images', express.static(PROCESSED_DIR));
 
 // Define multer storage configurations
@@ -193,6 +192,7 @@ async function cleanupDirectories(cleanProcessed = false) {
 
         // Only clean processed directory if explicitly requested
         if (cleanProcessed) {
+            console.log('WARNING: Cleaning processed files directory - this will remove all processed images');
             const processedFiles = await fsPromises.readdir(PROCESSED_DIR);
             for (const file of processedFiles) {
                 const filePath = path.join(PROCESSED_DIR, file);
