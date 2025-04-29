@@ -290,7 +290,7 @@ app.listen(port, async () => {
 app.post('/api/scan', upload.single('image'), async (req, res) => {
     let processedFiles = [];
     const metadata = {
-        date: req.body.date,
+        date: req.body.date || new Date().toISOString().split('T')[0], // Use today's date if not specified
         regatta_name: req.body.regatta_name,
         photographer_name: req.body.photographer_name,
         photographer_website: req.body.photographer_website,
@@ -1135,8 +1135,8 @@ app.get('/api/search-photos', async (req, res) => {
         let paramCount = 1;
 
         if (sail_number) {
-            query += ` AND sail_number ILIKE $${paramCount}`;
-            params.push(`%${sail_number}%`);
+            query += ` AND sail_number = $${paramCount}`;
+            params.push(sail_number);
             paramCount++;
         }
         if (date) {
