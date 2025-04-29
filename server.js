@@ -1273,9 +1273,9 @@ app.get('/api/folder-count', async (req, res) => {
         let dirPath;
 
         if (folder === 'uploads') {
-            dirPath = path.join(__dirname, 'uploads');
+            dirPath = UPLOAD_DIR;
         } else if (folder === 'processed') {
-            dirPath = path.join(__dirname, 'public', 'Images');
+            dirPath = PROCESSED_DIR;  // Changed from public/Images to PROCESSED_DIR
         } else {
             return res.status(400).json({ error: 'Invalid folder specified' });
         }
