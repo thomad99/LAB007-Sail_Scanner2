@@ -235,6 +235,66 @@
                 margin: 10px 0;
             }
         }
+
+        .photo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .photo-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            background: white;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .photo-card img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+        }
+
+        .photo-error {
+            width: 100%;
+            height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8f9fa;
+            color: #dc3545;
+        }
+
+        .photo-details {
+            padding: 15px;
+        }
+
+        .photo-details p {
+            margin: 5px 0;
+        }
+
+        .download-button {
+            display: inline-block;
+            background: #0066cc;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            text-decoration: none;
+            margin-top: 10px;
+        }
+
+        .download-button:hover {
+            background: #0052a3;
+        }
+
+        @media (max-width: 768px) {
+            .photo-grid {
+                grid-template-columns: 1fr;
+                padding: 10px;
+            }
+        }
     </style>
 </head>
 
@@ -366,37 +426,67 @@
                 resultsDiv.innerHTML = '';
                 resultsDiv.appendChild(matchCount);
 
-                const photosHTML = photos.map(photo => {
-                    // Format the date if it exists
-                    const formattedDate = photo.date ? new Date(photo.date).toISOString().split('T')[0] : 'N/A';
-
-                    return `
-                    <div class="photo-card" onclick="showImage('${photo.filename}')">
-                        <img src="/Images/${photo.filename}" class="photo-thumbnail" alt="${photo.filename}">
-                        <div class="photo-info">
-                            <div><strong>Sail #:</strong> ${photo.sail_number || 'N/A'}</div>
-                            <div><strong>Date:</strong> ${formattedDate}</div>
-                            <div><strong>Regatta:</strong> ${photo.regatta_name || 'N/A'}</div>
-                            <div><strong>Photographer:</strong> ${photo.photographer_name || 'N/A'}
-                                ${photo.photographer_website ?
-                            `<a href="${photo.photographer_website}" 
-                                        target="_blank" 
-                                        onclick="event.stopPropagation()" 
-                                        style="margin-left: 5px; color: #0066cc; text-decoration: underline;">
-                                        <small>(Website)</small>
-                                    </a>`
-                            : ''}
-                            </div>
-                            <div><strong>Location:</strong> ${photo.location || 'N/A'}</div>
-                        </div>
-                    </div>
-                `}).join('');
-
-                resultsDiv.innerHTML += photosHTML;
+                displaySearchResults(photos);
             } catch (err) {
                 console.error('Error searching photos:', err);
                 resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: red;">Error searching photos. Please try again.</div>';
             }
+        }
+
+        function displaySearchResults(photos) {
+            const resultsContainer = document.getElementById('results');
+            resultsContainer.innerHTML = '';
+
+            if (photos.length === 0) {
+                resultsContainer.innerHTML = '<p>No photos found matching your criteria.</p>';
+                return;
+            }
+
+            const grid = document.createElement('div');
+            grid.className = 'photo-grid';
+
+            photos.forEach(photo => {
+                const photoCard = document.createElement('div');
+                photoCard.className = 'photo-card';
+
+                // Only create image if we have a valid URL
+                if (photo.url) {
+                    const img = document.createElement('img');
+                    img.src = photo.url;
+                    img.alt = `Sail number ${photo.sail_number}`;
+                    img.loading = 'lazy';
+                    photoCard.appendChild(img);
+                } else {
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'photo-error';
+                    errorDiv.textContent = 'Image not available';
+                    photoCard.appendChild(errorDiv);
+                }
+
+                const details = document.createElement('div');
+                details.className = 'photo-details';
+                details.innerHTML = `
+                    <p><strong>Sail Number:</strong> ${photo.sail_number || 'N/A'}</p>
+                    <p><strong>Date:</strong> ${photo.date ? new Date(photo.date).toLocaleDateString() : 'N/A'}</p>
+                    <p><strong>Regatta:</strong> ${photo.regatta_name || 'N/A'}</p>
+                    <p><strong>Photographer:</strong> ${photo.photographer_name || 'N/A'}</p>
+                    <p><strong>Location:</strong> ${photo.location || 'N/A'}</p>
+                `;
+
+                if (photo.url) {
+                    const downloadBtn = document.createElement('a');
+                    downloadBtn.href = photo.url;
+                    downloadBtn.className = 'download-button';
+                    downloadBtn.textContent = 'Download Photo';
+                    downloadBtn.download = photo.filename;
+                    details.appendChild(downloadBtn);
+                }
+
+                photoCard.appendChild(details);
+                grid.appendChild(photoCard);
+            });
+
+            resultsContainer.appendChild(grid);
         }
 
         function showImage(filename) {

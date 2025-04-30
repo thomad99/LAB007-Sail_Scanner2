@@ -1188,7 +1188,27 @@ app.get('/api/search-photos', async (req, res) => {
         query += ` ORDER BY created_at DESC`;
 
         const result = await pool.query(query, params);
-        res.json(result.rows);
+
+        // Generate signed URLs for each photo
+        const photosWithUrls = await Promise.all(result.rows.map(async (photo) => {
+            try {
+                const s3Key = `processed/${photo.filename}`;
+                const signedUrl = await getS3SignedUrl(s3Key);
+                return {
+                    ...photo,
+                    url: signedUrl
+                };
+            } catch (err) {
+                console.error(`Error generating signed URL for ${photo.filename}:`, err);
+                return {
+                    ...photo,
+                    url: null,
+                    error: 'Unable to generate photo URL'
+                };
+            }
+        }));
+
+        res.json(photosWithUrls);
     } catch (err) {
         console.error('Error searching photos:', err);
         res.status(500).json({ error: err.message });
