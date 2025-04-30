@@ -6,10 +6,97 @@ const { ComputerVisionClient } = require('@azure/cognitiveservices-computervisio
 const { CognitiveServicesCredentials } = require('@azure/ms-rest-azure-js');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
-const { GetObjectCommand } = require('@aws-sdk/client-s3');
+const {
+    S3Client,
+    PutObjectCommand,
+    GetObjectCommand,
+    DeleteObjectCommand,
+    ListObjectsV2Command
+} = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// AWS S3 Configuration
+const s3Client = new S3Client({
+    region: process.env.AWS_REGION || 'us-east-1',
+    credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+    }
+});
+
+const BUCKET_NAME = process.env.AWS_BUCKET_NAME || 'lovesailing-photostore';
+
+// Helper function to upload file to S3
+async function uploadToS3(buffer, key, contentType) {
+    try {
+        console.log(`Uploading to S3: ${key}`);
+        const command = new PutObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: key,
+            Body: buffer,
+            ContentType: contentType
+        });
+        await s3Client.send(command);
+        console.log(`Successfully uploaded to S3: ${key}`);
+        return `https://${BUCKET_NAME}.s3.amazonaws.com/${key}`;
+    } catch (err) {
+        console.error('Error uploading to S3:', err);
+        throw err;
+    }
+}
+
+// Helper function to get signed URL for S3 object
+async function getS3SignedUrl(key) {
+    try {
+        console.log(`Getting signed URL for: ${key}`);
+        const command = new GetObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: key
+        });
+        const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 }); // URL expires in 1 hour
+        console.log(`Generated signed URL for: ${key}`);
+        return url;
+    } catch (err) {
+        console.error('Error getting signed URL:', err);
+        throw err;
+    }
+}
+
+// Helper function to delete from S3
+async function deleteFromS3(key) {
+    try {
+        console.log(`Deleting from S3: ${key}`);
+        const command = new DeleteObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: key
+        });
+        await s3Client.send(command);
+        console.log(`Successfully deleted from S3: ${key}`);
+    } catch (err) {
+        console.error('Error deleting from S3:', err);
+        throw err;
+    }
+}
+
+// Helper function to list objects in S3
+async function listS3Objects(prefix = '') {
+    try {
+        console.log(`Listing S3 objects with prefix: ${prefix}`);
+        const command = new ListObjectsV2Command({
+            Bucket: BUCKET_NAME,
+            Prefix: prefix
+        });
+        const response = await s3Client.send(command);
+        console.log(`Found ${response.Contents?.length || 0} objects in S3`);
+        return response.Contents || [];
+    } catch (err) {
+        console.error('Error listing S3 objects:', err);
+        throw err;
+    }
+}
 
 // Add these near the top of server.js
 const LOCAL_SAVE_PATH = process.env.LOCAL_SAVE_PATH || path.join(process.cwd(), 'local_saves');
