@@ -18,32 +18,77 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// AWS S3 Configuration
+// AWS S3 Configuration and Validation
+if (!process.env.AWS_ACCESS_KEY || !process.env.AWS_SECRET_ACCESS_KEY || !process.env.AWS_REGION) {
+    console.error('Missing required AWS credentials:');
+    console.error('AWS_ACCESS_KEY:', process.env.AWS_ACCESS_KEY ? 'Set' : 'Missing');
+    console.error('AWS_SECRET_ACCESS_KEY:', process.env.AWS_SECRET_ACCESS_KEY ? 'Set' : 'Missing');
+    console.error('AWS_REGION:', process.env.AWS_REGION ? 'Set' : 'Missing');
+    console.error('AWS_BUCKET_NAME:', process.env.AWS_BUCKET_NAME || 'lovesailing-photostore');
+}
+
+// Create the S3 client with explicit credentials
 const s3Client = new S3Client({
-    region: process.env.AWS_REGION || 'us-east-1',
+    region: process.env.AWS_REGION,
     credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        accessKeyId: process.env.AWS_ACCESS_KEY,
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-    }
+    },
+    forcePathStyle: true
 });
 
 const BUCKET_NAME = process.env.AWS_BUCKET_NAME || 'lovesailing-photostore';
+
+// Test S3 connection on startup
+async function testS3Connection() {
+    try {
+        console.log('Testing S3 connection...');
+        const command = new ListObjectsV2Command({
+            Bucket: BUCKET_NAME,
+            MaxKeys: 1
+        });
+        await s3Client.send(command);
+        console.log('Successfully connected to S3');
+    } catch (err) {
+        console.error('Error connecting to S3:', err);
+        console.error('AWS Credentials:', {
+            region: process.env.AWS_REGION,
+            accessKeyId: process.env.AWS_ACCESS_KEY ? '***' : 'Missing',
+            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ? '***' : 'Missing',
+            bucket: BUCKET_NAME
+        });
+    }
+}
 
 // Helper function to upload file to S3
 async function uploadToS3(buffer, key, contentType) {
     try {
         console.log(`Uploading to S3: ${key}`);
+        console.log('Using credentials:', {
+            region: process.env.AWS_REGION,
+            accessKeyId: process.env.AWS_ACCESS_KEY ? '***' : 'Missing',
+            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ? '***' : 'Missing',
+            bucket: BUCKET_NAME
+        });
+
         const command = new PutObjectCommand({
             Bucket: BUCKET_NAME,
             Key: key,
             Body: buffer,
             ContentType: contentType
         });
+
         await s3Client.send(command);
         console.log(`Successfully uploaded to S3: ${key}`);
         return `https://${BUCKET_NAME}.s3.amazonaws.com/${key}`;
     } catch (err) {
         console.error('Error uploading to S3:', err);
+        console.error('Upload details:', {
+            key,
+            contentType,
+            bufferSize: buffer.length,
+            bucket: BUCKET_NAME
+        });
         throw err;
     }
 }
@@ -378,6 +423,7 @@ app.listen(port, async () => {
     console.log(`Server running on port ${port}`);
     await ensureDirectories();
     await createPhotoMetadataTable();
+    await testS3Connection();
 });
 
 // Update the scan endpoint to include metadata
