@@ -6,6 +6,7 @@ const { ComputerVisionClient } = require('@azure/cognitiveservices-computervisio
 const { CognitiveServicesCredentials } = require('@azure/ms-rest-azure-js');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
+const { GetObjectCommand } = require('@aws-sdk/client-s3');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -1187,7 +1188,7 @@ app.get('/api/photo-count', async (req, res) => {
     }
 });
 
-// Update the validate-files endpoint
+// Update the validate-files endpoint to check S3
 app.get('/api/validate-files', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM photo_metadata');
@@ -1197,46 +1198,56 @@ app.get('/api/validate-files', async (req, res) => {
         let orphanedCount = 0;
 
         for (const photo of photos) {
-            const filePath = path.join(PROCESSED_DIR, photo.filename);
             try {
-                const stats = await fsPromises.stat(filePath);
+                // Check if file exists in S3
+                const s3Key = `processed/${photo.filename}`;
+                const command = new GetObjectCommand({
+                    Bucket: BUCKET_NAME,
+                    Key: s3Key
+                });
 
-                if (stats.size === 0) {
-                    results.push({
-                        filename: photo.filename,
-                        status: 'error',
-                        message: 'File exists but is empty (0 bytes)'
-                    });
-                    orphanedCount++;
-                } else {
+                try {
+                    await s3Client.send(command);
                     results.push({
                         filename: photo.filename,
                         status: 'success',
-                        message: 'File exists and is valid'
+                        message: 'File exists in S3',
+                        storage: 'S3'
                     });
+                } catch (s3Err) {
+                    if (s3Err.name === 'NoSuchKey') {
+                        results.push({
+                            filename: photo.filename,
+                            status: 'error',
+                            message: 'File not found in S3',
+                            storage: 'S3'
+                        });
+                        orphanedCount++;
+                    } else {
+                        results.push({
+                            filename: photo.filename,
+                            status: 'error',
+                            message: `Error checking S3: ${s3Err.message}`,
+                            storage: 'S3'
+                        });
+                        orphanedCount++;
+                    }
                 }
             } catch (err) {
-                if (err.code === 'ENOENT') {
-                    results.push({
-                        filename: photo.filename,
-                        status: 'error',
-                        message: 'File not found in processed images directory'
-                    });
-                    orphanedCount++;
-                } else {
-                    results.push({
-                        filename: photo.filename,
-                        status: 'error',
-                        message: `Error checking file: ${err.message}`
-                    });
-                    orphanedCount++;
-                }
+                results.push({
+                    filename: photo.filename,
+                    status: 'error',
+                    message: `Error checking file: ${err.message}`,
+                    storage: 'S3'
+                });
+                orphanedCount++;
             }
         }
 
         res.json({
             orphanedCount,
-            results
+            results,
+            storage: 'S3'
         });
     } catch (err) {
         console.error('Error validating files:', err);
@@ -1276,44 +1287,33 @@ app.post('/api/clean-orphaned', async (req, res) => {
 app.get('/api/folder-count', async (req, res) => {
     try {
         const folder = req.query.folder;
-        let dirPath;
 
         if (folder === 'uploads') {
-            dirPath = UPLOAD_DIR;
+            // For uploads, still check local directory
+            const files = await fsPromises.readdir(UPLOAD_DIR);
+            const validFiles = await Promise.all(
+                files.map(async (file) => {
+                    try {
+                        const filePath = path.join(UPLOAD_DIR, file);
+                        const stats = await fsPromises.stat(filePath);
+                        return stats.isFile() && stats.size > 0;
+                    } catch (err) {
+                        console.error(`Error checking file ${file}:`, err);
+                        return false;
+                    }
+                })
+            );
+            res.json({ count: validFiles.filter(Boolean).length });
         } else if (folder === 'processed') {
-            dirPath = PROCESSED_DIR;  // Changed from public/Images to PROCESSED_DIR
+            // For processed files, check S3
+            const objects = await listS3Objects('processed/');
+            res.json({
+                count: objects.length,
+                storage: 'S3'  // Add this to indicate where files are stored
+            });
         } else {
             return res.status(400).json({ error: 'Invalid folder specified' });
         }
-
-        // Ensure directory exists
-        try {
-            await fsPromises.access(dirPath);
-        } catch (err) {
-            if (err.code === 'ENOENT') {
-                // Directory doesn't exist, create it
-                await fsPromises.mkdir(dirPath, { recursive: true });
-                return res.json({ count: 0 });
-            }
-            throw err;
-        }
-
-        // Read directory and count files
-        const files = await fsPromises.readdir(dirPath);
-        const validFiles = await Promise.all(
-            files.map(async (file) => {
-                try {
-                    const filePath = path.join(dirPath, file);
-                    const stats = await fsPromises.stat(filePath);
-                    return stats.isFile() && stats.size > 0;
-                } catch (err) {
-                    console.error(`Error checking file ${file}:`, err);
-                    return false;
-                }
-            })
-        );
-
-        res.json({ count: validFiles.filter(Boolean).length });
     } catch (err) {
         console.error('Error counting files:', err);
         res.status(500).json({
