@@ -176,6 +176,8 @@ app.post('/api/train', trainUpload.single('image'), async (req, res) => {
 // Function to clean up directories
 async function cleanupDirectories(cleanProcessed = false) {
     console.log('Starting directory cleanup...');
+    console.log('UPLOAD_DIR:', UPLOAD_DIR);
+    console.log('PROCESSED_DIR:', PROCESSED_DIR);
 
     try {
         // Ensure directories exist
@@ -184,6 +186,8 @@ async function cleanupDirectories(cleanProcessed = false) {
 
         // Clean up upload directory
         const uploadFiles = await fsPromises.readdir(UPLOAD_DIR);
+        console.log(`Found ${uploadFiles.length} files in upload directory`);
+
         for (const file of uploadFiles) {
             const filePath = path.join(UPLOAD_DIR, file);
             await fsPromises.unlink(filePath);
@@ -194,6 +198,8 @@ async function cleanupDirectories(cleanProcessed = false) {
         if (cleanProcessed) {
             console.log('WARNING: Cleaning processed files directory - this will remove all processed images');
             const processedFiles = await fsPromises.readdir(PROCESSED_DIR);
+            console.log(`Found ${processedFiles.length} files in processed directory`);
+
             for (const file of processedFiles) {
                 const filePath = path.join(PROCESSED_DIR, file);
                 await fsPromises.unlink(filePath);
@@ -1384,10 +1390,10 @@ app.post('/api/export-images', async (req, res) => {
         res.attachment('exported_images.zip');
         archive.pipe(res);
 
-        // Add all files from the Images directory
-        const files = await fsPromises.readdir(path.join(__dirname, 'public', 'Images'));
+        // Add all files from the processed directory
+        const files = await fsPromises.readdir(PROCESSED_DIR);
         for (const file of files) {
-            const filePath = path.join(__dirname, 'public', 'Images', file);
+            const filePath = path.join(PROCESSED_DIR, file);
             archive.file(filePath, { name: file });
         }
 
