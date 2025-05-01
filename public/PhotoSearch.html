@@ -122,22 +122,49 @@
 
         .photo-card {
             border: 1px solid #ddd;
-            border-radius: 5px;
-            padding: 10px;
+            border-radius: 8px;
+            overflow: hidden;
             background: white;
-            cursor: pointer;
-            transition: transform 0.2s;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
         }
 
-        .photo-card:hover {
-            transform: scale(1.02);
-        }
-
-        .photo-thumbnail {
+        .photo-wrapper {
+            position: relative;
             width: 100%;
-            height: 150px;
+            height: 180px;
+        }
+
+        .photo-card img {
+            width: 100%;
+            height: 100%;
             object-fit: cover;
-            border-radius: 4px;
+            display: block;
+        }
+
+        .watermark {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 50%;
+            height: auto;
+            opacity: 0.3;
+            pointer-events: none;
+            background-image: url('lovesailing-header.jpg');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            filter: brightness(150%);
+        }
+
+        .watermark::after {
+            content: '';
+            display: block;
+            padding-bottom: 30%;
+            /* Adjust based on your logo's aspect ratio */
         }
 
         .photo-info {
@@ -242,24 +269,6 @@
             padding: 15px;
             width: 100%;
             box-sizing: border-box;
-        }
-
-        .photo-card {
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            overflow: hidden;
-            background: white;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-        }
-
-        .photo-card img {
-            width: 100%;
-            height: 180px;
-            object-fit: cover;
-            display: block;
         }
 
         .photo-error {
@@ -476,19 +485,30 @@
                 const photoCard = document.createElement('div');
                 photoCard.className = 'photo-card';
 
+                // Create wrapper for image and watermark
+                const photoWrapper = document.createElement('div');
+                photoWrapper.className = 'photo-wrapper';
+
                 // Only create image if we have a valid URL
                 if (photo.url) {
                     const img = document.createElement('img');
                     img.src = photo.url;
                     img.alt = `Sail number ${photo.sail_number}`;
                     img.loading = 'lazy';
-                    photoCard.appendChild(img);
+                    photoWrapper.appendChild(img);
+
+                    // Add watermark
+                    const watermark = document.createElement('div');
+                    watermark.className = 'watermark';
+                    photoWrapper.appendChild(watermark);
                 } else {
                     const errorDiv = document.createElement('div');
                     errorDiv.className = 'photo-error';
                     errorDiv.textContent = 'Image not available';
-                    photoCard.appendChild(errorDiv);
+                    photoWrapper.appendChild(errorDiv);
                 }
+
+                photoCard.appendChild(photoWrapper);
 
                 const details = document.createElement('div');
                 details.className = 'photo-details';
