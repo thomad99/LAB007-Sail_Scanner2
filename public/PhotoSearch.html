@@ -120,51 +120,37 @@
             margin-top: 20px;
         }
 
+        .photo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            padding: 0;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
         .photo-card {
             border: 1px solid #ddd;
             border-radius: 8px;
             overflow: hidden;
             background: white;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
             display: flex;
             flex-direction: column;
             height: 100%;
+            cursor: pointer;
+            transition: box-shadow 0.2s;
         }
 
-        .photo-wrapper {
-            position: relative;
-            width: 100%;
-            height: 180px;
+        .photo-card:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
 
         .photo-card img {
             width: 100%;
-            height: 100%;
+            height: 120px;
             object-fit: cover;
             display: block;
-        }
-
-        .watermark {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 50%;
-            height: auto;
-            opacity: 0.3;
-            pointer-events: none;
-            background-image: url('lovesailing-header.jpg');
-            background-size: contain;
-            background-repeat: no-repeat;
-            background-position: center;
-            filter: brightness(150%);
-        }
-
-        .watermark::after {
-            content: '';
-            display: block;
-            padding-bottom: 30%;
-            /* Adjust based on your logo's aspect ratio */
         }
 
         .photo-info {
@@ -178,33 +164,101 @@
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.85);
             z-index: 1000;
+            align-items: center;
+            justify-content: center;
         }
 
         .modal-content {
-            position: relative;
-            margin: auto;
-            padding: 20px;
-            max-width: 90%;
+            display: flex;
+            flex-direction: row;
+            background: none;
+            max-width: 90vw;
             max-height: 90vh;
+            margin: auto;
+            position: relative;
+        }
+
+        .modal-image-container {
+            position: relative;
+            background: #fff;
+            border-radius: 8px 0 0 8px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 300px;
+            min-height: 300px;
         }
 
         .modal-image {
-            max-width: 100%;
+            max-width: 70vw;
             max-height: 80vh;
-            object-fit: contain;
+            display: block;
+            border-radius: 8px 0 0 8px;
+        }
+
+        .modal-watermark {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60%;
+            opacity: 0.25;
+            pointer-events: none;
+            background-image: url('lovesailing-header.jpg');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            height: 40%;
+        }
+
+        .modal-side-banner {
+            background: #fff;
+            border-radius: 0 8px 8px 0;
+            padding: 32px 24px;
+            min-width: 220px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .purchase-modal-button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background 0.2s;
+        }
+
+        .purchase-modal-button:hover {
+            background: #218838;
         }
 
         .close-button {
             position: absolute;
             top: 10px;
             right: 10px;
-            color: white;
-            font-size: 24px;
+            color: #fff;
+            font-size: 32px;
             cursor: pointer;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .main-container {
@@ -262,13 +316,24 @@
             }
         }
 
-        .photo-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 15px;
-            padding: 15px;
-            width: 100%;
-            box-sizing: border-box;
+        @media (max-width: 900px) {
+            .modal-content {
+                flex-direction: column;
+                max-width: 98vw;
+            }
+
+            .modal-image-container,
+            .modal-image {
+                border-radius: 8px 8px 0 0;
+                min-width: 200px;
+            }
+
+            .modal-side-banner {
+                border-radius: 0 0 8px 8px;
+                min-width: unset;
+                width: 100%;
+                padding: 20px 10px;
+            }
         }
 
         .photo-error {
@@ -282,7 +347,7 @@
         }
 
         .photo-details {
-            padding: 12px;
+            padding: 10px;
             flex-grow: 1;
             display: flex;
             flex-direction: column;
@@ -292,6 +357,24 @@
             margin: 4px 0;
             font-size: 0.9em;
             line-height: 1.4;
+        }
+
+        .view-button {
+            display: inline-block;
+            background: #0066cc;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            text-decoration: none;
+            margin-top: 8px;
+            text-align: center;
+            border: none;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .view-button:hover {
+            background: #0052a3;
         }
 
         .download-button {
@@ -310,33 +393,97 @@
             background: #0052a3;
         }
 
-        @media (max-width: 768px) {
-            .photo-grid {
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 10px;
-                padding: 10px;
-            }
-
-            .photo-card img {
-                height: 150px;
-            }
-
-            .photo-details p {
-                font-size: 0.85em;
-            }
-        }
-
         @media (min-width: 1200px) {
             .photo-grid {
                 grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             }
         }
+
+        .auth-section {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px auto;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        .auth-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .auth-input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .auth-button {
+            background: #0066cc;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .watermark-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .photo-wrapper:hover .watermark-overlay {
+            opacity: 1;
+        }
+
+        .remove-watermark-button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        .remove-watermark-price {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
     </style>
+    <script src="https://js.stripe.com/v3/"></script>
 </head>
 
 <body>
     <div class="header">
         <img src="lovesailing-header.jpg" alt="LoveSailing Header" class="logo">
+    </div>
+
+    <div id="authSection" class="auth-section">
+        <h3>Sign In</h3>
+        <div class="auth-form">
+            <input type="email" id="email" placeholder="Email" class="auth-input">
+            <input type="password" id="password" placeholder="Password" class="auth-input">
+            <button onclick="login()" class="auth-button">Sign In</button>
+            <button onclick="showSignup()" class="auth-button" style="background: #6c757d;">Create Account</button>
+        </div>
     </div>
 
     <div class="main-container">
@@ -404,10 +551,14 @@
         <div id="results" class="results-grid"></div>
     </div>
 
-    <div id="imageModal" class="modal">
-        <div class="modal-content">
-            <span class="close-button" onclick="closeModal()">&times;</span>
-            <img id="modalImage" class="modal-image">
+    <div id="imageModal" class="modal" tabindex="-1" aria-modal="true" role="dialog">
+        <div class="close-button" onclick="closeModal()">&times;</div>
+        <div class="modal-content" id="modalContent">
+            <div class="modal-image-container" id="modalImageContainer">
+                <img id="modalImage" class="modal-image" src="" alt="Preview">
+                <div class="modal-watermark" id="modalWatermark"></div>
+            </div>
+            <div class="modal-side-banner" id="modalSideBanner"></div>
         </div>
     </div>
 
@@ -418,6 +569,62 @@
     </div>
 
     <script>
+        let stripe;
+        let authToken = localStorage.getItem('authToken');
+        let purchasedImages = new Set();
+
+        // Initialize Stripe with config from server
+        async function initializeStripe() {
+            try {
+                const response = await fetch('/api/config');
+                const config = await response.json();
+                stripe = Stripe(config.stripePublishableKey);
+            } catch (err) {
+                console.error('Error initializing Stripe:', err);
+            }
+        }
+
+        // Call this when the page loads
+        document.addEventListener('DOMContentLoaded', async () => {
+            await initializeStripe();
+            updateAuthUI();
+            loadPhotoCount();
+        });
+
+        // Update the purchaseImage function to ensure Stripe is initialized
+        async function purchaseImage(filename) {
+            if (!authToken) {
+                alert('Please sign in to purchase images');
+                return;
+            }
+
+            if (!stripe) {
+                alert('Payment system is not initialized. Please try again in a moment.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/create-payment-session', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ imageFilename: filename })
+                });
+                const session = await response.json();
+
+                if (session.url) {
+                    window.location.href = session.url;
+                } else {
+                    alert('Error creating payment session');
+                }
+            } catch (err) {
+                console.error('Error processing purchase:', err);
+                alert('Error processing purchase');
+            }
+        }
+
         async function loadPhotoCount() {
             try {
                 const response = await fetch('/api/photo-count');
@@ -429,8 +636,6 @@
                 document.getElementById('photoCount').innerHTML = 'Error loading photo count';
             }
         }
-
-        document.addEventListener('DOMContentLoaded', loadPhotoCount);
 
         async function searchPhotos() {
             const resultsDiv = document.getElementById('results');
@@ -481,34 +686,21 @@
             const grid = document.createElement('div');
             grid.className = 'photo-grid';
 
-            photos.forEach(photo => {
+            photos.forEach(async photo => {
                 const photoCard = document.createElement('div');
                 photoCard.className = 'photo-card';
+                photoCard.tabIndex = 0;
+                photoCard.setAttribute('role', 'button');
+                photoCard.setAttribute('aria-label', 'View photo preview');
 
-                // Create wrapper for image and watermark
-                const photoWrapper = document.createElement('div');
-                photoWrapper.className = 'photo-wrapper';
+                // Make the card clickable to open modal
+                photoCard.onclick = () => openModal(photo);
 
-                // Only create image if we have a valid URL
-                if (photo.url) {
-                    const img = document.createElement('img');
-                    img.src = photo.url;
-                    img.alt = `Sail number ${photo.sail_number}`;
-                    img.loading = 'lazy';
-                    photoWrapper.appendChild(img);
-
-                    // Add watermark
-                    const watermark = document.createElement('div');
-                    watermark.className = 'watermark';
-                    photoWrapper.appendChild(watermark);
-                } else {
-                    const errorDiv = document.createElement('div');
-                    errorDiv.className = 'photo-error';
-                    errorDiv.textContent = 'Image not available';
-                    photoWrapper.appendChild(errorDiv);
-                }
-
-                photoCard.appendChild(photoWrapper);
+                const img = document.createElement('img');
+                img.src = photo.url;
+                img.alt = `Sail number ${photo.sail_number}`;
+                img.loading = 'lazy';
+                photoCard.appendChild(img);
 
                 const details = document.createElement('div');
                 details.className = 'photo-details';
@@ -519,41 +711,46 @@
                     <p><strong>Photographer:</strong> ${photo.photographer_name || 'N/A'}</p>
                     <p><strong>Location:</strong> ${photo.location || 'N/A'}</p>
                 `;
-
-                if (photo.url) {
-                    const downloadBtn = document.createElement('a');
-                    downloadBtn.href = photo.url;
-                    downloadBtn.className = 'download-button';
-                    downloadBtn.textContent = 'Download Photo';
-                    downloadBtn.download = photo.filename;
-                    details.appendChild(downloadBtn);
-                }
-
+                // Add View Photo button
+                const viewBtn = document.createElement('button');
+                viewBtn.className = 'view-button';
+                viewBtn.textContent = 'View Photo';
+                viewBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    openModal(photo);
+                };
+                details.appendChild(viewBtn);
                 photoCard.appendChild(details);
                 grid.appendChild(photoCard);
             });
-
             resultsContainer.appendChild(grid);
         }
 
-        function showImage(filename) {
+        // Modal logic
+        let currentModalPhoto = null;
+        function openModal(photo) {
+            currentModalPhoto = photo;
             const modal = document.getElementById('imageModal');
+            const modalContent = document.getElementById('modalContent');
+            const modalImgContainer = document.getElementById('modalImageContainer');
             const modalImg = document.getElementById('modalImage');
-            modalImg.src = `/Images/${filename}`;
-            modal.style.display = 'block';
+            const modalWatermark = document.getElementById('modalWatermark');
+            const modalBanner = document.getElementById('modalSideBanner');
+
+            modalImg.src = photo.url;
+            modalImg.alt = `Sail number ${photo.sail_number}`;
+            modalWatermark.style.display = '';
+            modalBanner.innerHTML = `
+                <h3>Purchase Photo</h3>
+                <p>Remove watermark and get the full-resolution image for $5.00</p>
+                <button class="purchase-modal-button" onclick="purchaseImage('${photo.filename}')">Purchase Photo</button>
+            `;
+            modal.style.display = 'flex';
         }
 
         function closeModal() {
-            const modal = document.getElementById('imageModal');
-            modal.style.display = 'none';
-        }
-
-        // Close modal when clicking outside the image
-        window.onclick = function (event) {
-            const modal = document.getElementById('imageModal');
-            if (event.target === modal) {
-                modal.style.display = 'none';
-            }
+            document.getElementById('imageModal').style.display = 'none';
+            currentModalPhoto = null;
         }
 
         function clearSearch() {
@@ -568,6 +765,124 @@
             // Clear the results
             document.getElementById('results').innerHTML = '';
         }
+
+        async function checkImagePurchase(filename) {
+            if (!authToken) return false;
+
+            try {
+                const response = await fetch(`/api/check-image-purchase/${encodeURIComponent(filename)}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                const data = await response.json();
+                return data.isPurchased;
+            } catch (err) {
+                console.error('Error checking image purchase:', err);
+                return false;
+            }
+        }
+
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+                if (data.token) {
+                    authToken = data.token;
+                    localStorage.setItem('authToken', authToken);
+                    await updateAuthUI();
+                } else {
+                    alert('Invalid credentials');
+                }
+            } catch (err) {
+                alert('Error logging in');
+            }
+        }
+
+        async function register() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+                if (data.token) {
+                    authToken = data.token;
+                    localStorage.setItem('authToken', authToken);
+                    await updateAuthUI();
+                } else {
+                    alert('Error creating account');
+                }
+            } catch (err) {
+                alert('Error registering');
+            }
+        }
+
+        function showSignup() {
+            const authSection = document.getElementById('authSection');
+            authSection.innerHTML = `
+                <h3>Create Account</h3>
+                <div class="auth-form">
+                    <input type="email" id="email" placeholder="Email" class="auth-input">
+                    <input type="password" id="password" placeholder="Password" class="auth-input">
+                    <button onclick="register()" class="auth-button">Create Account</button>
+                    <button onclick="showLogin()" class="auth-button" style="background: #6c757d;">Back to Sign In</button>
+                </div>
+            `;
+        }
+
+        function showLogin() {
+            const authSection = document.getElementById('authSection');
+            authSection.innerHTML = `
+                <h3>Sign In</h3>
+                <div class="auth-form">
+                    <input type="email" id="email" placeholder="Email" class="auth-input">
+                    <input type="password" id="password" placeholder="Password" class="auth-input">
+                    <button onclick="login()" class="auth-button">Sign In</button>
+                    <button onclick="showSignup()" class="auth-button" style="background: #6c757d;">Create Account</button>
+                </div>
+            `;
+        }
+
+        async function updateAuthUI() {
+            const authSection = document.getElementById('authSection');
+
+            if (authToken) {
+                authSection.style.display = 'none';
+            } else {
+                authSection.style.display = 'block';
+            }
+        }
+
+        // Add URL parameter handling for successful payments
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const sessionId = urlParams.get('session_id');
+            const imageFilename = urlParams.get('image');
+
+            if (sessionId && imageFilename) {
+                alert('Payment successful! The watermark has been removed from your image.');
+                // Refresh the search results to show the updated image
+                searchPhotos();
+            }
+        });
     </script>
 </body>
 

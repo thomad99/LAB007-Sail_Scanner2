@@ -14,6 +14,9 @@ const {
     ListObjectsV2Command
 } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -423,6 +426,7 @@ app.listen(port, async () => {
     console.log(`Server running on port ${port}`);
     await ensureDirectories();
     await createPhotoMetadataTable();
+    await createUserTables();
     await testS3Connection();
 });
 
@@ -1464,4 +1468,188 @@ app.get('/api/regatta-names', async (req, res) => {
         console.error('Error fetching regatta names:', err);
         res.status(500).json({ error: 'Error fetching regatta names' });
     }
+});
+
+// Add this after the createPhotoMetadataTable function
+async function createUserTables() {
+    try {
+        // Create users table
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // Create purchased_images table instead of subscriptions
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS purchased_images (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                image_filename TEXT NOT NULL,
+                stripe_payment_id TEXT,
+                purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        console.log('User and purchased images tables created or verified');
+    } catch (err) {
+        console.error('Error creating user tables:', err);
+    }
+}
+
+// Add middleware for authentication
+const authenticateToken = async (req, res, next) => {
+    const token = req.headers['authorization']?.split(' ')[1];
+
+    if (!token) {
+        return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    try {
+        const user = jwt.verify(token, process.env.JWT_SECRET);
+        req.user = user;
+        next();
+    } catch (err) {
+        return res.status(403).json({ error: 'Invalid token' });
+    }
+};
+
+// Add authentication endpoints
+app.post('/api/register', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const result = await pool.query(
+            'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id',
+            [email, hashedPassword]
+        );
+
+        const token = jwt.sign({ userId: result.rows[0].id }, process.env.JWT_SECRET);
+        res.json({ token });
+    } catch (err) {
+        res.status(500).json({ error: 'Error creating user' });
+    }
+});
+
+app.post('/api/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+        if (result.rows.length === 0) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        const user = result.rows[0];
+        const validPassword = await bcrypt.compare(password, user.password_hash);
+
+        if (!validPassword) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET);
+        res.json({ token });
+    } catch (err) {
+        res.status(500).json({ error: 'Error logging in' });
+    }
+});
+
+// Replace subscription endpoints with per-image purchase endpoints
+app.post('/api/create-payment-session', authenticateToken, async (req, res) => {
+    try {
+        const { imageFilename } = req.body;
+
+        if (!imageFilename) {
+            return res.status(400).json({ error: 'Image filename is required' });
+        }
+
+        // Check if user has already purchased this image
+        const existingPurchase = await pool.query(
+            'SELECT * FROM purchased_images WHERE user_id = $1 AND image_filename = $2',
+            [req.user.userId, imageFilename]
+        );
+
+        if (existingPurchase.rows.length > 0) {
+            return res.status(400).json({ error: 'Image already purchased' });
+        }
+
+        const session = await stripe.checkout.sessions.create({
+            payment_method_types: ['card'],
+            line_items: [
+                {
+                    price_data: {
+                        currency: 'usd',
+                        product_data: {
+                            name: 'Photo Watermark Removal',
+                            description: `Remove watermark from ${imageFilename}`
+                        },
+                        unit_amount: 500, // $5.00 in cents
+                    },
+                    quantity: 1,
+                },
+            ],
+            mode: 'payment',
+            success_url: `${req.headers.origin}/payment-success?session_id={CHECKOUT_SESSION_ID}&image=${encodeURIComponent(imageFilename)}`,
+            cancel_url: `${req.headers.origin}/payment-cancelled`,
+            metadata: {
+                userId: req.user.userId,
+                imageFilename: imageFilename
+            }
+        });
+
+        res.json({ url: session.url });
+    } catch (err) {
+        console.error('Error creating payment session:', err);
+        res.status(500).json({ error: 'Error creating payment session' });
+    }
+});
+
+// Update webhook handler for one-time payments
+app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+    const sig = req.headers['stripe-signature'];
+    let event;
+
+    try {
+        event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    } catch (err) {
+        return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    if (event.type === 'checkout.session.completed') {
+        const session = event.data.object;
+
+        // Record the image purchase
+        await pool.query(
+            `INSERT INTO purchased_images (user_id, image_filename, stripe_payment_id)
+             VALUES ($1, $2, $3)`,
+            [session.metadata.userId, session.metadata.imageFilename, session.payment_intent]
+        );
+    }
+
+    res.json({ received: true });
+});
+
+// Add endpoint to check if an image is purchased
+app.get('/api/check-image-purchase/:filename', authenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT * FROM purchased_images WHERE user_id = $1 AND image_filename = $2',
+            [req.user.userId, req.params.filename]
+        );
+
+        res.json({ isPurchased: result.rows.length > 0 });
+    } catch (err) {
+        res.status(500).json({ error: 'Error checking image purchase status' });
+    }
+});
+
+// Add this endpoint to expose the publishable key
+app.get('/api/config', (req, res) => {
+    res.json({
+        stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY
+    });
 }); 
