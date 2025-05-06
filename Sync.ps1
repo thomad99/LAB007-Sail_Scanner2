@@ -3,11 +3,7 @@ cd "C:\Users\david\OneDrive\My Pet Projects\AI\3.1-ScanImage"
 # Set GitHub repo URL (just in case)
 git remote set-url origin https://github.com/thomad99/LAB007-Sail_Scanner2.git
 
-# Pull latest changes first
-Write-Output "⬇️ Pulling latest changes..."
-git pull origin main
-
-# Stage all changes
+# Stage all local changes
 git add .
 
 # Check for changes
@@ -20,7 +16,7 @@ if ($changes) {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     git commit -m "Auto-sync $timestamp"
 
-    Write-Output "⬆️ Pushing changes to GitHub..."
+    Write-Output "⬆️ Pushing local changes to GitHub..."
     git push origin main
     Write-Output "✅ Sync complete at $timestamp"
 }
