@@ -752,7 +752,7 @@ async function lookupSailorInDatabase(sailNumber) {
         const query = `
             SELECT "Sail_Number", "Boat_Name"
             FROM imported_data 
-            WHERE "Sail_Number" = $1
+            WHERE "Sail_Number" = $1 
             LIMIT 1
         `;
 

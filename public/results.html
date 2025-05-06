@@ -365,8 +365,8 @@
                     resultsTable.style.display = 'none';
                     loadingSpinner.style.display = 'block';
 
-                    const response = await fetch('/api/scans');
-                    if (!response.ok) {
+                const response = await fetch('/api/scans');
+                if (!response.ok) {
                         throw new Error('Network response was not ok');
                     }
 

@@ -209,7 +209,7 @@
             width: 60%;
             opacity: 0.25;
             pointer-events: none;
-            background-image: url('lovesailing-header.jpg');
+            background-image: url('watermark.png');
             background-size: contain;
             background-repeat: no-repeat;
             background-position: center;
@@ -217,15 +217,7 @@
         }
 
         .modal-side-banner {
-            background: #fff;
-            border-radius: 0 8px 8px 0;
-            padding: 32px 24px;
-            min-width: 220px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+            display: none !important;
         }
 
         .purchase-modal-button {
@@ -467,6 +459,28 @@
             font-weight: bold;
             margin-bottom: 10px;
         }
+
+        /* Add floating purchase button styles */
+        .purchase-fab {
+            position: absolute;
+            bottom: 24px;
+            right: 24px;
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 16px 28px;
+            border-radius: 32px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+            z-index: 20;
+            transition: background 0.2s;
+        }
+
+        .purchase-fab:hover {
+            background: #218838;
+        }
     </style>
     <script src="https://js.stripe.com/v3/"></script>
 </head>
@@ -554,11 +568,11 @@
     <div id="imageModal" class="modal" tabindex="-1" aria-modal="true" role="dialog">
         <div class="close-button" onclick="closeModal()">&times;</div>
         <div class="modal-content" id="modalContent">
-            <div class="modal-image-container" id="modalImageContainer">
+            <div class="modal-image-container" id="modalImageContainer" style="position:relative;">
                 <img id="modalImage" class="modal-image" src="" alt="Preview">
                 <div class="modal-watermark" id="modalWatermark"></div>
+                <button id="purchaseFab" class="purchase-fab" style="display:none;">Purchase Photo</button>
             </div>
-            <div class="modal-side-banner" id="modalSideBanner"></div>
         </div>
     </div>
 
@@ -731,25 +745,21 @@
         function openModal(photo) {
             currentModalPhoto = photo;
             const modal = document.getElementById('imageModal');
-            const modalContent = document.getElementById('modalContent');
-            const modalImgContainer = document.getElementById('modalImageContainer');
             const modalImg = document.getElementById('modalImage');
             const modalWatermark = document.getElementById('modalWatermark');
-            const modalBanner = document.getElementById('modalSideBanner');
+            const purchaseFab = document.getElementById('purchaseFab');
 
             modalImg.src = photo.url;
             modalImg.alt = `Sail number ${photo.sail_number}`;
             modalWatermark.style.display = '';
-            modalBanner.innerHTML = `
-                <h3>Purchase Photo</h3>
-                <p>Remove watermark and get the full-resolution image for $5.00</p>
-                <button class="purchase-modal-button" onclick="purchaseImage('${photo.filename}')">Purchase Photo</button>
-            `;
+            purchaseFab.style.display = 'block';
+            purchaseFab.onclick = function () { purchaseImage(photo.filename); };
             modal.style.display = 'flex';
         }
 
         function closeModal() {
             document.getElementById('imageModal').style.display = 'none';
+            document.getElementById('purchaseFab').style.display = 'none';
             currentModalPhoto = null;
         }
 
