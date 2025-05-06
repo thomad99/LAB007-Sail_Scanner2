@@ -16,9 +16,9 @@ if ($changes) {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     git commit -m "Auto-sync $timestamp"
 
-    Write-Output "⬆️ Pushing local changes to GitHub..."
-    git push origin main
-    Write-Output "✅ Sync complete at $timestamp"
+    Write-Output "⬆️ Force pushing local changes to GitHub..."
+    git push origin main --force
+    Write-Output "✅ Force sync complete at $timestamp"
 }
 else {
     Write-Output "🟢 No changes to sync."
