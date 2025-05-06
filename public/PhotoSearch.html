@@ -114,19 +114,18 @@
         }
 
         .results-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 20px;
-            margin-top: 20px;
+            display: none !important;
         }
 
         .photo-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 12px;
-            padding: 0;
-            width: 100%;
+            gap: 16px;
+            width: 100vw;
+            max-width: 100vw;
+            margin: 0 auto;
             box-sizing: border-box;
+            padding: 16px 0;
         }
 
         .photo-card {
@@ -254,9 +253,10 @@
         }
 
         .main-container {
-            max-width: 100%;
-            margin: 0 auto;
-            padding: 0 15px;
+            width: 100vw;
+            max-width: 100vw;
+            margin: 0;
+            padding: 0;
             box-sizing: border-box;
         }
 
