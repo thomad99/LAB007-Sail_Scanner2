@@ -133,6 +133,7 @@
             height: 100%;
             cursor: pointer;
             transition: box-shadow 0.2s;
+            position: relative;
         }
 
         .photo-card:hover {
@@ -475,6 +476,23 @@
         .purchase-fab:hover {
             background: #218838;
         }
+
+        /* Add thumbnail watermark CSS */
+        .thumbnail-watermark {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 60%;
+            height: 40%;
+            transform: translate(-50%, -50%);
+            opacity: 0.25;
+            pointer-events: none;
+            background-image: url('watermark.png');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            z-index: 2;
+        }
     </style>
     <script src="https://js.stripe.com/v3/"></script>
 </head>
@@ -709,6 +727,9 @@
                 img.alt = `Sail number ${photo.sail_number}`;
                 img.loading = 'lazy';
                 photoCard.appendChild(img);
+                const thumbWatermark = document.createElement('div');
+                thumbWatermark.className = 'thumbnail-watermark';
+                photoCard.appendChild(thumbWatermark);
 
                 const details = document.createElement('div');
                 details.className = 'photo-details';
