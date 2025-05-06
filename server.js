@@ -1652,4 +1652,9 @@ app.get('/api/config', (req, res) => {
     res.json({
         stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY
     });
+});
+
+// Serve the payment success page for Stripe redirect
+app.get('/payment-success', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'payment-success.html'));
 }); 

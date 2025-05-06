@@ -199,15 +199,16 @@
             position: absolute;
             top: 50%;
             left: 50%;
+            width: 80%;
+            height: 80%;
             transform: translate(-50%, -50%);
-            width: 60%;
             opacity: 0.25;
             pointer-events: none;
             background-image: url('watermark.png');
             background-size: contain;
             background-repeat: no-repeat;
             background-position: center;
-            height: 40%;
+            z-index: 2;
         }
 
         .modal-side-banner {
@@ -754,7 +755,7 @@
 
         // Modal logic
         let currentModalPhoto = null;
-        function openModal(photo) {
+        async function openModal(photo) {
             currentModalPhoto = photo;
             const modal = document.getElementById('imageModal');
             const modalImg = document.getElementById('modalImage');
@@ -763,15 +764,43 @@
 
             modalImg.src = photo.url;
             modalImg.alt = `Sail number ${photo.sail_number}`;
-            modalWatermark.style.display = '';
-            purchaseFab.style.display = 'block';
-            purchaseFab.onclick = function () { purchaseImage(photo.filename); };
+
+            // Check if purchased
+            const isPurchased = await checkImagePurchase(photo.filename);
+            if (isPurchased) {
+                modalWatermark.style.display = 'none';
+                purchaseFab.style.display = 'none';
+                // Add or show a Download Photo button
+                let downloadBtn = document.getElementById('downloadPhotoBtn');
+                if (!downloadBtn) {
+                    downloadBtn = document.createElement('a');
+                    downloadBtn.id = 'downloadPhotoBtn';
+                    downloadBtn.className = 'purchase-fab';
+                    downloadBtn.textContent = 'Download Photo';
+                    downloadBtn.style.right = '24px';
+                    downloadBtn.style.bottom = '24px';
+                    downloadBtn.style.position = 'absolute';
+                    modalImg.parentNode.appendChild(downloadBtn);
+                }
+                downloadBtn.href = photo.url;
+                downloadBtn.download = photo.filename;
+                downloadBtn.style.display = 'block';
+            } else {
+                modalWatermark.style.display = '';
+                purchaseFab.style.display = 'block';
+                purchaseFab.onclick = function () { purchaseImage(photo.filename); };
+                // Hide Download Photo button if present
+                const downloadBtn = document.getElementById('downloadPhotoBtn');
+                if (downloadBtn) downloadBtn.style.display = 'none';
+            }
             modal.style.display = 'flex';
         }
 
         function closeModal() {
             document.getElementById('imageModal').style.display = 'none';
             document.getElementById('purchaseFab').style.display = 'none';
+            const downloadBtn = document.getElementById('downloadPhotoBtn');
+            if (downloadBtn) downloadBtn.style.display = 'none';
             currentModalPhoto = null;
         }
 
