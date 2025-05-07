@@ -28,13 +28,75 @@
         .btn:hover {
             background: #0052a3;
         }
+
+        .img-preview {
+            max-width: 90vw;
+            max-height: 60vh;
+            margin: 30px auto 20px auto;
+            display: block;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .msg {
+            margin: 30px 0;
+            color: #c82333;
+            font-size: 18px;
+        }
     </style>
 </head>
 
 <body>
     <h1>Thank you for your purchase!</h1>
-    <p>Your photo is now available without a watermark.<br>You may close this window or return to the gallery.</p>
+    <div id="imageSection">
+        <div class="msg">Loading your photo...</div>
+    </div>
     <button class="btn" onclick="window.location.href='/'">Back to Gallery</button>
+    <script>
+        // Get image filename from URL
+        function getQueryParam(name) {
+            const url = new URL(window.location.href);
+            return url.searchParams.get(name);
+        }
+        const imageFilename = getQueryParam('image');
+        const imageSection = document.getElementById('imageSection');
+        const authToken = localStorage.getItem('authToken');
+
+        async function checkAndShowImage() {
+            if (!imageFilename) {
+                imageSection.innerHTML = '<div class="msg">No image specified.</div>';
+                return;
+            }
+            if (!authToken) {
+                imageSection.innerHTML = '<div class="msg">You must be signed in to view your purchased photo.</div>';
+                return;
+            }
+            // Check purchase status
+            try {
+                const resp = await fetch(`/api/check-image-purchase/${encodeURIComponent(imageFilename)}`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                const data = await resp.json();
+                if (data.isPurchased) {
+                    // Get the signed URL for the image (same as in search)
+                    // We'll use /api/search-photos with the filename as a filter
+                    const searchResp = await fetch(`/api/search-photos?sail_number=&date=&regatta_name=&photographer_name=&location=`);
+                    const photos = await searchResp.json();
+                    const photo = photos.find(p => p.filename === imageFilename);
+                    if (photo && photo.url) {
+                        imageSection.innerHTML = `<img src="${photo.url}" class="img-preview"><br><a href="${photo.url}" download="${photo.filename}" class="btn">Download Photo</a>`;
+                    } else {
+                        imageSection.innerHTML = '<div class="msg">Could not find your photo. Please return to the gallery.</div>';
+                    }
+                } else {
+                    imageSection.innerHTML = '<div class="msg">You have not purchased this photo or your purchase is not yet confirmed. Please contact support if you believe this is an error.</div>';
+                }
+            } catch (err) {
+                imageSection.innerHTML = '<div class="msg">Error loading your photo. Please try again later.</div>';
+            }
+        }
+        checkAndShowImage();
+    </script>
 </body>
 
 </html>
