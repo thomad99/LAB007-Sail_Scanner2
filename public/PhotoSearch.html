@@ -727,6 +727,11 @@
             photos.forEach(photo => {
                 const card = document.createElement('div');
                 card.className = 'photo-card';
+                card.onclick = () => openModal(photo);
+
+                const photoWrapper = document.createElement('div');
+                photoWrapper.className = 'photo-wrapper';
+                photoWrapper.style.position = 'relative';
 
                 const img = document.createElement('img');
                 img.src = photo.url;
@@ -749,41 +754,18 @@
                     <p><strong>Tags:</strong> ${photo.tags || 'None'}</p>
                 `;
 
-                const downloadBtn = document.createElement('button');
-                downloadBtn.className = 'download-btn';
-                downloadBtn.innerHTML = '<i class="fas fa-download"></i> Download Photo';
-                downloadBtn.onclick = async (e) => {
-                    e.preventDefault();
-                    try {
-                        // Fetch the image
-                        const response = await fetch(photo.url);
-                        const blob = await response.blob();
-
-                        // Create a download link
-                        const downloadUrl = window.URL.createObjectURL(blob);
-                        const link = document.createElement('a');
-                        link.href = downloadUrl;
-
-                        // Set the filename using the original filename from the URL
-                        const filename = photo.url.split('/').pop().split('?')[0];
-                        link.download = filename;
-
-                        // Trigger the download
-                        document.body.appendChild(link);
-                        link.click();
-
-                        // Clean up
-                        document.body.removeChild(link);
-                        window.URL.revokeObjectURL(downloadUrl);
-                    } catch (error) {
-                        console.error('Error downloading photo:', error);
-                        alert('Failed to download photo. Please try again.');
-                    }
+                const viewButton = document.createElement('button');
+                viewButton.className = 'view-button';
+                viewButton.innerHTML = '<i class="fas fa-eye"></i> View Photo';
+                viewButton.onclick = (e) => {
+                    e.stopPropagation();
+                    openModal(photo);
                 };
 
-                card.appendChild(img);
+                photoWrapper.appendChild(img);
+                card.appendChild(photoWrapper);
                 card.appendChild(info);
-                card.appendChild(downloadBtn);
+                card.appendChild(viewButton);
                 grid.appendChild(card);
             });
 
