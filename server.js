@@ -1615,19 +1615,26 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
 
     try {
         event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+        console.log('Stripe webhook event received:', event.type);
     } catch (err) {
+        console.error('Webhook signature verification failed:', err.message);
         return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
     if (event.type === 'checkout.session.completed') {
         const session = event.data.object;
-
+        console.log('Checkout session completed. Session metadata:', session.metadata);
         // Record the image purchase
-        await pool.query(
-            `INSERT INTO purchased_images (user_id, image_filename, stripe_payment_id)
-             VALUES ($1, $2, $3)`,
-            [session.metadata.userId, session.metadata.imageFilename, session.payment_intent]
-        );
+        try {
+            await pool.query(
+                `INSERT INTO purchased_images (user_id, image_filename, stripe_payment_id)
+                 VALUES ($1, $2, $3)`,
+                [session.metadata.userId, session.metadata.imageFilename, session.payment_intent]
+            );
+            console.log('Purchase recorded in database:', session.metadata);
+        } catch (dbErr) {
+            console.error('Error inserting purchase into database:', dbErr);
+        }
     }
 
     res.json({ received: true });
