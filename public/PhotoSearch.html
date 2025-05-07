@@ -717,50 +717,76 @@
             resultsContainer.innerHTML = '';
 
             if (photos.length === 0) {
-                resultsContainer.innerHTML = '<p>No photos found matching your criteria.</p>';
+                resultsContainer.innerHTML = '<p class="no-results">No photos found matching your search criteria.</p>';
                 return;
             }
 
             const grid = document.createElement('div');
             grid.className = 'photo-grid';
 
-            photos.forEach(async photo => {
-                const photoCard = document.createElement('div');
-                photoCard.className = 'photo-card';
-                photoCard.tabIndex = 0;
-                photoCard.setAttribute('role', 'button');
-                photoCard.setAttribute('aria-label', 'View photo preview');
-
-                // Make the card clickable to open modal
-                photoCard.onclick = () => openModal(photo);
+            photos.forEach(photo => {
+                const card = document.createElement('div');
+                card.className = 'photo-card';
 
                 const img = document.createElement('img');
                 img.src = photo.url;
-                img.alt = `Sail number ${photo.sail_number}`;
+                img.alt = `Sail ${photo.sail_number}`;
                 img.loading = 'lazy';
-                photoCard.appendChild(img);
-
-                const details = document.createElement('div');
-                details.className = 'photo-details';
-                details.innerHTML = `
-                    <p><strong>Sail Number:</strong> ${photo.sail_number || 'N/A'}</p>
-                    <p><strong>Date:</strong> ${photo.date ? new Date(photo.date).toLocaleDateString() : 'N/A'}</p>
-                    <p><strong>Regatta:</strong> ${photo.regatta_name || 'N/A'}</p>
-                    <p><strong>Photographer:</strong> ${photo.photographer_name || 'N/A'}</p>
-                    <p><strong>Location:</strong> ${photo.location || 'N/A'}</p>
-                `;
-                // Add View Photo button
-                const viewBtn = document.createElement('button');
-                viewBtn.className = 'view-button';
-                viewBtn.textContent = 'View Photo';
-                viewBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    openModal(photo);
+                img.onerror = () => {
+                    img.src = 'https://via.placeholder.com/300x200?text=Image+Not+Available';
+                    img.alt = 'Image not available';
                 };
-                details.appendChild(viewBtn);
-                photoCard.appendChild(details);
-                grid.appendChild(photoCard);
+
+                const info = document.createElement('div');
+                info.className = 'photo-info';
+                info.innerHTML = `
+                    <p><strong>Sail Number:</strong> ${photo.sail_number}</p>
+                    <p><strong>Date:</strong> ${new Date(photo.date).toLocaleDateString()}</p>
+                    <p><strong>Location:</strong> ${photo.location || 'Not specified'}</p>
+                    <p><strong>Photographer:</strong> ${photo.photographer_name || 'Not specified'}</p>
+                    <p><strong>Yacht Club:</strong> ${photo.yacht_club || 'Not specified'}</p>
+                    <p><strong>Regatta:</strong> ${photo.regatta_name || 'Not specified'}</p>
+                    <p><strong>Tags:</strong> ${photo.tags || 'None'}</p>
+                `;
+
+                const downloadBtn = document.createElement('button');
+                downloadBtn.className = 'download-btn';
+                downloadBtn.innerHTML = '<i class="fas fa-download"></i> Download Photo';
+                downloadBtn.onclick = async (e) => {
+                    e.preventDefault();
+                    try {
+                        // Fetch the image
+                        const response = await fetch(photo.url);
+                        const blob = await response.blob();
+
+                        // Create a download link
+                        const downloadUrl = window.URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = downloadUrl;
+
+                        // Set the filename using the original filename from the URL
+                        const filename = photo.url.split('/').pop().split('?')[0];
+                        link.download = filename;
+
+                        // Trigger the download
+                        document.body.appendChild(link);
+                        link.click();
+
+                        // Clean up
+                        document.body.removeChild(link);
+                        window.URL.revokeObjectURL(downloadUrl);
+                    } catch (error) {
+                        console.error('Error downloading photo:', error);
+                        alert('Failed to download photo. Please try again.');
+                    }
+                };
+
+                card.appendChild(img);
+                card.appendChild(info);
+                card.appendChild(downloadBtn);
+                grid.appendChild(card);
             });
+
             resultsContainer.appendChild(grid);
         }
 
