@@ -162,6 +162,38 @@ const PROCESSED_DIR = path.join(__dirname, 'processed_images');
 const MAX_RETRIES = 3;
 const BASE_RETRY_DELAY = 5000; // 5 seconds
 
+// Update webhook handler for one-time payments (must be before any body parsers)
+app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+    const sig = req.headers['stripe-signature'];
+    let event;
+
+    try {
+        event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+        console.log('Stripe webhook event received:', event.type);
+    } catch (err) {
+        console.error('Webhook signature verification failed:', err.message);
+        return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    if (event.type === 'checkout.session.completed') {
+        const session = event.data.object;
+        console.log('Checkout session completed. Session metadata:', session.metadata);
+        // Record the image purchase
+        try {
+            await pool.query(
+                `INSERT INTO purchased_images (user_id, image_filename, stripe_payment_id)
+                 VALUES ($1, $2, $3)`,
+                [session.metadata.userId, session.metadata.imageFilename, session.payment_intent]
+            );
+            console.log('Purchase recorded in database:', session.metadata);
+        } catch (dbErr) {
+            console.error('Error inserting purchase into database:', dbErr);
+        }
+    }
+
+    res.json({ received: true });
+});
+
 // Add general error handler
 app.use((err, req, res, next) => {
     console.error('Unhandled error:', err);
@@ -1606,38 +1638,6 @@ app.post('/api/create-payment-session', authenticateToken, async (req, res) => {
         console.error('Error creating payment session:', err);
         res.status(500).json({ error: 'Error creating payment session' });
     }
-});
-
-// Update webhook handler for one-time payments
-app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-    const sig = req.headers['stripe-signature'];
-    let event;
-
-    try {
-        event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-        console.log('Stripe webhook event received:', event.type);
-    } catch (err) {
-        console.error('Webhook signature verification failed:', err.message);
-        return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
-
-    if (event.type === 'checkout.session.completed') {
-        const session = event.data.object;
-        console.log('Checkout session completed. Session metadata:', session.metadata);
-        // Record the image purchase
-        try {
-            await pool.query(
-                `INSERT INTO purchased_images (user_id, image_filename, stripe_payment_id)
-                 VALUES ($1, $2, $3)`,
-                [session.metadata.userId, session.metadata.imageFilename, session.payment_intent]
-            );
-            console.log('Purchase recorded in database:', session.metadata);
-        } catch (dbErr) {
-            console.error('Error inserting purchase into database:', dbErr);
-        }
-    }
-
-    res.json({ received: true });
 });
 
 // Add endpoint to check if an image is purchased
