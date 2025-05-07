@@ -213,7 +213,7 @@
             width: 75%;
             height: 75%;
             transform: translate(-50%, -50%);
-            opacity: 0.9;
+            opacity: 0.4;
             pointer-events: none;
             background-image: url('watermark.png');
             background-size: contain;
@@ -954,7 +954,7 @@
         window.addEventListener('load', () => {
             const urlParams = new URLSearchParams(window.location.search);
             const sessionId = urlParams.get('session_id');
-       imageFilename = urlParams.get('image');
+            imageFilename = urlParams.get('image');
 
             if (sessionId && imageFilename) {
                 alert('Payment successful! The watermark has been removed from your image.');
