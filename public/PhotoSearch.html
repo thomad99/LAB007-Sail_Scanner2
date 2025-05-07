@@ -213,7 +213,7 @@
             width: 75%;
             height: 75%;
             transform: translate(-50%, -50%);
-            opacity: 0.4;
+            opacity: 0.9;
             pointer-events: none;
             background-image: url('watermark.png');
             background-size: contain;
@@ -697,14 +697,6 @@
                     return;
                 }
 
-                const matchCount = document.createElement('div');
-                matchCount.style.textAlign = 'center';
-                matchCount.style.marginBottom = '20px';
-                matchCount.style.color = '#666';
-                matchCount.innerHTML = `Found ${photos.length} matching photo${photos.length !== 1 ? 's' : ''}`;
-                resultsDiv.innerHTML = '';
-                resultsDiv.appendChild(matchCount);
-
                 displaySearchResults(photos);
             } catch (err) {
                 console.error('Error searching photos:', err);
@@ -721,10 +713,27 @@
                 return;
             }
 
+            // Deduplicate photos based on filename
+            const uniquePhotos = photos.reduce((acc, current) => {
+                const x = acc.find(item => item.filename === current.filename);
+                if (!x) {
+                    return acc.concat([current]);
+                } else {
+                    return acc;
+                }
+            }, []);
+
+            const matchCount = document.createElement('div');
+            matchCount.style.textAlign = 'center';
+            matchCount.style.marginBottom = '20px';
+            matchCount.style.color = '#666';
+            matchCount.innerHTML = `Found ${uniquePhotos.length} unique photo${uniquePhotos.length !== 1 ? 's' : ''}`;
+            resultsContainer.appendChild(matchCount);
+
             const grid = document.createElement('div');
             grid.className = 'photo-grid';
 
-            photos.forEach(photo => {
+            uniquePhotos.forEach(photo => {
                 const card = document.createElement('div');
                 card.className = 'photo-card';
                 card.onclick = () => openModal(photo);
@@ -945,7 +954,7 @@
         window.addEventListener('load', () => {
             const urlParams = new URLSearchParams(window.location.search);
             const sessionId = urlParams.get('session_id');
-            const imageFilename = urlParams.get('image');
+       imageFilename = urlParams.get('image');
 
             if (sessionId && imageFilename) {
                 alert('Payment successful! The watermark has been removed from your image.');
