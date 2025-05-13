@@ -6,7 +6,7 @@ info:
 servers:
   - url: http://localhost:3000
     description: Local development server
-  - url: https://your-production-domain.com
+  - url: https://lab007-sail-scanner2.onrender.com
     description: Production server
 paths:
   /api/search-by-sail/{sailNumber}:
