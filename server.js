@@ -162,6 +162,169 @@ const PROCESSED_DIR = path.join(__dirname, 'processed_images');
 const MAX_RETRIES = 3;
 const BASE_RETRY_DELAY = 5000; // 5 seconds
 
+// Add rate limiting configuration
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute window
+const MAX_REQUESTS_PER_WINDOW = 10; // 10 requests per minute
+
+// Simple in-memory store for rate limiting
+const rateLimitStore = new Map();
+
+// Rate limiting middleware
+const rateLimiter = (req, res, next) => {
+    const apiKey = req.headers['x-api-key'];
+    const now = Date.now();
+
+    // Initialize or get rate limit data for this API key
+    if (!rateLimitStore.has(apiKey)) {
+        rateLimitStore.set(apiKey, {
+            count: 0,
+            resetTime: now + RATE_LIMIT_WINDOW
+        });
+    }
+
+    const rateLimitData = rateLimitStore.get(apiKey);
+
+    // Reset counter if window has passed
+    if (now > rateLimitData.resetTime) {
+        rateLimitData.count = 0;
+        rateLimitData.resetTime = now + RATE_LIMIT_WINDOW;
+    }
+
+    // Increment counter
+    rateLimitData.count++;
+
+    // Check if rate limit exceeded
+    if (rateLimitData.count > MAX_REQUESTS_PER_WINDOW) {
+        const retryAfter = Math.ceil((rateLimitData.resetTime - now) / 1000);
+        return res.status(429).json({
+            success: false,
+            error: 'Rate limit exceeded',
+            retryAfter,
+            limit: MAX_REQUESTS_PER_WINDOW,
+            window: RATE_LIMIT_WINDOW / 1000
+        });
+    }
+
+    // Add rate limit headers
+    res.set({
+        'X-RateLimit-Limit': MAX_REQUESTS_PER_WINDOW,
+        'X-RateLimit-Remaining': MAX_REQUESTS_PER_WINDOW - rateLimitData.count,
+        'X-RateLimit-Reset': rateLimitData.resetTime
+    });
+
+    next();
+};
+
+// Update API key authentication to include rate limiting
+const authenticateApiKey = (req, res, next) => {
+    const apiKey = req.headers['x-api-key'];
+
+    // You can change this to your desired API key
+    const validApiKey = process.env.API_KEY || 'your-static-api-key-here';
+
+    if (!apiKey || apiKey !== validApiKey) {
+        console.log('Invalid or missing API key');
+        return res.status(401).json({
+            success: false,
+            error: 'Invalid or missing API key'
+        });
+    }
+
+    // Apply rate limiting
+    rateLimiter(req, res, next);
+};
+
+// Update the search endpoint to use the combined auth and rate limiting
+app.get('/api/search-by-sail/:sailNumber', authenticateApiKey, async (req, res) => {
+    console.log('Received request for sail number:', req.params.sailNumber);
+
+    try {
+        const sailNumber = req.params.sailNumber;
+
+        // Validate sail number format
+        if (!sailNumber || !/^\d{1,6}$/.test(sailNumber)) {
+            console.log('Invalid sail number format:', sailNumber);
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid sail number format. Must be 1-6 digits.',
+                receivedValue: sailNumber
+            });
+        }
+
+        console.log('Querying database for sail number:', sailNumber);
+
+        // Query the database for photos with matching sail number
+        const result = await pool.query(`
+            SELECT * FROM photo_metadata 
+            WHERE sail_number = $1
+            ORDER BY created_at DESC
+        `, [sailNumber]);
+
+        console.log(`Found ${result.rows.length} photos for sail number ${sailNumber}`);
+
+        // Generate signed URLs for each photo
+        const photosWithUrls = await Promise.all(result.rows.map(async (photo) => {
+            try {
+                const s3Key = `processed/${photo.filename}`;
+                console.log('Generating signed URL for:', s3Key);
+                const signedUrl = await getS3SignedUrl(s3Key);
+                return {
+                    ...photo,
+                    url: signedUrl
+                };
+            } catch (err) {
+                console.error(`Error generating signed URL for ${photo.filename}:`, err);
+                return {
+                    ...photo,
+                    url: null,
+                    error: 'Unable to generate photo URL'
+                };
+            }
+        }));
+
+        res.json({
+            success: true,
+            sailNumber: sailNumber,
+            count: photosWithUrls.length,
+            photos: photosWithUrls,
+            rateLimit: {
+                remaining: res.get('X-RateLimit-Remaining'),
+                reset: res.get('X-RateLimit-Reset')
+            }
+        });
+    } catch (err) {
+        console.error('Error searching photos by sail number:', err);
+        res.status(500).json({
+            success: false,
+            error: 'Error searching photos by sail number',
+            details: err.message
+        });
+    }
+});
+
+// Update test endpoint to include rate limit info
+app.get('/api/test', authenticateApiKey, (req, res) => {
+    res.json({
+        status: 'ok',
+        message: 'Server is running',
+        timestamp: new Date().toISOString(),
+        rateLimit: {
+            remaining: res.get('X-RateLimit-Remaining'),
+            reset: res.get('X-RateLimit-Reset')
+        }
+    });
+});
+
+// Keep the health endpoint public and without rate limiting
+app.get('/api/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        message: 'Server is running',
+        timestamp: new Date().toISOString(),
+        version: '1.0.0'
+    });
+});
+
 // Update webhook handler for one-time payments (must be before any body parsers)
 app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
     const sig = req.headers['stripe-signature'];
@@ -1664,77 +1827,4 @@ app.get('/api/config', (req, res) => {
 // Serve the payment success page for Stripe redirect
 app.get('/payment-success', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'payment-success.html'));
-});
-
-// Add endpoint to search photos by sail number
-app.get('/api/search-by-sail/:sailNumber', async (req, res) => {
-    console.log('Received request for sail number:', req.params.sailNumber);
-
-    try {
-        const sailNumber = req.params.sailNumber;
-
-        // Validate sail number format
-        if (!sailNumber || !/^\d{1,6}$/.test(sailNumber)) {
-            console.log('Invalid sail number format:', sailNumber);
-            return res.status(400).json({
-                success: false,
-                error: 'Invalid sail number format. Must be 1-6 digits.',
-                receivedValue: sailNumber
-            });
-        }
-
-        console.log('Querying database for sail number:', sailNumber);
-
-        // Query the database for photos with matching sail number
-        const result = await pool.query(`
-            SELECT * FROM photo_metadata 
-            WHERE sail_number = $1
-            ORDER BY created_at DESC
-        `, [sailNumber]);
-
-        console.log(`Found ${result.rows.length} photos for sail number ${sailNumber}`);
-
-        // Generate signed URLs for each photo
-        const photosWithUrls = await Promise.all(result.rows.map(async (photo) => {
-            try {
-                const s3Key = `processed/${photo.filename}`;
-                console.log('Generating signed URL for:', s3Key);
-                const signedUrl = await getS3SignedUrl(s3Key);
-                return {
-                    ...photo,
-                    url: signedUrl
-                };
-            } catch (err) {
-                console.error(`Error generating signed URL for ${photo.filename}:`, err);
-                return {
-                    ...photo,
-                    url: null,
-                    error: 'Unable to generate photo URL'
-                };
-            }
-        }));
-
-        res.json({
-            success: true,
-            sailNumber: sailNumber,
-            count: photosWithUrls.length,
-            photos: photosWithUrls
-        });
-    } catch (err) {
-        console.error('Error searching photos by sail number:', err);
-        res.status(500).json({
-            success: false,
-            error: 'Error searching photos by sail number',
-            details: err.message
-        });
-    }
-});
-
-// Add a test endpoint to verify the server is running
-app.get('/api/test', (req, res) => {
-    res.json({
-        status: 'ok',
-        message: 'Server is running',
-        timestamp: new Date().toISOString()
-    });
 });
