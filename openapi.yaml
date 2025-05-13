@@ -1,0 +1,152 @@
+openapi: 3.1.0
+info:
+  title: Sail Photo Search API
+  description: API for searching and retrieving sailing photos by sail number
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+  - url: https://your-production-domain.com
+    description: Production server
+paths:
+  /api/search-by-sail/{sailNumber}:
+    get:
+      summary: Search photos by sail number
+      description: Retrieves all photos associated with a specific sail number
+      operationId: searchPhotosBySailNumber
+      parameters:
+        - name: sailNumber
+          in: path
+          required: true
+          description: The sail number to search for
+          schema:
+            type: string
+            pattern: '^\d{1,6}$'
+            example: "1234"
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  sailNumber:
+                    type: string
+                    example: "1234"
+                  count:
+                    type: integer
+                    example: 2
+                  photos:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                          example: 1
+                        filename:
+                          type: string
+                          example: "1234_JohnDoe_image1.jpg"
+                        sail_number:
+                          type: string
+                          example: "1234"
+                        date:
+                          type: string
+                          format: date
+                          example: "2024-03-20"
+                        regatta_name:
+                          type: string
+                          example: "Summer Regatta"
+                        photographer_name:
+                          type: string
+                          example: "John Smith"
+                        photographer_website:
+                          type: string
+                          example: "https://example.com"
+                        location:
+                          type: string
+                          example: "San Francisco Bay"
+                        url:
+                          type: string
+                          format: uri
+                          example: "https://s3.amazonaws.com/bucket/processed/1234_JohnDoe_image1.jpg"
+                        created_at:
+                          type: string
+                          format: date-time
+                          example: "2024-03-20T15:30:00Z"
+        '400':
+          description: Invalid sail number format
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Invalid sail number format"
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Error searching photos by sail number"
+                  details:
+                    type: string
+                    example: "Database connection error"
+components:
+  schemas:
+    Photo:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Unique identifier for the photo
+        filename:
+          type: string
+          description: Name of the photo file
+        sail_number:
+          type: string
+          description: Sail number associated with the photo
+        date:
+          type: string
+          format: date
+          description: Date when the photo was taken
+        regatta_name:
+          type: string
+          description: Name of the regatta
+        photographer_name:
+          type: string
+          description: Name of the photographer
+        photographer_website:
+          type: string
+          description: Website of the photographer
+        location:
+          type: string
+          description: Location where the photo was taken
+        url:
+          type: string
+          format: uri
+          description: Signed URL to access the photo
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp when the photo was added to the system
+      required:
+        - id
+        - filename
+        - sail_number
+        - url 

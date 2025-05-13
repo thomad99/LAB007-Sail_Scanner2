@@ -1664,4 +1664,51 @@ app.get('/api/config', (req, res) => {
 // Serve the payment success page for Stripe redirect
 app.get('/payment-success', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'payment-success.html'));
-}); 
+});
+
+// Add endpoint to search photos by sail number
+app.get('/api/search-by-sail/:sailNumber', async (req, res) => {
+    try {
+        const sailNumber = req.params.sailNumber;
+
+        // Query the database for photos with matching sail number
+        const result = await pool.query(`
+            SELECT * FROM photo_metadata 
+            WHERE sail_number = $1
+            ORDER BY created_at DESC
+        `, [sailNumber]);
+
+        // Generate signed URLs for each photo
+        const photosWithUrls = await Promise.all(result.rows.map(async (photo) => {
+            try {
+                const s3Key = `processed/${photo.filename}`;
+                const signedUrl = await getS3SignedUrl(s3Key);
+                return {
+                    ...photo,
+                    url: signedUrl
+                };
+            } catch (err) {
+                console.error(`Error generating signed URL for ${photo.filename}:`, err);
+                return {
+                    ...photo,
+                    url: null,
+                    error: 'Unable to generate photo URL'
+                };
+            }
+        }));
+
+        res.json({
+            success: true,
+            sailNumber: sailNumber,
+            count: photosWithUrls.length,
+            photos: photosWithUrls
+        });
+    } catch (err) {
+        console.error('Error searching photos by sail number:', err);
+        res.status(500).json({
+            success: false,
+            error: 'Error searching photos by sail number',
+            details: err.message
+        });
+    }
+});
