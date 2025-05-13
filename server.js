@@ -1668,8 +1668,22 @@ app.get('/payment-success', (req, res) => {
 
 // Add endpoint to search photos by sail number
 app.get('/api/search-by-sail/:sailNumber', async (req, res) => {
+    console.log('Received request for sail number:', req.params.sailNumber);
+
     try {
         const sailNumber = req.params.sailNumber;
+
+        // Validate sail number format
+        if (!sailNumber || !/^\d{1,6}$/.test(sailNumber)) {
+            console.log('Invalid sail number format:', sailNumber);
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid sail number format. Must be 1-6 digits.',
+                receivedValue: sailNumber
+            });
+        }
+
+        console.log('Querying database for sail number:', sailNumber);
 
         // Query the database for photos with matching sail number
         const result = await pool.query(`
@@ -1678,10 +1692,13 @@ app.get('/api/search-by-sail/:sailNumber', async (req, res) => {
             ORDER BY created_at DESC
         `, [sailNumber]);
 
+        console.log(`Found ${result.rows.length} photos for sail number ${sailNumber}`);
+
         // Generate signed URLs for each photo
         const photosWithUrls = await Promise.all(result.rows.map(async (photo) => {
             try {
                 const s3Key = `processed/${photo.filename}`;
+                console.log('Generating signed URL for:', s3Key);
                 const signedUrl = await getS3SignedUrl(s3Key);
                 return {
                     ...photo,
@@ -1711,4 +1728,13 @@ app.get('/api/search-by-sail/:sailNumber', async (req, res) => {
             details: err.message
         });
     }
+});
+
+// Add a test endpoint to verify the server is running
+app.get('/api/test', (req, res) => {
+    res.json({
+        status: 'ok',
+        message: 'Server is running',
+        timestamp: new Date().toISOString()
+    });
 });
