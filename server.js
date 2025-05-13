@@ -1828,3 +1828,16 @@ app.get('/api/config', (req, res) => {
 app.get('/payment-success', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'payment-success.html'));
 });
+
+// Add a simple test endpoint to verify API key
+app.get('/api/verify-key', authenticateApiKey, (req, res) => {
+    res.json({
+        success: true,
+        message: 'API key is valid',
+        timestamp: new Date().toISOString(),
+        rateLimit: {
+            remaining: res.get('X-RateLimit-Remaining'),
+            reset: res.get('X-RateLimit-Reset')
+        }
+    });
+});
