@@ -219,8 +219,8 @@ const rateLimiter = (req, res, next) => {
 const authenticateApiKey = (req, res, next) => {
     const apiKey = req.headers['x-api-key'];
 
-    // You can change this to your desired API key
-    const validApiKey = process.env.API_KEY || 'your-static-api-key-here';
+    // Updated to use APIKEY instead of API_KEY
+    const validApiKey = process.env.APIKEY || 'your-static-api-key-here';
 
     if (!apiKey || apiKey !== validApiKey) {
         console.log('Invalid or missing API key');
