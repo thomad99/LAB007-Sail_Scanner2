@@ -241,12 +241,12 @@ app.get('/api/search-by-sail/:sailNumber', authenticateApiKey, async (req, res) 
     try {
         const sailNumber = req.params.sailNumber;
 
-        // Validate sail number format
-        if (!sailNumber || !/^\d{1,6}$/.test(sailNumber)) {
+        // Updated validation to allow alphanumeric sail numbers
+        if (!sailNumber || !/^[A-Za-z0-9]{1,10}$/.test(sailNumber)) {
             console.log('Invalid sail number format:', sailNumber);
             return res.status(400).json({
                 success: false,
-                error: 'Invalid sail number format. Must be 1-6 digits.',
+                error: 'Invalid sail number format. Must be 1-10 alphanumeric characters.',
                 receivedValue: sailNumber
             });
         }
@@ -256,7 +256,7 @@ app.get('/api/search-by-sail/:sailNumber', authenticateApiKey, async (req, res) 
         // Query the database for photos with matching sail number
         const result = await pool.query(`
             SELECT * FROM photo_metadata 
-            WHERE sail_number = $1
+            WHERE sail_number ILIKE $1
             ORDER BY created_at DESC
         `, [sailNumber]);
 
@@ -302,7 +302,7 @@ app.get('/api/search-by-sail/:sailNumber', authenticateApiKey, async (req, res) 
     }
 });
 
-// Update test endpoint to include rate limit info
+// Add a test endpoint that also uses API key auth
 app.get('/api/test', authenticateApiKey, (req, res) => {
     res.json({
         status: 'ok',
