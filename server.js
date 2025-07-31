@@ -726,11 +726,16 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                 processingSteps.debug.azureResponse = operationResult.analyzeResult;
                 const foundNumbers = extractSailNumbers(operationResult.analyzeResult);
                 const sortedNumbers = foundNumbers.sort((a, b) => b.confidence - a.confidence);
-                processingSteps.sailNumbers.numbers = sortedNumbers;
 
-                // Process each detected sail number
-                if (sortedNumbers.length > 0) {
-                    for (const sailData of sortedNumbers) {
+                // Filter sail numbers by confidence level (>90%)
+                const highConfidenceNumbers = sortedNumbers.filter(sailData => sailData.confidence > 0.9);
+                processingSteps.sailNumbers.numbers = highConfidenceNumbers;
+
+                console.log(`Found ${sortedNumbers.length} sail numbers, ${highConfidenceNumbers.length} with >90% confidence`);
+
+                // Process each detected sail number (only high confidence ones)
+                if (highConfidenceNumbers.length > 0) {
+                    for (const sailData of highConfidenceNumbers) {
                         try {
                             const sailorInfo = await lookupSailorInDatabase(sailData.number);
                             const sailorName = sailorInfo ? sanitizeForFilename(sailorInfo.sailorName) : 'NONAME';
@@ -1028,86 +1033,11 @@ app.get('/test', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'test.html'));
 });
 
-// Add this endpoint to view database schema
-app.get('/api/schema', async (req, res) => {
-    try {
-        // Get all tables
-        const tables = await pool.query(`
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = 'public'
-        `);
-
-        // Get schema for each table
-        const schema = {};
-        for (const table of tables.rows) {
-            const tableName = table.table_name;
-            const columns = await pool.query(`
-                SELECT 
-                    column_name,
-                    data_type,
-                    column_default,
-                    is_nullable
-                FROM information_schema.columns
-                WHERE table_schema = 'public'
-                AND table_name = $1
-                ORDER BY ordinal_position
-            `, [tableName]);
-
-            schema[tableName] = columns.rows;
-        }
-
-        res.json(schema);
-    } catch (err) {
-        console.error('Error fetching schema:', err);
-        res.status(500).json({ error: 'Failed to fetch database schema' });
-    }
-});
-
-// Add detailed schema endpoint
-app.get('/api/schema/details', async (req, res) => {
-    try {
-        // Get detailed table information
-        const schemaDetails = await pool.query(`
-            SELECT 
-                t.table_name,
-                c.column_name,
-                c.data_type,
-                c.column_default,
-                c.is_nullable,
-                c.character_maximum_length,
-                c.numeric_precision,
-                c.numeric_scale
-            FROM information_schema.tables t
-            JOIN information_schema.columns c 
-                ON t.table_name = c.table_name
-            WHERE t.table_schema = 'public'
-                AND c.table_schema = 'public'
-            ORDER BY t.table_name, c.ordinal_position;
-        `);
-
-        // Format the results in a more readable way
-        const formattedSchema = {};
-        schemaDetails.rows.forEach(row => {
-            if (!formattedSchema[row.table_name]) {
-                formattedSchema[row.table_name] = [];
-            }
-            formattedSchema[row.table_name].push({
-                column: row.column_name,
-                type: row.data_type,
-                nullable: row.is_nullable,
-                default: row.column_default,
-                maxLength: row.character_maximum_length,
-                precision: row.numeric_precision,
-                scale: row.numeric_scale
-            });
-        });
-
-        res.json(formattedSchema);
-    } catch (err) {
-        console.error('Error fetching detailed schema:', err);
-        res.status(500).json({ error: 'Failed to fetch detailed schema' });
-    }
+// Add this endpoint to expose the publishable key
+app.get('/api/config', (req, res) => {
+    res.json({
+        stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY
+    });
 });
 
 // Add endpoint to get scan history
@@ -1898,13 +1828,6 @@ app.get('/api/check-image-purchase/:filename', authenticateToken, async (req, re
     } catch (err) {
         res.status(500).json({ error: 'Error checking image purchase status' });
     }
-});
-
-// Add this endpoint to expose the publishable key
-app.get('/api/config', (req, res) => {
-    res.json({
-        stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY
-    });
 });
 
 // Serve the payment success page for Stripe redirect
