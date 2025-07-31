@@ -585,6 +585,7 @@ async function processWithRetry(operation, operationName) {
 // Add this after the database connection setup
 async function createPhotoMetadataTable() {
     try {
+        // First create the table if it doesn't exist
         await pool.query(`
             CREATE TABLE IF NOT EXISTS photo_metadata (
                 id SERIAL PRIMARY KEY,
@@ -596,16 +597,40 @@ async function createPhotoMetadataTable() {
                 photographer_website TEXT,
                 location TEXT,
                 additional_tags TEXT[],
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                -- New fields for enhanced metadata
-                file_checksum TEXT UNIQUE,
-                photo_timestamp TIMESTAMP,
-                gps_latitude DECIMAL,
-                gps_longitude DECIMAL,
-                gps_altitude DECIMAL
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
-        console.log('Photo metadata table created or verified');
+
+        // Check if new columns exist and add them if they don't
+        const columnsToAdd = [
+            { name: 'file_checksum', type: 'TEXT UNIQUE' },
+            { name: 'photo_timestamp', type: 'TIMESTAMP' },
+            { name: 'gps_latitude', type: 'DECIMAL' },
+            { name: 'gps_longitude', type: 'DECIMAL' },
+            { name: 'gps_altitude', type: 'DECIMAL' }
+        ];
+
+        for (const column of columnsToAdd) {
+            try {
+                // Check if column exists
+                const columnCheck = await pool.query(`
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.columns 
+                        WHERE table_name = 'photo_metadata' 
+                        AND column_name = $1
+                    );
+                `, [column.name]);
+
+                if (!columnCheck.rows[0].exists) {
+                    console.log(`Adding column ${column.name} to photo_metadata table`);
+                    await pool.query(`ALTER TABLE photo_metadata ADD COLUMN ${column.name} ${column.type}`);
+                }
+            } catch (err) {
+                console.error(`Error adding column ${column.name}:`, err);
+            }
+        }
+
+        console.log('Photo metadata table created or verified with all columns');
     } catch (err) {
         console.error('Error creating photo metadata table:', err);
     }
@@ -1438,6 +1463,69 @@ app.get('/api/photo-count', async (req, res) => {
     }
 });
 
+// Add endpoint to get most recent upload date
+app.get('/api/recent-upload', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT created_at 
+            FROM photo_metadata 
+            ORDER BY created_at DESC 
+            LIMIT 1
+        `);
+
+        const recentUpload = result.rows.length > 0 ? result.rows[0].created_at : null;
+        res.json({ recentUpload });
+    } catch (err) {
+        console.error('Error fetching recent upload:', err);
+        res.status(500).json({ error: 'Error fetching recent upload' });
+    }
+});
+
+// Add endpoint to get total storage size
+app.get('/api/storage-size', async (req, res) => {
+    try {
+        // Get all objects from S3 processed folder
+        const objects = await listS3Objects('processed/');
+
+        let totalSize = 0;
+        for (const obj of objects) {
+            totalSize += obj.Size || 0;
+        }
+
+        res.json({ totalSize });
+    } catch (err) {
+        console.error('Error calculating storage size:', err);
+        res.status(500).json({ error: 'Error calculating storage size' });
+    }
+});
+
+// Add endpoint to get S3 count
+app.get('/api/s3-count', async (req, res) => {
+    try {
+        const objects = await listS3Objects('processed/');
+        res.json({ count: objects.length });
+    } catch (err) {
+        console.error('Error counting S3 objects:', err);
+        res.status(500).json({ error: 'Error counting S3 objects' });
+    }
+});
+
+// Add a simple test endpoint for PhotoAdmin debugging
+app.get('/api/admin-test', async (req, res) => {
+    try {
+        res.json({
+            success: true,
+            message: 'PhotoAdmin API is working',
+            timestamp: new Date().toISOString(),
+            databaseConnected: !!pool,
+            s3Configured: !!(process.env.AWS_ACCESS_KEY && process.env.AWS_SECRET_ACCESS_KEY)
+        });
+    } catch (error) {
+        console.error('Error in admin-test endpoint:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Update the validate-files endpoint to check S3
 app.get('/api/validate-files', async (req, res) => {
     try {
@@ -1848,15 +1936,14 @@ app.get('/api/verify-key', authenticateApiKey, (req, res) => {
     });
 });
 
-// Add debug endpoint to check database state
+// Add debug endpoint to check database status
 app.get('/api/debug-database', async (req, res) => {
     try {
         // Check if table exists
         const tableCheck = await pool.query(`
             SELECT EXISTS (
                 SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
-                AND table_name = 'photo_metadata'
+                WHERE table_name = 'photo_metadata'
             );
         `);
 
@@ -1870,20 +1957,20 @@ app.get('/api/debug-database', async (req, res) => {
         }
 
         // Get table structure
-        const columns = await pool.query(`
+        const structure = await pool.query(`
             SELECT column_name, data_type, is_nullable
-            FROM information_schema.columns
-            WHERE table_schema = 'public' 
-            AND table_name = 'photo_metadata'
+            FROM information_schema.columns 
+            WHERE table_name = 'photo_metadata'
             ORDER BY ordinal_position;
         `);
 
         // Get row count
-        const count = await pool.query('SELECT COUNT(*) as total FROM photo_metadata');
+        const countResult = await pool.query('SELECT COUNT(*) as total FROM photo_metadata');
+        const totalRows = parseInt(countResult.rows[0].total);
 
         // Get recent entries
-        const recent = await pool.query(`
-            SELECT filename, sail_number, created_at 
+        const recentEntries = await pool.query(`
+            SELECT id, filename, sail_number, created_at, file_checksum
             FROM photo_metadata 
             ORDER BY created_at DESC 
             LIMIT 5
@@ -1891,107 +1978,18 @@ app.get('/api/debug-database', async (req, res) => {
 
         res.json({
             tableExists: true,
-            tableStructure: columns.rows,
-            totalRows: parseInt(count.rows[0].total),
-            recentEntries: recent.rows,
-            databaseConnected: !!pool
+            totalRows: totalRows,
+            tableStructure: structure.rows,
+            recentEntries: recentEntries.rows,
+            message: 'Database check completed'
         });
+
     } catch (err) {
         console.error('Error in debug-database endpoint:', err);
         res.status(500).json({
             error: err.message,
-            databaseConnected: !!pool
+            stack: err.stack
         });
-    }
-});
-
-// Add a simple test endpoint for PhotoAdmin debugging
-app.get('/api/admin-test', async (req, res) => {
-    try {
-        res.json({
-            success: true,
-            message: 'PhotoAdmin API is working',
-            timestamp: new Date().toISOString(),
-            databaseConnected: !!pool,
-            s3Configured: !!(process.env.AWS_ACCESS_KEY && process.env.AWS_SECRET_ACCESS_KEY)
-        });
-    } catch (error) {
-        console.error('Error in admin-test endpoint:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Add endpoint to get most recent upload date
-app.get('/api/recent-upload', async (req, res) => {
-    try {
-        const result = await pool.query(`
-            SELECT created_at 
-            FROM photo_metadata 
-            ORDER BY created_at DESC 
-            LIMIT 1
-        `);
-
-        const recentUpload = result.rows.length > 0 ? result.rows[0].created_at : null;
-        res.json({ recentUpload });
-    } catch (err) {
-        console.error('Error fetching recent upload:', err);
-        res.status(500).json({ error: 'Error fetching recent upload' });
-    }
-});
-
-// Add endpoint to get total storage size
-app.get('/api/storage-size', async (req, res) => {
-    try {
-        // Get all objects from S3 processed folder
-        const objects = await listS3Objects('processed/');
-
-        let totalSize = 0;
-        for (const obj of objects) {
-            totalSize += obj.Size || 0;
-        }
-
-        res.json({ totalSize });
-    } catch (err) {
-        console.error('Error calculating storage size:', err);
-        res.status(500).json({ error: 'Error calculating storage size' });
-    }
-});
-
-// Add endpoint to get S3 count
-app.get('/api/s3-count', async (req, res) => {
-    try {
-        const objects = await listS3Objects('processed/');
-        res.json({ count: objects.length });
-    } catch (err) {
-        console.error('Error counting S3 objects:', err);
-        res.status(500).json({ error: 'Error counting S3 objects' });
-    }
-});
-
-// Test endpoint for EXIF and checksum functionality
-app.post('/api/test-metadata', upload.single('image'), async (req, res) => {
-    try {
-        if (!req.file || !req.file.buffer) {
-            return res.status(400).json({ error: 'No image file received' });
-        }
-
-        const exifData = extractExifData(req.file.buffer);
-        const fileChecksum = generateFileChecksum(req.file.buffer);
-        const existingFile = await checkForDuplicate(fileChecksum);
-
-        res.json({
-            success: true,
-            originalFilename: req.file.originalname,
-            fileSize: req.file.size,
-            mimeType: req.file.mimetype,
-            checksum: fileChecksum,
-            isDuplicate: !!existingFile,
-            existingFile: existingFile ? existingFile.filename : null,
-            exifData: exifData
-        });
-    } catch (error) {
-        console.error('Error in test-metadata endpoint:', error);
-        res.status(500).json({ error: error.message });
     }
 });
 
@@ -2056,6 +2054,20 @@ function generateFileChecksum(buffer) {
 // Helper function to check for duplicate files
 async function checkForDuplicate(checksum) {
     try {
+        // First check if the file_checksum column exists
+        const columnCheck = await pool.query(`
+            SELECT EXISTS (
+                SELECT FROM information_schema.columns 
+                WHERE table_name = 'photo_metadata' 
+                AND column_name = 'file_checksum'
+            );
+        `);
+
+        if (!columnCheck.rows[0].exists) {
+            console.log('file_checksum column does not exist yet, skipping duplicate check');
+            return null;
+        }
+
         const result = await pool.query(
             'SELECT filename FROM photo_metadata WHERE file_checksum = $1',
             [checksum]
