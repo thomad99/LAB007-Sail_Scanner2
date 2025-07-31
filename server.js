@@ -781,9 +781,21 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
         }
 
         // Store metadata for each processed file
+        let dbInsertionSuccess = true;
+
+        // Ensure the photo_metadata table exists
+        try {
+            await createPhotoMetadataTable();
+            console.log('Photo metadata table verified/created');
+        } catch (tableErr) {
+            console.error('Error ensuring photo_metadata table exists:', tableErr);
+            dbInsertionSuccess = false;
+        }
+
         for (const file of processedFiles) {
             try {
-                await pool.query(
+                console.log(`Attempting to insert metadata for file: ${file.newFilename}`);
+                const result = await pool.query(
                     `INSERT INTO photo_metadata (
                         filename, sail_number, date, regatta_name, 
                         photographer_name, photographer_website, 
@@ -805,9 +817,16 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                         exifData.gps_altitude || null
                     ]
                 );
+                console.log(`Successfully inserted metadata for file: ${file.newFilename}, rows affected: ${result.rowCount}`);
             } catch (dbErr) {
-                console.error('Error storing metadata:', dbErr);
+                console.error('Error storing metadata for file:', file.newFilename, dbErr);
+                dbInsertionSuccess = false;
+                // Don't throw here, but mark that insertion failed
             }
+        }
+
+        if (!dbInsertionSuccess) {
+            console.error('Some or all database insertions failed');
         }
 
         res.json({
@@ -1904,6 +1923,79 @@ app.get('/api/verify-key', authenticateApiKey, (req, res) => {
             reset: res.get('X-RateLimit-Reset')
         }
     });
+});
+
+// Add debug endpoint to check database state
+app.get('/api/debug-database', async (req, res) => {
+    try {
+        // Check if table exists
+        const tableCheck = await pool.query(`
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'photo_metadata'
+            );
+        `);
+
+        const tableExists = tableCheck.rows[0].exists;
+
+        if (!tableExists) {
+            return res.json({
+                tableExists: false,
+                message: 'photo_metadata table does not exist'
+            });
+        }
+
+        // Get table structure
+        const columns = await pool.query(`
+            SELECT column_name, data_type, is_nullable
+            FROM information_schema.columns
+            WHERE table_schema = 'public' 
+            AND table_name = 'photo_metadata'
+            ORDER BY ordinal_position;
+        `);
+
+        // Get row count
+        const count = await pool.query('SELECT COUNT(*) as total FROM photo_metadata');
+
+        // Get recent entries
+        const recent = await pool.query(`
+            SELECT filename, sail_number, created_at 
+            FROM photo_metadata 
+            ORDER BY created_at DESC 
+            LIMIT 5
+        `);
+
+        res.json({
+            tableExists: true,
+            tableStructure: columns.rows,
+            totalRows: parseInt(count.rows[0].total),
+            recentEntries: recent.rows,
+            databaseConnected: !!pool
+        });
+    } catch (err) {
+        console.error('Error in debug-database endpoint:', err);
+        res.status(500).json({
+            error: err.message,
+            databaseConnected: !!pool
+        });
+    }
+});
+
+// Add a simple test endpoint for PhotoAdmin debugging
+app.get('/api/admin-test', async (req, res) => {
+    try {
+        res.json({
+            success: true,
+            message: 'PhotoAdmin API is working',
+            timestamp: new Date().toISOString(),
+            databaseConnected: !!pool,
+            s3Configured: !!(process.env.AWS_ACCESS_KEY && process.env.AWS_SECRET_ACCESS_KEY)
+        });
+    } catch (error) {
+        console.error('Error in admin-test endpoint:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // Add endpoint to get most recent upload date

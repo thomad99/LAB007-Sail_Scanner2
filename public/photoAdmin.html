@@ -285,6 +285,8 @@
             <div id="statusMessage" class="status-message"></div>
 
             <div style="margin-top: 30px;">
+                <button class="action-button" onclick="testAPI()">🧪 Test API Connection</button>
+                <button class="action-button" onclick="debugDatabase()">🔍 Debug Database</button>
                 <button class="action-button" onclick="validateFiles()">Validate Database Files</button>
                 <button class="action-button" onclick="cleanDatabase()">Clean Database Entries</button>
                 <button class="action-button" onclick="cleanOrphanedEntries()">Clean Orphaned Entries</button>
@@ -314,20 +316,33 @@
             try {
                 // Load database count
                 try {
+                    console.log('Fetching database count...');
                     const dbResponse = await fetch('/api/photo-count');
+                    console.log('Database count response status:', dbResponse.status);
+                    if (!dbResponse.ok) {
+                        throw new Error(`HTTP ${dbResponse.status}: ${dbResponse.statusText}`);
+                    }
                     const dbData = await dbResponse.json();
+                    console.log('Database count data:', dbData);
                     const element = document.getElementById('dbCount');
                     element.textContent = dbData.total;
                     element.className = 'stat-value success';
                 } catch (err) {
+                    console.error('Error loading database count:', err);
                     document.getElementById('dbCount').textContent = 'Error';
                     document.getElementById('dbCount').className = 'stat-value error';
                 }
 
                 // Load most recent upload date
                 try {
+                    console.log('Fetching recent upload...');
                     const recentResponse = await fetch('/api/recent-upload');
+                    console.log('Recent upload response status:', recentResponse.status);
+                    if (!recentResponse.ok) {
+                        throw new Error(`HTTP ${recentResponse.status}: ${recentResponse.statusText}`);
+                    }
                     const recentData = await recentResponse.json();
+                    console.log('Recent upload data:', recentData);
                     const element = document.getElementById('recentUpload');
                     if (recentData.recentUpload) {
                         const date = new Date(recentData.recentUpload);
@@ -337,54 +352,83 @@
                     }
                     element.className = 'stat-value success';
                 } catch (err) {
+                    console.error('Error loading recent upload:', err);
                     document.getElementById('recentUpload').textContent = 'Error';
                     document.getElementById('recentUpload').className = 'stat-value error';
                 }
 
                 // Load total storage size
                 try {
+                    console.log('Fetching storage size...');
                     const sizeResponse = await fetch('/api/storage-size');
+                    console.log('Storage size response status:', sizeResponse.status);
+                    if (!sizeResponse.ok) {
+                        throw new Error(`HTTP ${sizeResponse.status}: ${sizeResponse.statusText}`);
+                    }
                     const sizeData = await sizeResponse.json();
+                    console.log('Storage size data:', sizeData);
                     const element = document.getElementById('totalSize');
                     element.textContent = formatBytes(sizeData.totalSize);
                     element.className = 'stat-value success';
                 } catch (err) {
+                    console.error('Error loading storage size:', err);
                     document.getElementById('totalSize').textContent = 'Error';
                     document.getElementById('totalSize').className = 'stat-value error';
                 }
 
                 // Load S3 storage count
                 try {
+                    console.log('Fetching S3 count...');
                     const s3Response = await fetch('/api/s3-count');
+                    console.log('S3 count response status:', s3Response.status);
+                    if (!s3Response.ok) {
+                        throw new Error(`HTTP ${s3Response.status}: ${s3Response.statusText}`);
+                    }
                     const s3Data = await s3Response.json();
+                    console.log('S3 count data:', s3Data);
                     const element = document.getElementById('s3Count');
                     element.textContent = s3Data.count;
                     element.className = 'stat-value success';
                 } catch (err) {
+                    console.error('Error loading S3 count:', err);
                     document.getElementById('s3Count').textContent = 'Error';
                     document.getElementById('s3Count').className = 'stat-value error';
                 }
 
                 // Load uploads folder count
                 try {
+                    console.log('Fetching uploads count...');
                     const uploadsResponse = await fetch('/api/folder-count?folder=uploads');
+                    console.log('Uploads count response status:', uploadsResponse.status);
+                    if (!uploadsResponse.ok) {
+                        throw new Error(`HTTP ${uploadsResponse.status}: ${uploadsResponse.statusText}`);
+                    }
                     const uploadsData = await uploadsResponse.json();
+                    console.log('Uploads count data:', uploadsData);
                     const element = document.getElementById('uploadsCount');
                     element.textContent = uploadsData.count;
                     element.className = 'stat-value success';
                 } catch (err) {
+                    console.error('Error loading uploads count:', err);
                     document.getElementById('uploadsCount').textContent = 'Error';
                     document.getElementById('uploadsCount').className = 'stat-value error';
                 }
 
                 // Load orphaned count
                 try {
+                    console.log('Fetching orphaned count...');
                     const validationResponse = await fetch('/api/validate-files');
+                    console.log('Validation response status:', validationResponse.status);
+                    if (!validationResponse.ok) {
+                        throw new Error(`HTTP ${validationResponse.status}: ${validationResponse.statusText}`);
+                    }
                     const validationData = await validationResponse.json();
+                    console.log('Validation data:', validationData);
                     const element = document.getElementById('orphanedCount');
                     element.textContent = validationData.orphanedCount;
                     element.className = 'stat-value success';
                 } catch (err) {
+                    console.error('Error loading orphaned count:', err);
                     document.getElementById('orphanedCount').textContent = 'Error';
                     document.getElementById('orphanedCount').className = 'stat-value error';
                 }
@@ -509,6 +553,46 @@
             } catch (err) {
                 console.error('Error cleaning orphaned entries:', err);
                 showStatus('Error cleaning orphaned entries', 'error');
+            }
+        }
+
+        async function testAPI() {
+            try {
+                console.log('Testing API connection...');
+                const response = await fetch('/api/admin-test');
+                console.log('Test response status:', response.status);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log('Test API response:', data);
+
+                showStatus(`API Test: ${data.message} | DB: ${data.databaseConnected ? 'Connected' : 'Not Connected'} | S3: ${data.s3Configured ? 'Configured' : 'Not Configured'}`, 'success');
+            } catch (err) {
+                console.error('API test failed:', err);
+                showStatus(`API Test Failed: ${err.message}`, 'error');
+            }
+        }
+
+        async function debugDatabase() {
+            try {
+                console.log('Debugging database...');
+                const response = await fetch('/api/debug-database');
+                console.log('Debug response status:', response.status);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log('Debug data:', data);
+
+                showStatus(`Database Debug: ${data.message}`, 'info'); // Changed to info for debugging
+            } catch (err) {
+                console.error('Database debug failed:', err);
+                showStatus(`Database Debug Failed: ${err.message}`, 'error');
             }
         }
 

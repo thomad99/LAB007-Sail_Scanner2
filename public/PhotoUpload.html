@@ -976,11 +976,16 @@
                 console.log('Sail numbers:', sailNumbers);
                 console.log('Processed files:', dataProcessedFiles);
 
-                if (sailNumbers.length > 0) {
+                // Filter sail numbers by confidence level (>90%)
+                const highConfidenceSailNumbers = sailNumbers.filter(sailData =>
+                    sailData.confidence > 0.9
+                );
+
+                if (highConfidenceSailNumbers.length > 0) {
                     contentDiv.innerHTML = `
                         <div class="sail-numbers-list">
-                            <h4>Detected Sail Numbers:</h4>
-                            ${sailNumbers.map((sailData, index) => `
+                            <h4>Detected Sail Numbers (High Confidence >90%):</h4>
+                            ${highConfidenceSailNumbers.map((sailData, index) => `
                                 <div class="sail-number-item" style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px; border-left: 4px solid #28a745;">
                                     <div class="number" style="font-size: 1.2em; font-weight: bold; color: #28a745;">
                                         Sail #${sailData.number} 
@@ -993,6 +998,26 @@
                                             <strong>Sailor:</strong> ${sailData.skipperInfo.sailorName}
                                         </div>
                                     ` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } else if (sailNumbers.length > 0) {
+                    // Show low confidence detections for reference
+                    contentDiv.innerHTML = `
+                        <div class="sail-numbers-list">
+                            <h4>Low Confidence Detections (Filtered Out):</h4>
+                            <div style="color: #856404; padding: 10px; background: #fff3cd; border-radius: 5px; margin-bottom: 15px;">
+                                <strong>Note:</strong> Only sail numbers with >90% confidence are recorded. The following detections were below the threshold:
+                            </div>
+                            ${sailNumbers.map((sailData, index) => `
+                                <div class="sail-number-item" style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px; border-left: 4px solid #ffc107;">
+                                    <div class="number" style="font-size: 1.2em; font-weight: bold; color: #856404;">
+                                        Sail #${sailData.number} 
+                                        <span style="font-size: 0.8em; color: #666;">
+                                            (Confidence: ${(sailData.confidence * 100).toFixed(1)}% - Too Low)
+                                        </span>
+                                    </div>
                                 </div>
                             `).join('')}
                         </div>
