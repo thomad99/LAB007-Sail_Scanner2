@@ -474,6 +474,30 @@
             background-color: #0066cc !important;
             color: #ffffff;
         }
+
+        .metadata-header {
+            transition: background-color 0.2s ease;
+            padding: 10px;
+            border-radius: 5px;
+            user-select: none;
+        }
+
+        .metadata-header:hover {
+            background-color: #e9ecef;
+        }
+
+        .metadata-content {
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .metadata-toggle {
+            transition: transform 0.3s ease;
+        }
+
+        .metadata-toggle.expanded {
+            transform: rotate(180deg);
+        }
     </style>
 </head>
 
@@ -492,63 +516,69 @@
 
             <div class="metadata-section"
                 style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
-                <h3>Photo Information (Optional)</h3>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div>
-                        <label for="date">Date:</label>
-                        <input type="date" id="date" class="metadata-input">
-                    </div>
-                    <div>
-                        <label for="regattaName">Regatta Name:</label>
-                        <input type="text" id="regattaName" class="metadata-input" placeholder="Enter regatta name">
-                    </div>
-                    <div>
-                        <label for="yachtClub">Yacht Club:</label>
-                        <input type="text" id="yachtClub" class="metadata-input" list="yachtClubList">
-                        <datalist id="yachtClubList">
-                            <option value="Alamitos Bay Yacht Club">
-                            <option value="American Yacht Club">
-                            <option value="Annapolis Yacht Club">
-                            <option value="Atlanta Yacht Club">
-                            <option value="Austin Yacht Club">
-                            <option value="Avalon Yacht Club">
-                            <option value="Bay Head Yacht Club">
-                            <option value="Beverly Yacht Club">
-                            <option value="Chicago Yacht Club">
-                            <option value="Corinthian Yacht Club">
-                            <option value="Eastern Yacht Club">
-                            <option value="Fort Worth Yacht Club">
-                            <option value="Houston Yacht Club">
-                            <option value="Lake Norman Yacht Club">
-                            <option value="Larchmont Yacht Club">
-                            <option value="Long Beach Yacht Club">
-                            <option value="New York Yacht Club">
-                            <option value="Newport Harbor Yacht Club">
-                            <option value="San Diego Yacht Club">
-                            <option value="San Francisco Yacht Club">
-                            <option value="Seattle Yacht Club">
-                            <option value="St. Francis Yacht Club">
-                                <!-- Add more options as needed -->
-                        </datalist>
-                    </div>
-                    <div>
-                        <label for="photographerName">Photographer Name:</label>
-                        <input type="text" id="photographerName" class="metadata-input"
-                            placeholder="Enter photographer name">
-                    </div>
-                    <div>
-                        <label for="photographerWebsite">Photographer Website:</label>
-                        <input type="url" id="photographerWebsite" class="metadata-input"
-                            placeholder="Enter website URL">
-                    </div>
-                    <div>
-                        <label for="location">Location:</label>
-                        <input type="text" id="location" class="metadata-input" placeholder="Enter location">
-                    </div>
-                    <div>
-                        <label for="additionalTags">Additional Tags:</label>
-                        <input type="text" id="additionalTags" class="metadata-input"
-                            placeholder="Enter tags (comma separated)">
+                <div class="metadata-header" onclick="toggleMetadataSection()">
+                    <h3 style="margin: 0;">Photo Information (Optional)</h3>
+                    <span id="metadataToggle" class="metadata-toggle"
+                        style="font-size: 18px; font-weight: bold; color: #0066cc;">▼</span>
+                </div>
+                <div id="metadataContent" class="metadata-content" style="display: none;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <label for="date">Date:</label>
+                            <input type="date" id="date" class="metadata-input">
+                        </div>
+                        <div>
+                            <label for="regattaName">Regatta Name:</label>
+                            <input type="text" id="regattaName" class="metadata-input" placeholder="Enter regatta name">
+                        </div>
+                        <div>
+                            <label for="yachtClub">Yacht Club:</label>
+                            <input type="text" id="yachtClub" class="metadata-input" list="yachtClubList">
+                            <datalist id="yachtClubList">
+                                <option value="Alamitos Bay Yacht Club">
+                                <option value="American Yacht Club">
+                                <option value="Annapolis Yacht Club">
+                                <option value="Atlanta Yacht Club">
+                                <option value="Austin Yacht Club">
+                                <option value="Avalon Yacht Club">
+                                <option value="Bay Head Yacht Club">
+                                <option value="Beverly Yacht Club">
+                                <option value="Chicago Yacht Club">
+                                <option value="Corinthian Yacht Club">
+                                <option value="Eastern Yacht Club">
+                                <option value="Fort Worth Yacht Club">
+                                <option value="Houston Yacht Club">
+                                <option value="Lake Norman Yacht Club">
+                                <option value="Larchmont Yacht Club">
+                                <option value="Long Beach Yacht Club">
+                                <option value="New York Yacht Club">
+                                <option value="Newport Harbor Yacht Club">
+                                <option value="San Diego Yacht Club">
+                                <option value="San Francisco Yacht Club">
+                                <option value="Seattle Yacht Club">
+                                <option value="St. Francis Yacht Club">
+                                    <!-- Add more options as needed -->
+                            </datalist>
+                        </div>
+                        <div>
+                            <label for="photographerName">Photographer Name:</label>
+                            <input type="text" id="photographerName" class="metadata-input"
+                                placeholder="Enter photographer name">
+                        </div>
+                        <div>
+                            <label for="photographerWebsite">Photographer Website:</label>
+                            <input type="url" id="photographerWebsite" class="metadata-input"
+                                placeholder="Enter website URL">
+                        </div>
+                        <div>
+                            <label for="location">Location:</label>
+                            <input type="text" id="location" class="metadata-input" placeholder="Enter location">
+                        </div>
+                        <div>
+                            <label for="additionalTags">Additional Tags:</label>
+                            <input type="text" id="additionalTags" class="metadata-input"
+                                placeholder="Enter tags (comma separated)">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1108,6 +1138,22 @@
 
         // Restore values when the page loads
         document.addEventListener('DOMContentLoaded', restoreFormValues);
+
+        function toggleMetadataSection() {
+            const metadataContent = document.getElementById('metadataContent');
+            const metadataToggle = document.getElementById('metadataToggle');
+            const isCollapsed = metadataContent.style.display === 'none';
+
+            if (isCollapsed) {
+                metadataContent.style.display = 'block';
+                metadataToggle.textContent = '▲';
+                metadataToggle.classList.add('expanded');
+            } else {
+                metadataContent.style.display = 'none';
+                metadataToggle.textContent = '▼';
+                metadataToggle.classList.remove('expanded');
+            }
+        }
     </script>
 </body>
 

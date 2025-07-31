@@ -17,6 +17,8 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const ExifParser = require('exif-parser');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -594,7 +596,13 @@ async function createPhotoMetadataTable() {
                 photographer_website TEXT,
                 location TEXT,
                 additional_tags TEXT[],
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                -- New fields for enhanced metadata
+                file_checksum TEXT UNIQUE,
+                photo_timestamp TIMESTAMP,
+                gps_latitude DECIMAL,
+                gps_longitude DECIMAL,
+                gps_altitude DECIMAL
             )
         `);
         console.log('Photo metadata table created or verified');
@@ -646,6 +654,25 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
 
         const originalFilename = req.file.originalname;
         console.log('Processing file:', originalFilename);
+
+        // Extract EXIF data and generate checksum
+        const exifData = extractExifData(req.file.buffer);
+        const fileChecksum = generateFileChecksum(req.file.buffer);
+
+        console.log('File checksum:', fileChecksum);
+        console.log('EXIF data extracted:', exifData);
+
+        // Check for duplicate files
+        const existingFile = await checkForDuplicate(fileChecksum);
+        if (existingFile) {
+            console.log('Duplicate file detected:', existingFile.filename);
+            return res.status(409).json({
+                success: false,
+                error: 'Duplicate file detected',
+                existingFile: existingFile.filename,
+                message: 'This image has already been uploaded and processed.'
+            });
+        }
 
         // Initialize tracking variables
         let processingSteps = {
@@ -760,8 +787,8 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                     `INSERT INTO photo_metadata (
                         filename, sail_number, date, regatta_name, 
                         photographer_name, photographer_website, 
-                        location, additional_tags
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                        location, additional_tags, file_checksum, photo_timestamp, gps_latitude, gps_longitude, gps_altitude
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
                     [
                         file.newFilename,
                         file.sailNumber,
@@ -770,7 +797,12 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                         metadata.photographer_name || null,
                         metadata.photographer_website || null,
                         metadata.location || null,
-                        metadata.additional_tags || []
+                        metadata.additional_tags || [],
+                        fileChecksum,
+                        exifData.photo_timestamp || null,
+                        exifData.gps_latitude || null,
+                        exifData.gps_longitude || null,
+                        exifData.gps_altitude || null
                     ]
                 );
             } catch (dbErr) {
@@ -1348,7 +1380,12 @@ app.get('/api/search-photos', async (req, res) => {
             date,
             regatta_name,
             photographer_name,
-            location
+            location,
+            photo_timestamp_start,
+            photo_timestamp_end,
+            gps_latitude,
+            gps_longitude,
+            radius_km
         } = req.query;
 
         let query = `
@@ -1382,6 +1419,28 @@ app.get('/api/search-photos', async (req, res) => {
             query += ` AND location ILIKE $${paramCount}`;
             params.push(`%${location}%`);
             paramCount++;
+        }
+        if (photo_timestamp_start) {
+            query += ` AND photo_timestamp >= $${paramCount}`;
+            params.push(photo_timestamp_start);
+            paramCount++;
+        }
+        if (photo_timestamp_end) {
+            query += ` AND photo_timestamp <= $${paramCount}`;
+            params.push(photo_timestamp_end);
+            paramCount++;
+        }
+        if (gps_latitude && gps_longitude && radius_km) {
+            // Search within radius using Haversine formula
+            query += ` AND (
+                6371 * acos(
+                    cos(radians($${paramCount})) * cos(radians(gps_latitude)) * 
+                    cos(radians(gps_longitude) - radians($${paramCount + 1})) + 
+                    sin(radians($${paramCount})) * sin(radians(gps_latitude))
+                ) <= $${paramCount + 2}
+            )`;
+            params.push(parseFloat(gps_latitude), parseFloat(gps_longitude), parseFloat(radius_km));
+            paramCount += 3;
         }
 
         query += ` ORDER BY created_at DESC`;
@@ -1841,3 +1900,102 @@ app.get('/api/verify-key', authenticateApiKey, (req, res) => {
         }
     });
 });
+
+// Test endpoint for EXIF and checksum functionality
+app.post('/api/test-metadata', upload.single('image'), async (req, res) => {
+    try {
+        if (!req.file || !req.file.buffer) {
+            return res.status(400).json({ error: 'No image file received' });
+        }
+
+        const exifData = extractExifData(req.file.buffer);
+        const fileChecksum = generateFileChecksum(req.file.buffer);
+        const existingFile = await checkForDuplicate(fileChecksum);
+
+        res.json({
+            success: true,
+            originalFilename: req.file.originalname,
+            fileSize: req.file.size,
+            mimeType: req.file.mimetype,
+            checksum: fileChecksum,
+            isDuplicate: !!existingFile,
+            existingFile: existingFile ? existingFile.filename : null,
+            exifData: exifData
+        });
+    } catch (error) {
+        console.error('Error in test-metadata endpoint:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Helper function to extract EXIF data from image buffer
+function extractExifData(buffer) {
+    try {
+        const parser = ExifParser.create(buffer);
+        const result = parser.parse();
+
+        const exifData = {
+            photo_timestamp: null,
+            gps_latitude: null,
+            gps_longitude: null,
+            gps_altitude: null
+        };
+
+        // Extract photo timestamp (try multiple EXIF fields)
+        if (result.tags) {
+            if (result.tags.DateTimeOriginal) {
+                exifData.photo_timestamp = new Date(result.tags.DateTimeOriginal * 1000);
+            } else if (result.tags.DateTime) {
+                exifData.photo_timestamp = new Date(result.tags.DateTime * 1000);
+            } else if (result.tags.CreateDate) {
+                exifData.photo_timestamp = new Date(result.tags.CreateDate * 1000);
+            }
+        }
+
+        // Extract GPS data
+        if (result.gps) {
+            if (result.gps.GPSLatitude && result.gps.GPSLongitude) {
+                exifData.gps_latitude = result.gps.GPSLatitude;
+                exifData.gps_longitude = result.gps.GPSLongitude;
+            }
+            if (result.gps.GPSAltitude) {
+                exifData.gps_altitude = result.gps.GPSAltitude;
+            }
+        }
+
+        console.log('EXIF extraction successful:', {
+            hasTimestamp: !!exifData.photo_timestamp,
+            hasGPS: !!(exifData.gps_latitude && exifData.gps_longitude),
+            hasAltitude: !!exifData.gps_altitude
+        });
+
+        return exifData;
+    } catch (error) {
+        console.log('No EXIF data found or error parsing EXIF:', error.message);
+        return {
+            photo_timestamp: null,
+            gps_latitude: null,
+            gps_longitude: null,
+            gps_altitude: null
+        };
+    }
+}
+
+// Helper function to generate file checksum
+function generateFileChecksum(buffer) {
+    return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+// Helper function to check for duplicate files
+async function checkForDuplicate(checksum) {
+    try {
+        const result = await pool.query(
+            'SELECT filename FROM photo_metadata WHERE file_checksum = $1',
+            [checksum]
+        );
+        return result.rows.length > 0 ? result.rows[0] : null;
+    } catch (error) {
+        console.error('Error checking for duplicate:', error);
+        return null;
+    }
+}

@@ -18,7 +18,8 @@
     "stripe": "^18.1.0",
     "busboy": "^1.6.0",
     "bcrypt": "^5.1.0",
-    "jsonwebtoken": "^9.0.0"
+    "jsonwebtoken": "^9.0.0",
+    "exif-parser": "^0.1.12"
   },
   "engines": {
     "node": ">=14.0.0"
