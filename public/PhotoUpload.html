@@ -566,6 +566,90 @@
         .metadata-toggle.expanded {
             transform: rotate(180deg);
         }
+
+        /* Metadata display styles for results */
+        .result-metadata-section {
+            margin-top: 15px;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .result-metadata-header {
+            background: #f8f9fa;
+            padding: 10px 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #dee2e6;
+            transition: background-color 0.2s ease;
+        }
+
+        .result-metadata-header:hover {
+            background: #e9ecef;
+        }
+
+        .result-metadata-header h4 {
+            margin: 0;
+            color: #0066cc;
+            font-size: 14px;
+        }
+
+        .result-metadata-toggle {
+            font-size: 16px;
+            font-weight: bold;
+            color: #0066cc;
+            transition: transform 0.3s ease;
+        }
+
+        .result-metadata-toggle.expanded {
+            transform: rotate(180deg);
+        }
+
+        .result-metadata-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            background: white;
+        }
+
+        .result-metadata-content.expanded {
+            max-height: 500px;
+        }
+
+        .result-metadata-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            padding: 15px;
+        }
+
+        .result-metadata-item {
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border-left: 3px solid #0066cc;
+        }
+
+        .result-metadata-item strong {
+            color: #0066cc;
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+
+        .result-metadata-item .value {
+            color: #333;
+            margin-left: 5px;
+            font-size: 13px;
+        }
+
+        .result-metadata-item .no-data {
+            color: #6c757d;
+            font-style: italic;
+            font-size: 13px;
+        }
     </style>
 </head>
 
@@ -1001,6 +1085,7 @@
                                 </div>
                             `).join('')}
                         </div>
+                        ${generateMetadataSection(data, file)}
                     `;
                 } else if (sailNumbers.length > 0) {
                     // Show low confidence detections for reference
@@ -1021,12 +1106,14 @@
                                 </div>
                             `).join('')}
                         </div>
+                        ${generateMetadataSection(data, file)}
                     `;
                 } else {
                     contentDiv.innerHTML = `
                         <div class="no-numbers" style="color: #dc3545; padding: 10px; background: #f8f9fa; border-radius: 5px;">
                             <div style="font-weight: bold;">No sail numbers detected</div>
                         </div>
+                        ${generateMetadataSection(data, file)}
                     `;
                 }
 
@@ -1081,6 +1168,107 @@
                     ⚠ Processed with fallback
                 `;
                 resultCard.className = 'result-card error';
+            }
+        }
+
+        // Function to generate metadata section for results
+        function generateMetadataSection(data, file) {
+            const metadataId = `metadata-${file.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+            const contentId = `metadata-content-${file.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+            // Get form data
+            const formData = {
+                filename: file.name,
+                date: document.getElementById('date').value,
+                regatta_name: document.getElementById('regattaName').value,
+                yacht_club: document.getElementById('yachtClub').value,
+                photographer_name: document.getElementById('photographerName').value,
+                photographer_website: document.getElementById('photographerWebsite').value,
+                location: document.getElementById('location').value,
+                additional_tags: document.getElementById('additionalTags').value,
+                file_size: file.size,
+                file_type: file.type,
+                upload_timestamp: new Date().toISOString()
+            };
+
+            // Add any additional data from the server response
+            if (data && data.processedFiles && data.processedFiles.length > 0) {
+                const processedFile = data.processedFiles.find(pf => pf.originalFilename === file.name);
+                if (processedFile) {
+                    Object.assign(formData, {
+                        new_filename: processedFile.newFilename,
+                        sail_numbers: data.sailNumbers?.numbers?.map(n => n.number).join(', ') || 'None detected',
+                        confidence_scores: data.sailNumbers?.numbers?.map(n => `${n.number}: ${(n.confidence * 100).toFixed(1)}%`).join(', ') || 'None',
+                        processing_status: 'Completed'
+                    });
+                }
+            }
+
+            const metadataFields = [
+                { key: 'filename', label: 'Original Filename' },
+                { key: 'new_filename', label: 'Processed Filename' },
+                { key: 'date', label: 'Date' },
+                { key: 'regatta_name', label: 'Regatta Name' },
+                { key: 'yacht_club', label: 'Yacht Club' },
+                { key: 'photographer_name', label: 'Photographer' },
+                { key: 'photographer_website', label: 'Photographer Website' },
+                { key: 'location', label: 'Location' },
+                { key: 'additional_tags', label: 'Additional Tags' },
+                { key: 'sail_numbers', label: 'Detected Sail Numbers' },
+                { key: 'confidence_scores', label: 'Confidence Scores' },
+                { key: 'file_size', label: 'File Size', formatter: (value) => value ? `${(value / 1024 / 1024).toFixed(2)} MB` : null },
+                { key: 'file_type', label: 'File Type' },
+                { key: 'upload_timestamp', label: 'Upload Time', formatter: (value) => value ? new Date(value).toLocaleString() : null },
+                { key: 'processing_status', label: 'Processing Status' }
+            ];
+
+            const metadataItems = metadataFields.map(field => {
+                const value = formData[field.key];
+                const formattedValue = field.formatter ? field.formatter(value) : value;
+
+                if (formattedValue && formattedValue !== 'null' && formattedValue !== 'undefined' && formattedValue !== '') {
+                    return `
+                        <div class="result-metadata-item">
+                            <strong>${field.label}:</strong>
+                            <span class="value">${formattedValue}</span>
+                        </div>
+                    `;
+                } else {
+                    return `
+                        <div class="result-metadata-item">
+                            <strong>${field.label}:</strong>
+                            <span class="no-data">Not provided</span>
+                        </div>
+                    `;
+                }
+            }).join('');
+
+            return `
+                <div class="result-metadata-section" id="${metadataId}">
+                    <div class="result-metadata-header" onclick="toggleResultMetadata('${metadataId}', '${contentId}')">
+                        <h4>📋 View All Captured Metadata</h4>
+                        <span class="result-metadata-toggle" id="toggle-${metadataId}">▼</span>
+                    </div>
+                    <div class="result-metadata-content" id="${contentId}">
+                        <div class="result-metadata-grid">
+                            ${metadataItems}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Function to toggle result metadata section
+        function toggleResultMetadata(metadataId, contentId) {
+            const content = document.getElementById(contentId);
+            const toggle = document.getElementById(`toggle-${metadataId}`);
+
+            if (content.classList.contains('expanded')) {
+                content.classList.remove('expanded');
+                toggle.classList.remove('expanded');
+            } else {
+                content.classList.add('expanded');
+                toggle.classList.add('expanded');
             }
         }
 
