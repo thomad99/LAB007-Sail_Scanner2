@@ -120,24 +120,6 @@
             margin: 5px 0;
         }
 
-        .download-section {
-            margin-top: 15px;
-            text-align: center;
-        }
-
-        .download-section button {
-            background: #0066cc;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-
-        .download-section button:hover {
-            background: #0052a3;
-        }
-
         .no-skipper {
             color: #666;
             font-style: italic;
@@ -239,28 +221,6 @@
             background: #f8d7da;
             color: #721c24;
             border: 1px solid #f5c6cb;
-        }
-
-        .batch-actions {
-            margin: 20px 0;
-            padding: 15px;
-            background: #f0f8ff;
-            border-radius: 5px;
-            text-align: center;
-        }
-
-        .download-all-btn {
-            background: #0066cc;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-
-        .download-all-btn:hover {
-            background: #0052a3;
         }
 
         .results-list {
@@ -467,13 +427,6 @@
             }
         }
 
-        /* Add this to detect touch devices */
-        @media (hover: none) {
-            .download-section {
-                display: none;
-            }
-        }
-
         .metadata-input {
             width: 100%;
             padding: 8px;
@@ -531,6 +484,12 @@
 
     <div class="main-container">
         <div class="content-wrapper">
+            <div class="upload-section">
+                <h2>Upload Sail Photos</h2>
+                <input type="file" id="imageInput" accept="image/*" multiple>
+                <p>Select one or more images to analyze</p>
+            </div>
+
             <div class="metadata-section"
                 style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
                 <h3>Photo Information (Optional)</h3>
@@ -594,20 +553,9 @@
                 </div>
             </div>
 
-            <div class="upload-section">
-                <h2>Upload Sail Photos</h2>
-                <input type="file" id="imageInput" accept="image/*" multiple>
-                <p>Select one or more images to analyze</p>
-            </div>
-
             <div id="topResultsBox" class="sail-number-display">
                 <h2>Results</h2>
                 <div class="results-list"></div>
-            </div>
-
-            <div id="batchActions" class="batch-actions" style="display: none;">
-                <button id="downloadAllBtn" class="download-all-btn">Download All Renamed Files</button>
-                <div class="batch-summary"></div>
             </div>
 
             <img id="preview" style="display: none;">
@@ -653,34 +601,6 @@
                     <div class="progress-fill"></div>
                 </div>
             </div>
-
-            <div class="results-container">
-                <!-- Sail numbers and file listings here -->
-
-                <!-- Always show the Download All section -->
-                <div class="batch-download" style="
-                    margin-top: 30px;
-                    padding: 20px;
-                    background: #f8f9fa;
-                    border-radius: 8px;
-                    text-align: center;
-                    border: 1px solid #dee2e6;
-                ">
-                    <button id="mainDownloadAllBtn" onclick="downloadAllFiles()" class="download-all-btn"
-                        style="padding: 15px 40px; font-size: 1.2em;">
-                        Download All Renamed Files
-                    </button>
-                    <div id="processedCount" class="processed-count" style="margin-top: 10px; color: #666;">
-                        No files processed yet
-                    </div>
-                </div>
-            </div>
-
-            <div class="status-section">
-                <h3>System Status</h3>
-                <div id="uploadCount">Files in Upload Directory: Loading...</div>
-                <div id="processedCount">Images in S3 Storage: Loading...</div>
-            </div>
         </div>
     </div>
 
@@ -702,8 +622,6 @@
         const numberDebug = document.getElementById('numberDebug');
         const debugToggle = document.getElementById('debugToggle');
         const processingStatus = document.getElementById('processingStatus');
-        const batchActions = document.getElementById('batchActions');
-        const downloadAllBtn = document.getElementById('downloadAllBtn');
         const resultsContainer = document.querySelector('.results-list');
         window.processedFiles = [];
         const batchProgress = document.getElementById('batchProgress');
@@ -812,7 +730,6 @@
         });
 
         imageInput.addEventListener('change', handleFiles);
-        downloadAllBtn.addEventListener('click', downloadAllFiles);
 
         async function waitForRateLimit() {
             const now = Date.now();
@@ -845,22 +762,9 @@
                     });
 
                     // Update UI to show we're starting
-                    batchActions.style.display = 'block';
+                    // batchActions.style.display = 'block'; // This line is removed
                     batchProgress.style.display = 'block';
                     updateBatchProgress();
-
-                    // Update the download button status
-                    const processedCount = document.getElementById('processedCount');
-                    if (processedCount) {
-                        processedCount.innerHTML = `Processing ${totalFiles} file(s)...`;
-                    }
-
-                    // Update download button text to indicate processing
-                    const downloadButton = document.getElementById('mainDownloadAllBtn');
-                    if (downloadButton) {
-                        downloadButton.disabled = true;
-                        downloadButton.textContent = `Processing ${totalFiles} file(s)...`;
-                    }
 
                     // Create result cards for all files first
                     files.forEach(file => {
@@ -1089,7 +993,7 @@
             console.log('Total completed files:', completedFiles);
             console.log('Current processedFiles length:', window.processedFiles.length);
 
-            const summary = batchActions.querySelector('.batch-summary');
+            const summary = document.querySelector('.batch-summary');
             const processedCount = document.getElementById('processedCount');
             const totalFiles = completedFiles; // Use the global completedFiles count
             const successCount = window.processedFiles.length;
@@ -1107,143 +1011,6 @@
                 processedCount.innerHTML = `
                     ${successCount} files ready for download
                 `;
-
-                // Update the download button state
-                const downloadButton = document.getElementById('mainDownloadAllBtn');
-                if (downloadButton) {
-                    console.log(`Updating download button: ${successCount} files available`);
-                    downloadButton.disabled = successCount === 0;
-                    if (successCount === 0) {
-                        downloadButton.textContent = 'No files to download';
-                    } else {
-                        downloadButton.textContent = `Download ${successCount} Renamed File${successCount !== 1 ? 's' : ''}`;
-                    }
-                }
-            }
-        }
-
-        async function downloadFile(url, filename) {
-            try {
-                console.log(`Attempting to download file: ${url}`);
-
-                // Check if URL is valid
-                if (!url || !url.startsWith('/')) {
-                    console.error(`Invalid download URL: ${url}`);
-                    throw new Error(`Invalid download URL`);
-                }
-
-                // Make absolute URL if needed
-                const fullUrl = url.startsWith('http') ? url : window.location.origin + url;
-                console.log(`Downloading from full URL: ${fullUrl}`);
-
-                // Fetch the file with proper headers
-                const response = await fetch(fullUrl, {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/octet-stream'
-                    },
-                    cache: 'no-store'
-                });
-
-                // Check for successful response
-                if (!response.ok) {
-                    console.error(`Download failed with status: ${response.status}`);
-                    throw new Error(`Download failed with status ${response.status}`);
-                }
-
-                // Get the file content
-                const blob = await response.blob();
-
-                // Verify we got data
-                if (!blob || blob.size === 0) {
-                    console.error('Downloaded file is empty');
-                    throw new Error('Downloaded file is empty');
-                }
-
-                console.log(`File downloaded successfully, size: ${blob.size} bytes, type: ${blob.type}`);
-
-                // Create a download link
-                const downloadUrl = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = downloadUrl;
-                a.download = filename;
-                a.style.display = 'none';
-
-                // Add to document, click, and clean up
-                document.body.appendChild(a);
-                a.click();
-
-                // Clean up
-                setTimeout(() => {
-                    URL.revokeObjectURL(downloadUrl);
-                    document.body.removeChild(a);
-                    console.log(`Download of ${filename} complete and link removed`);
-                }, 100);
-
-                return true;
-            } catch (err) {
-                console.error(`Download error for ${filename}:`, err);
-                alert(`Error downloading ${filename}: ${err.message}`);
-                return false;
-            }
-        }
-
-        async function downloadAllFiles() {
-            const downloadLinks = document.querySelectorAll('.download-link');
-            if (downloadLinks.length === 0) {
-                console.error('No files to download');
-                return;
-            }
-
-            // Create a temporary link for each file and trigger download
-            downloadLinks.forEach(link => {
-                const url = link.getAttribute('data-url');
-                const filename = link.getAttribute('data-filename');
-
-                if (url && filename) {
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = filename;
-                    a.style.display = 'none';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                }
-            });
-        }
-
-        function displayProcessedFiles(files) {
-            const fileList = document.getElementById('fileList');
-            fileList.innerHTML = ''; // Clear existing content
-
-            if (!files || files.length === 0) {
-                fileList.innerHTML = '<p>No files were processed.</p>';
-                return;
-            }
-
-            const fileListHTML = files.map(file => `
-                <div class="file-item">
-                    <span class="file-info">
-                        Sail Number: ${file.sailNumber}<br>
-                        Sailor: ${file.sailorName}<br>
-                        File: ${file.newFilename}
-                    </span>
-                    <a href="${file.downloadUrl}" 
-                       class="download-link" 
-                       data-url="${file.downloadUrl}" 
-                       data-filename="${file.newFilename}"
-                       style="display: none;">
-                        Download
-                    </a>
-                </div>
-            `).join('');
-
-            fileList.innerHTML = fileListHTML;
-
-            // Show the download all button if we have files
-            const downloadAllBtn = document.getElementById('downloadAllBtn');
-            if (downloadAllBtn) {
-                downloadAllBtn.style.display = 'block';
             }
         }
 
@@ -1265,15 +1032,6 @@
             }
         }
 
-        // Add function to download all versions
-        async function downloadAllVersions(files) {
-            for (const file of files) {
-                await downloadFile(file.downloadUrl, file.newFilename);
-                // Small delay between downloads
-                await new Promise(resolve => setTimeout(resolve, 500));
-            }
-        }
-
         function toggleDebug(checkbox) {
             const debugPanel = document.getElementById('debugPanel');
             debugPanel.style.display = checkbox.checked ? 'block' : 'none';
@@ -1287,12 +1045,6 @@
         // Add this function to handle mobile-specific adjustments
         function setupMobileLayout() {
             if (isMobileDevice()) {
-                // Hide download section on mobile
-                const downloadSection = document.querySelector('.download-section');
-                if (downloadSection) {
-                    downloadSection.style.display = 'none';
-                }
-
                 // Adjust metadata section for mobile
                 const metadataSection = document.querySelector('.metadata-section');
                 if (metadataSection) {
@@ -1356,35 +1108,6 @@
 
         // Restore values when the page loads
         document.addEventListener('DOMContentLoaded', restoreFormValues);
-
-        // Update the folder count display function
-        function updateFolderCounts() {
-            // Check upload folder
-            fetch('/api/folder-count?folder=uploads')
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('uploadCount').textContent =
-                        `Files in Upload Directory: ${data.count}`;
-                })
-                .catch(error => {
-                    console.error('Error fetching upload count:', error);
-                    document.getElementById('uploadCount').textContent =
-                        'Files in Upload Directory: Error loading';
-                });
-
-            // Check processed folder (now S3)
-            fetch('/api/folder-count?folder=processed')
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('processedCount').textContent =
-                        `Images in S3 Storage: ${data.count}`;
-                })
-                .catch(error => {
-                    console.error('Error fetching processed count:', error);
-                    document.getElementById('processedCount').textContent =
-                        'Images in S3 Storage: Error loading';
-                });
-        }
     </script>
 </body>
 
