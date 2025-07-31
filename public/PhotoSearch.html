@@ -489,6 +489,38 @@
             background: #218838;
         }
 
+        /* Add metadata styles */
+        .modal-metadata {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+
+        .metadata-item {
+            padding: 8px 12px;
+            background: white;
+            border-radius: 4px;
+            border-left: 3px solid #0066cc;
+            margin-bottom: 8px;
+        }
+
+        .metadata-item strong {
+            color: #0066cc;
+            font-weight: 600;
+        }
+
+        .metadata-item .value {
+            color: #333;
+            margin-left: 5px;
+        }
+
+        .metadata-item .no-data {
+            color: #6c757d;
+            font-style: italic;
+        }
+
         /* Add thumbnail watermark CSS */
         .thumbnail-watermark {
             position: absolute;
@@ -596,6 +628,14 @@
                 <img id="modalImage" class="modal-image" src="" alt="Preview">
                 <div class="modal-watermark" id="modalWatermark"></div>
                 <button id="purchaseFab" class="purchase-fab" style="display:none;">Purchase Photo</button>
+            </div>
+            <div class="modal-metadata" id="modalMetadata"
+                style="margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                <h3 style="margin: 0 0 15px 0; color: #0066cc;">Photo Metadata</h3>
+                <div id="metadataContent"
+                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                    <!-- Metadata will be populated here -->
+                </div>
             </div>
         </div>
     </div>
@@ -789,9 +829,54 @@
             const modalImg = document.getElementById('modalImage');
             const modalWatermark = document.getElementById('modalWatermark');
             const purchaseFab = document.getElementById('purchaseFab');
+            const modalMetadata = document.getElementById('modalMetadata');
+            const metadataContent = document.getElementById('metadataContent');
 
             modalImg.src = photo.url;
             modalImg.alt = `Sail number ${photo.sail_number}`;
+
+            // Clear previous metadata
+            metadataContent.innerHTML = '';
+
+            // Populate metadata
+            const metadataFields = [
+                { key: 'filename', label: 'Filename' },
+                { key: 'sail_number', label: 'Sail Number' },
+                { key: 'date', label: 'Date', formatter: (value) => value ? new Date(value).toLocaleDateString() : null },
+                { key: 'regatta_name', label: 'Regatta Name' },
+                { key: 'yacht_club', label: 'Yacht Club' },
+                { key: 'photographer_name', label: 'Photographer' },
+                { key: 'photographer_website', label: 'Photographer Website' },
+                { key: 'location', label: 'Location' },
+                { key: 'additional_tags', label: 'Additional Tags', formatter: (value) => Array.isArray(value) ? value.join(', ') : value },
+                { key: 'photo_timestamp', label: 'Photo Timestamp', formatter: (value) => value ? new Date(value).toLocaleString() : null },
+                { key: 'gps_latitude', label: 'GPS Latitude' },
+                { key: 'gps_longitude', label: 'GPS Longitude' },
+                { key: 'gps_altitude', label: 'GPS Altitude' },
+                { key: 'created_at', label: 'Upload Date', formatter: (value) => value ? new Date(value).toLocaleString() : null }
+            ];
+
+            metadataFields.forEach(field => {
+                const value = photo[field.key];
+                const formattedValue = field.formatter ? field.formatter(value) : value;
+
+                const metadataItem = document.createElement('div');
+                metadataItem.className = 'metadata-item';
+
+                if (formattedValue && formattedValue !== 'null' && formattedValue !== 'undefined') {
+                    metadataItem.innerHTML = `
+                        <strong>${field.label}:</strong>
+                        <span class="value">${formattedValue}</span>
+                    `;
+                } else {
+                    metadataItem.innerHTML = `
+                        <strong>${field.label}:</strong>
+                        <span class="no-data">Not available</span>
+                    `;
+                }
+
+                metadataContent.appendChild(metadataItem);
+            });
 
             // Check if purchased
             const isPurchased = await checkImagePurchase(photo.filename);
