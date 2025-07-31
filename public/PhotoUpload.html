@@ -981,8 +981,8 @@
                         <div class="sail-numbers-list">
                             <h4>Detected Sail Numbers:</h4>
                             ${sailNumbers.map((sailData, index) => `
-                                <div class="sail-number-item" style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
-                                    <div class="number" style="font-size: 1.2em; font-weight: bold;">
+                                <div class="sail-number-item" style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px; border-left: 4px solid #28a745;">
+                                    <div class="number" style="font-size: 1.2em; font-weight: bold; color: #28a745;">
                                         Sail #${sailData.number} 
                                         <span style="font-size: 0.8em; color: #666;">
                                             (Confidence: ${(sailData.confidence * 100).toFixed(1)}%)
@@ -992,7 +992,7 @@
                                         <div class="sailor-info" style="margin-top: 5px; color: #28a745;">
                                             <strong>Sailor:</strong> ${sailData.skipperInfo.sailorName}
                                         </div>
-                                    ` : '<div class="no-sailor" style="color: #dc3545; margin-top: 5px;">No sailor information found</div>'}
+                                    ` : ''}
                                 </div>
                             `).join('')}
                         </div>
@@ -1002,31 +1002,6 @@
                         <div class="no-numbers" style="color: #dc3545; padding: 10px; background: #f8f9fa; border-radius: 5px;">
                             <div style="font-weight: bold;">No sail numbers detected</div>
                             <div style="margin-top: 5px; font-size: 0.9em;">File will be renamed with NOSAIL prefix</div>
-                        </div>
-                    `;
-                }
-
-                // Add files section separately (always show if files exist)
-                if (dataProcessedFiles && dataProcessedFiles.length > 0) {
-                    contentDiv.innerHTML += `
-                        <div class="generated-files" style="margin-top: 20px;">
-                            <h4>Generated Files:</h4>
-                            ${dataProcessedFiles.map(file => `
-                                <div class="file-item" style="margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 5px;">
-                                    <div style="font-weight: bold;">
-                                        ${file.sailNumber === 'NOSAIL' ? 'No Sail' : 'Sail #' + file.sailNumber}
-                                        ${file.sailorName !== 'NONAME' ? ' - ' + file.sailorName : ''}
-                                    </div>
-                                    <div style="color: #666; margin: 5px 0;">${file.newFilename}</div>
-                                    <div style="color: #28a745; font-size: 0.9em;">✓ File processed and stored successfully</div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    `;
-                } else {
-                    contentDiv.innerHTML += `
-                        <div class="no-files" style="margin-top: 20px; color: #dc3545; padding: 10px; background: #f8f9fa; border-radius: 5px;">
-                            No files were generated
                         </div>
                     `;
                 }
