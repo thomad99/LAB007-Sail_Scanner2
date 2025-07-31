@@ -112,7 +112,7 @@
             background: #0066cc;
             color: white;
             border: none;
-            padding: 8px 16px;
+            padding: 16px 16px;
             border-radius: 5px;
             cursor: pointer;
             margin-top: 15px;
@@ -286,7 +286,7 @@
             background: #dc3545;
             color: white;
             border: none;
-            padding: 8px 16px;
+            padding: 16px 16px;
             border-radius: 5px;
             cursor: pointer;
             margin-top: 15px;
@@ -398,37 +398,7 @@
             }
         }
 
-        .auth-section {
-            background: #fff;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px auto;
-            max-width: 400px;
-            text-align: center;
-        }
 
-        .auth-form {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            margin-top: 15px;
-        }
-
-        .auth-input {
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-
-        .auth-button {
-            background: #0066cc;
-            color: white;
-            border: none;
-            padding: 10px;
-            border-radius: 4px;
-            cursor: pointer;
-        }
 
         .watermark-overlay {
             position: absolute;
@@ -546,15 +516,7 @@
         <img src="lovesailing-header.jpg" alt="LoveSailing Header" class="logo">
     </div>
 
-    <div id="authSection" class="auth-section">
-        <h3>Sign In</h3>
-        <div class="auth-form">
-            <input type="email" id="email" placeholder="Email" class="auth-input">
-            <input type="password" id="password" placeholder="Password" class="auth-input">
-            <button onclick="login()" class="auth-button">Sign In</button>
-            <button onclick="showSignup()" class="auth-button" style="background: #6c757d;">Create Account</button>
-        </div>
-    </div>
+
 
     <div class="main-container">
         <div class="search-section">
@@ -647,61 +609,12 @@
     </div>
 
     <script>
-        let stripe;
-        let authToken = localStorage.getItem('authToken');
-        let purchasedImages = new Set();
-
-        // Initialize Stripe with config from server
-        async function initializeStripe() {
-            try {
-                const response = await fetch('/api/config');
-                const config = await response.json();
-                stripe = Stripe(config.stripePublishableKey);
-            } catch (err) {
-                console.error('Error initializing Stripe:', err);
-            }
-        }
-
         // Call this when the page loads
         document.addEventListener('DOMContentLoaded', async () => {
-            await initializeStripe();
-            updateAuthUI();
             loadPhotoCount();
         });
 
-        // Update the purchaseImage function to ensure Stripe is initialized
-        async function purchaseImage(filename) {
-            if (!authToken) {
-                alert('Please sign in to purchase images');
-                return;
-            }
 
-            if (!stripe) {
-                alert('Payment system is not initialized. Please try again in a moment.');
-                return;
-            }
-
-            try {
-                const response = await fetch('/api/create-payment-session', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${authToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ imageFilename: filename })
-                });
-                const session = await response.json();
-
-                if (session.url) {
-                    window.location.href = session.url;
-                } else {
-                    alert('Error creating payment session');
-                }
-            } catch (err) {
-                console.error('Error processing purchase:', err);
-                alert('Error processing purchase');
-            }
-        }
 
         async function loadPhotoCount() {
             try {
@@ -828,7 +741,6 @@
             const modal = document.getElementById('imageModal');
             const modalImg = document.getElementById('modalImage');
             const modalWatermark = document.getElementById('modalWatermark');
-            const purchaseFab = document.getElementById('purchaseFab');
             const modalMetadata = document.getElementById('modalMetadata');
             const metadataContent = document.getElementById('metadataContent');
 
@@ -878,42 +790,16 @@
                 metadataContent.appendChild(metadataItem);
             });
 
-            // Check if purchased
-            const isPurchased = await checkImagePurchase(photo.filename);
-            if (isPurchased) {
-                modalWatermark.style.display = 'none';
-                purchaseFab.style.display = 'none';
-                // Add or show a Download Photo button
-                let downloadBtn = document.getElementById('downloadPhotoBtn');
-                if (!downloadBtn) {
-                    downloadBtn = document.createElement('a');
-                    downloadBtn.id = 'downloadPhotoBtn';
-                    downloadBtn.className = 'purchase-fab';
-                    downloadBtn.textContent = 'Download Photo';
-                    downloadBtn.style.right = '24px';
-                    downloadBtn.style.bottom = '24px';
-                    downloadBtn.style.position = 'absolute';
-                    modalImg.parentNode.appendChild(downloadBtn);
-                }
-                downloadBtn.href = photo.url;
-                downloadBtn.download = photo.filename;
-                downloadBtn.style.display = 'block';
-            } else {
-                modalWatermark.style.display = '';
-                purchaseFab.style.display = 'block';
-                purchaseFab.onclick = function () { purchaseImage(photo.filename); };
-                // Hide Download Photo button if present
-                const downloadBtn = document.getElementById('downloadPhotoBtn');
-                if (downloadBtn) downloadBtn.style.display = 'none';
-            }
+            // Hide watermark and purchase button for now
+            modalWatermark.style.display = 'none';
+            const purchaseFab = document.getElementById('purchaseFab');
+            if (purchaseFab) purchaseFab.style.display = 'none';
+
             modal.style.display = 'flex';
         }
 
         function closeModal() {
             document.getElementById('imageModal').style.display = 'none';
-            document.getElementById('purchaseFab').style.display = 'none';
-            const downloadBtn = document.getElementById('downloadPhotoBtn');
-            if (downloadBtn) downloadBtn.style.display = 'none';
             currentModalPhoto = null;
         }
 
@@ -930,123 +816,7 @@
             document.getElementById('results').innerHTML = '';
         }
 
-        async function checkImagePurchase(filename) {
-            if (!authToken) return false;
 
-            try {
-                const response = await fetch(`/api/check-image-purchase/${encodeURIComponent(filename)}`, {
-                    headers: {
-                        'Authorization': `Bearer ${authToken}`
-                    }
-                });
-                const data = await response.json();
-                return data.isPurchased;
-            } catch (err) {
-                console.error('Error checking image purchase:', err);
-                return false;
-            }
-        }
-
-        async function login() {
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-
-            try {
-                const response = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ email, password })
-                });
-
-                const data = await response.json();
-                if (data.token) {
-                    authToken = data.token;
-                    localStorage.setItem('authToken', authToken);
-                    await updateAuthUI();
-                } else {
-                    alert('Invalid credentials');
-                }
-            } catch (err) {
-                alert('Error logging in');
-            }
-        }
-
-        async function register() {
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-
-            try {
-                const response = await fetch('/api/register', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ email, password })
-                });
-
-                const data = await response.json();
-                if (data.token) {
-                    authToken = data.token;
-                    localStorage.setItem('authToken', authToken);
-                    await updateAuthUI();
-                } else {
-                    alert('Error creating account');
-                }
-            } catch (err) {
-                alert('Error registering');
-            }
-        }
-
-        function showSignup() {
-            const authSection = document.getElementById('authSection');
-            authSection.innerHTML = `
-                <h3>Create Account</h3>
-                <div class="auth-form">
-                    <input type="email" id="email" placeholder="Email" class="auth-input">
-                    <input type="password" id="password" placeholder="Password" class="auth-input">
-                    <button onclick="register()" class="auth-button">Create Account</button>
-                    <button onclick="showLogin()" class="auth-button" style="background: #6c757d;">Back to Sign In</button>
-                </div>
-            `;
-        }
-
-        function showLogin() {
-            const authSection = document.getElementById('authSection');
-            authSection.innerHTML = `
-                <h3>Sign In</h3>
-                <div class="auth-form">
-                    <input type="email" id="email" placeholder="Email" class="auth-input">
-                    <input type="password" id="password" placeholder="Password" class="auth-input">
-                    <button onclick="login()" class="auth-button">Sign In</button>
-                    <button onclick="showSignup()" class="auth-button" style="background: #6c757d;">Create Account</button>
-                </div>
-            `;
-        }
-
-        async function updateAuthUI() {
-            const authSection = document.getElementById('authSection');
-
-            if (authToken) {
-                authSection.style.display = 'none';
-            } else {
-                authSection.style.display = 'block';
-            }
-        }
-
-        // Add URL parameter handling for successful payments
-        window.addEventListener('load', () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const sessionId = urlParams.get('session_id');
-            imageFilename = urlParams.get('image');
-
-            if (sessionId && imageFilename) {
-                alert('Payment successful! The watermark has been removed from your image.');
-                // Refresh the search results to show the updated image
-                searchPhotos();
-            }
-        });
     </script>
 </body>
 
