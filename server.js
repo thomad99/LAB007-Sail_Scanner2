@@ -971,6 +971,11 @@ app.get('/results', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'results.html'));
 });
 
+// Add route to serve PhotoAdmin page
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'photoAdmin.html'));
+});
+
 // Add this helper function to look up skipper info
 async function lookupSailorInDatabase(sailNumber) {
     try {
@@ -1899,6 +1904,53 @@ app.get('/api/verify-key', authenticateApiKey, (req, res) => {
             reset: res.get('X-RateLimit-Reset')
         }
     });
+});
+
+// Add endpoint to get most recent upload date
+app.get('/api/recent-upload', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT created_at 
+            FROM photo_metadata 
+            ORDER BY created_at DESC 
+            LIMIT 1
+        `);
+
+        const recentUpload = result.rows.length > 0 ? result.rows[0].created_at : null;
+        res.json({ recentUpload });
+    } catch (err) {
+        console.error('Error fetching recent upload:', err);
+        res.status(500).json({ error: 'Error fetching recent upload' });
+    }
+});
+
+// Add endpoint to get total storage size
+app.get('/api/storage-size', async (req, res) => {
+    try {
+        // Get all objects from S3 processed folder
+        const objects = await listS3Objects('processed/');
+
+        let totalSize = 0;
+        for (const obj of objects) {
+            totalSize += obj.Size || 0;
+        }
+
+        res.json({ totalSize });
+    } catch (err) {
+        console.error('Error calculating storage size:', err);
+        res.status(500).json({ error: 'Error calculating storage size' });
+    }
+});
+
+// Add endpoint to get S3 count
+app.get('/api/s3-count', async (req, res) => {
+    try {
+        const objects = await listS3Objects('processed/');
+        res.json({ count: objects.length });
+    } catch (err) {
+        console.error('Error counting S3 objects:', err);
+        res.status(500).json({ error: 'Error counting S3 objects' });
+    }
 });
 
 // Test endpoint for EXIF and checksum functionality

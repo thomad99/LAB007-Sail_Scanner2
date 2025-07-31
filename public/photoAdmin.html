@@ -60,13 +60,20 @@
         .stat-card {
             background: #f8f9fa;
             border: 1px solid #dee2e6;
-            border-radius: 5px;
-            padding: 15px;
+            border-radius: 8px;
+            padding: 20px;
             text-align: center;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
 
         .stat-value {
-            font-size: 24px;
+            font-size: 28px;
             font-weight: bold;
             color: #0066cc;
             margin: 10px 0;
@@ -75,6 +82,9 @@
         .stat-label {
             color: #666;
             font-size: 0.9em;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .action-button {
@@ -203,6 +213,31 @@
             font-size: 0.9em;
             color: #666;
         }
+
+        .loading {
+            color: #0066cc;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .error {
+            color: #dc3545;
+        }
+
+        .success {
+            color: #28a745;
+        }
     </style>
 </head>
 
@@ -221,12 +256,20 @@
                     <div class="stat-value" id="dbCount">Loading...</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">Images in Uploads Folder</div>
-                    <div class="stat-value" id="uploadsCount">Loading...</div>
+                    <div class="stat-label">Most Recent Upload</div>
+                    <div class="stat-value" id="recentUpload">Loading...</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">Images in Processed Folder</div>
-                    <div class="stat-value" id="processedCount">Loading...</div>
+                    <div class="stat-label">Total Storage Size</div>
+                    <div class="stat-value" id="totalSize">Loading...</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Images in S3 Storage</div>
+                    <div class="stat-value" id="s3Count">Loading...</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Images in Uploads Folder</div>
+                    <div class="stat-value" id="uploadsCount">Loading...</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">Orphaned Database Entries</div>
@@ -260,26 +303,92 @@
 
     <script>
         async function loadStats() {
+            // Set loading state for all stats
+            const statElements = ['dbCount', 'recentUpload', 'totalSize', 's3Count', 'uploadsCount', 'orphanedCount'];
+            statElements.forEach(id => {
+                const element = document.getElementById(id);
+                element.textContent = 'Loading...';
+                element.className = 'stat-value loading';
+            });
+
             try {
                 // Load database count
-                const dbResponse = await fetch('/api/photo-count');
-                const dbData = await dbResponse.json();
-                document.getElementById('dbCount').textContent = dbData.total;
+                try {
+                    const dbResponse = await fetch('/api/photo-count');
+                    const dbData = await dbResponse.json();
+                    const element = document.getElementById('dbCount');
+                    element.textContent = dbData.total;
+                    element.className = 'stat-value success';
+                } catch (err) {
+                    document.getElementById('dbCount').textContent = 'Error';
+                    document.getElementById('dbCount').className = 'stat-value error';
+                }
+
+                // Load most recent upload date
+                try {
+                    const recentResponse = await fetch('/api/recent-upload');
+                    const recentData = await recentResponse.json();
+                    const element = document.getElementById('recentUpload');
+                    if (recentData.recentUpload) {
+                        const date = new Date(recentData.recentUpload);
+                        element.textContent = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                    } else {
+                        element.textContent = 'No uploads';
+                    }
+                    element.className = 'stat-value success';
+                } catch (err) {
+                    document.getElementById('recentUpload').textContent = 'Error';
+                    document.getElementById('recentUpload').className = 'stat-value error';
+                }
+
+                // Load total storage size
+                try {
+                    const sizeResponse = await fetch('/api/storage-size');
+                    const sizeData = await sizeResponse.json();
+                    const element = document.getElementById('totalSize');
+                    element.textContent = formatBytes(sizeData.totalSize);
+                    element.className = 'stat-value success';
+                } catch (err) {
+                    document.getElementById('totalSize').textContent = 'Error';
+                    document.getElementById('totalSize').className = 'stat-value error';
+                }
+
+                // Load S3 storage count
+                try {
+                    const s3Response = await fetch('/api/s3-count');
+                    const s3Data = await s3Response.json();
+                    const element = document.getElementById('s3Count');
+                    element.textContent = s3Data.count;
+                    element.className = 'stat-value success';
+                } catch (err) {
+                    document.getElementById('s3Count').textContent = 'Error';
+                    document.getElementById('s3Count').className = 'stat-value error';
+                }
 
                 // Load uploads folder count
-                const uploadsResponse = await fetch('/api/folder-count?folder=uploads');
-                const uploadsData = await uploadsResponse.json();
-                document.getElementById('uploadsCount').textContent = uploadsData.count;
-
-                // Load processed folder count
-                const processedResponse = await fetch('/api/folder-count?folder=processed');
-                const processedData = await processedResponse.json();
-                document.getElementById('processedCount').textContent = processedData.count;
+                try {
+                    const uploadsResponse = await fetch('/api/folder-count?folder=uploads');
+                    const uploadsData = await uploadsResponse.json();
+                    const element = document.getElementById('uploadsCount');
+                    element.textContent = uploadsData.count;
+                    element.className = 'stat-value success';
+                } catch (err) {
+                    document.getElementById('uploadsCount').textContent = 'Error';
+                    document.getElementById('uploadsCount').className = 'stat-value error';
+                }
 
                 // Load orphaned count
-                const validationResponse = await fetch('/api/validate-files');
-                const validationData = await validationResponse.json();
-                document.getElementById('orphanedCount').textContent = validationData.orphanedCount;
+                try {
+                    const validationResponse = await fetch('/api/validate-files');
+                    const validationData = await validationResponse.json();
+                    const element = document.getElementById('orphanedCount');
+                    element.textContent = validationData.orphanedCount;
+                    element.className = 'stat-value success';
+                } catch (err) {
+                    document.getElementById('orphanedCount').textContent = 'Error';
+                    document.getElementById('orphanedCount').className = 'stat-value error';
+                }
+
             } catch (err) {
                 console.error('Error loading stats:', err);
                 showStatus('Error loading statistics', 'error');
@@ -413,6 +522,14 @@
             setTimeout(() => {
                 statusDiv.style.display = 'none';
             }, 5000);
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
         // Load stats when page loads
