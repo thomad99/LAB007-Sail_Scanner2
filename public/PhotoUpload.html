@@ -897,6 +897,8 @@
             font-size: 15px;
         }
     </style>
+    <script src="https://js.stripe.com/v3/"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exif-js@2.3.0/exif.min.js"></script>
 </head>
 
 <body>
@@ -1223,6 +1225,94 @@
             lastAzureCallTime = Date.now();
         }
 
+        // Function to extract EXIF data from image files
+        function extractExifData(file) {
+            return new Promise((resolve) => {
+                EXIF.getData(file, function () {
+                    const exifData = {
+                        gps_latitude: null,
+                        gps_longitude: null,
+                        gps_altitude: null,
+                        date_time: null,
+                        location_name: null
+                    };
+
+                    try {
+                        // Extract GPS coordinates
+                        const gpsLatitude = EXIF.getTag(this, "GPSLatitude");
+                        const gpsLongitude = EXIF.getTag(this, "GPSLongitude");
+                        const gpsLatitudeRef = EXIF.getTag(this, "GPSLatitudeRef");
+                        const gpsLongitudeRef = EXIF.getTag(this, "GPSLongitudeRef");
+                        const gpsAltitude = EXIF.getTag(this, "GPSAltitude");
+
+                        if (gpsLatitude && gpsLongitude) {
+                            // Convert GPS coordinates to decimal degrees
+                            const lat = convertDMSToDD(gpsLatitude, gpsLatitudeRef);
+                            const lng = convertDMSToDD(gpsLongitude, gpsLongitudeRef);
+
+                            exifData.gps_latitude = lat;
+                            exifData.gps_longitude = lng;
+
+                            // Try to get location name using reverse geocoding
+                            getLocationName(lat, lng).then(locationName => {
+                                exifData.location_name = locationName;
+                                resolve(exifData);
+                            }).catch(() => {
+                                resolve(exifData);
+                            });
+                        } else {
+                            resolve(exifData);
+                        }
+
+                        // Extract date/time
+                        const dateTimeOriginal = EXIF.getTag(this, "DateTimeOriginal");
+                        const dateTime = EXIF.getTag(this, "DateTime");
+                        exifData.date_time = dateTimeOriginal || dateTime;
+
+                    } catch (error) {
+                        console.log('Error extracting EXIF data:', error);
+                        resolve(exifData);
+                    }
+                });
+            });
+        }
+
+        // Function to convert DMS (Degrees, Minutes, Seconds) to decimal degrees
+        function convertDMSToDD(dms, ref) {
+            const degrees = dms[0];
+            const minutes = dms[1];
+            const seconds = dms[2];
+
+            let dd = degrees + (minutes / 60) + (seconds / 3600);
+
+            if (ref === 'S' || ref === 'W') {
+                dd = -dd;
+            }
+
+            return dd;
+        }
+
+        // Function to get location name from coordinates using reverse geocoding
+        async function getLocationName(lat, lng) {
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10`);
+                const data = await response.json();
+
+                if (data.display_name) {
+                    // Extract city and state/country from the full address
+                    const parts = data.display_name.split(', ');
+                    if (parts.length >= 3) {
+                        return `${parts[0]}, ${parts[parts.length - 2]}, ${parts[parts.length - 1]}`;
+                    }
+                    return data.display_name;
+                }
+                return null;
+            } catch (error) {
+                console.log('Error getting location name:', error);
+                return null;
+            }
+        }
+
         async function handleFiles(e) {
             const files = Array.from(e.target.files);
 
@@ -1241,6 +1331,35 @@
                         setTimeout(() => {
                             switchTab('results');
                         }, 300);
+                    }
+
+                    // Extract EXIF data from the first image and populate location field
+                    if (files.length > 0) {
+                        const firstFile = files[0];
+                        if (firstFile.type.startsWith('image/')) {
+                            try {
+                                const exifData = await extractExifData(firstFile);
+                                console.log('Extracted EXIF data:', exifData);
+
+                                // Populate location field if we have GPS data
+                                if (exifData.location_name) {
+                                    document.getElementById('location').value = exifData.location_name;
+                                    console.log('Auto-populated location:', exifData.location_name);
+                                }
+
+                                // Populate date field if we have date data
+                                if (exifData.date_time) {
+                                    const date = new Date(exifData.date_time);
+                                    if (!isNaN(date.getTime())) {
+                                        const dateString = date.toISOString().split('T')[0];
+                                        document.getElementById('date').value = dateString;
+                                        console.log('Auto-populated date:', dateString);
+                                    }
+                                }
+                            } catch (error) {
+                                console.log('Error extracting EXIF data:', error);
+                            }
+                        }
                     }
 
                     // Call cleanup before starting new batch
