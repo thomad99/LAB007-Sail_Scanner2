@@ -1492,6 +1492,7 @@
             ctx.font = '14px Arial';
             ctx.fillText('Device fingerprint', 2, 2);
 
+            // Create a stable fingerprint without time-dependent elements
             const fingerprint = {
                 userAgent: navigator.userAgent,
                 language: navigator.language,
@@ -1501,10 +1502,15 @@
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                 canvasHash: canvas.toDataURL(),
                 deviceType: isMobileDevice() ? 'Mobile' : 'Desktop',
-                timestamp: new Date().toISOString()
+                // Removed timestamp to make fingerprint stable
+                // Added some additional stable identifiers
+                hardwareConcurrency: navigator.hardwareConcurrency || 'unknown',
+                maxTouchPoints: navigator.maxTouchPoints || 0,
+                cookieEnabled: navigator.cookieEnabled,
+                doNotTrack: navigator.doNotTrack || 'unknown'
             };
 
-            // Create a hash from the fingerprint data
+            // Create a hash from the fingerprint data (excluding time-dependent elements)
             const fingerprintString = JSON.stringify(fingerprint);
             let hash = 0;
             for (let i = 0; i < fingerprintString.length; i++) {
@@ -1515,7 +1521,10 @@
 
             return {
                 ...fingerprint,
-                fingerprint: Math.abs(hash).toString(36) + Date.now().toString(36)
+                // Create a stable fingerprint without timestamp
+                fingerprint: Math.abs(hash).toString(36),
+                // Add timestamp separately for reference (not used in fingerprint)
+                generatedAt: new Date().toISOString()
             };
         }
 
