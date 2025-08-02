@@ -396,6 +396,8 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(UPLOAD_DIR));
 app.use('/Images', express.static(PROCESSED_DIR));
+// Serve website images from public/Images directory
+app.use('/website-images', express.static(path.join(__dirname, 'public', 'Images')));
 
 // Define multer storage configurations
 const trainUpload = multer({
@@ -1559,8 +1561,8 @@ app.get('/api/device-fingerprints', async (req, res) => {
             GROUP BY device_fingerprint, device_type, user_agent, screen_resolution, timezone
             ORDER BY photo_count DESC, last_upload DESC
         `);
-        
-        res.json({ 
+
+        res.json({
             fingerprints: result.rows,
             total: result.rows.length
         });
