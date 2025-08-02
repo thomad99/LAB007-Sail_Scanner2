@@ -790,9 +790,9 @@
                                         onclick="window.open('${photo.url}', '_blank')">
                                     👁️ View
                                 </button>
-                                <button class="action-button" style="margin: 0; padding: 5px 10px; font-size: 0.8em;" 
-                                        onclick="downloadPhoto('${photo.url}', '${photo.filename}')">
-                                    ⬇️ Download
+                                <button class="action-button danger-button" style="margin: 0; padding: 5px 10px; font-size: 0.8em;" 
+                                        onclick="deletePhoto('${photo.id}', '${photo.filename}')">
+                                    🗑️ Delete
                                 </button>
                             </div>
                         </div>

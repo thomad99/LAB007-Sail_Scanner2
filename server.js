@@ -400,6 +400,11 @@ app.use('/Images', express.static(path.join(__dirname, 'public', 'Images')));
 // Then serve processed images from processed_images directory
 app.use('/processed-images', express.static(PROCESSED_DIR));
 
+// Handle favicon requests - redirect to the correct location
+app.get('/favicon.ico', (req, res) => {
+    res.redirect('/Images/favicon.ico');
+});
+
 // Define multer storage configurations
 const trainUpload = multer({
     dest: 'training_data/',
@@ -1553,7 +1558,7 @@ app.get('/api/device-fingerprints', async (req, res) => {
                    COUNT(device_fingerprint) as photos_with_fingerprint
             FROM photo_metadata
         `);
-        
+
         console.log('Device fingerprint check:', checkResult.rows[0]);
 
         const result = await pool.query(`
