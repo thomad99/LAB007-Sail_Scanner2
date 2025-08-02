@@ -275,11 +275,34 @@
                     <div class="stat-label">Orphaned Database Entries</div>
                     <div class="stat-value" id="orphanedCount">Loading...</div>
                 </div>
+                <div class="stat-card">
+                    <div class="stat-label">Unique Devices</div>
+                    <div class="stat-value" id="deviceCount">Loading...</div>
+                </div>
             </div>
 
             <div id="validationResults" class="validation-results" style="display: none;">
                 <h3>Validation Results</h3>
                 <div id="validationList" class="validation-list"></div>
+            </div>
+
+            <!-- Device Fingerprint Search Section -->
+            <div class="admin-section" style="margin-top: 30px;">
+                <h2>🔍 Device Fingerprint Search</h2>
+                <p>Search for all photos uploaded from a specific device</p>
+                
+                <div id="deviceFingerprintsList" style="margin: 20px 0; display: none;">
+                    <h3>Available Devices</h3>
+                    <div id="fingerprintsList" class="validation-list"></div>
+                </div>
+
+                <div id="deviceSearchResults" style="margin: 20px 0; display: none;">
+                    <h3>Search Results</h3>
+                    <div id="devicePhotosList" class="validation-list"></div>
+                </div>
+
+                <button class="action-button" onclick="loadDeviceFingerprints()">📱 Load Device Fingerprints</button>
+                <button class="action-button" onclick="clearDeviceSearch()">🗑️ Clear Search Results</button>
             </div>
 
             <div id="statusMessage" class="status-message"></div>
@@ -431,6 +454,25 @@
                     console.error('Error loading orphaned count:', err);
                     document.getElementById('orphanedCount').textContent = 'Error';
                     document.getElementById('orphanedCount').className = 'stat-value error';
+                }
+
+                // Load device count
+                try {
+                    console.log('Fetching device count...');
+                    const deviceResponse = await fetch('/api/device-fingerprints');
+                    console.log('Device count response status:', deviceResponse.status);
+                    if (!deviceResponse.ok) {
+                        throw new Error(`HTTP ${deviceResponse.status}: ${deviceResponse.statusText}`);
+                    }
+                    const deviceData = await deviceResponse.json();
+                    console.log('Device count data:', deviceData);
+                    const element = document.getElementById('deviceCount');
+                    element.textContent = deviceData.total;
+                    element.className = 'stat-value success';
+                } catch (err) {
+                    console.error('Error loading device count:', err);
+                    document.getElementById('deviceCount').textContent = 'Error';
+                    document.getElementById('deviceCount').className = 'stat-value error';
                 }
 
             } catch (err) {
@@ -614,6 +656,140 @@
             const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Device fingerprint search functions
+        async function loadDeviceFingerprints() {
+            try {
+                console.log('Loading device fingerprints...');
+                const response = await fetch('/api/device-fingerprints');
+                console.log('Device fingerprints response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                console.log('Device fingerprints data:', data);
+                
+                // Update device count in stats
+                const deviceCountElement = document.getElementById('deviceCount');
+                deviceCountElement.textContent = data.total;
+                deviceCountElement.className = 'stat-value success';
+                
+                // Display the fingerprints list
+                const fingerprintsList = document.getElementById('fingerprintsList');
+                const deviceFingerprintsList = document.getElementById('deviceFingerprintsList');
+                
+                if (data.fingerprints.length === 0) {
+                    fingerprintsList.innerHTML = '<div class="validation-item warning">No device fingerprints found in database</div>';
+                } else {
+                    fingerprintsList.innerHTML = data.fingerprints.map(fingerprint => `
+                        <div class="validation-item success">
+                            <div style="flex: 1;">
+                                <div style="font-weight: bold; margin-bottom: 5px;">
+                                    📱 ${fingerprint.device_type || 'Unknown Device'} 
+                                    <span style="font-size: 0.8em; color: #666;">(${fingerprint.photo_count} photos)</span>
+                                </div>
+                                <div style="font-size: 0.9em; color: #666; margin-bottom: 5px;">
+                                    <strong>Fingerprint:</strong> ${fingerprint.device_fingerprint}
+                                </div>
+                                <div style="font-size: 0.8em; color: #888;">
+                                    <strong>Screen:</strong> ${fingerprint.screen_resolution || 'Unknown'} | 
+                                    <strong>Timezone:</strong> ${fingerprint.timezone || 'Unknown'} | 
+                                    <strong>First Upload:</strong> ${fingerprint.first_upload ? new Date(fingerprint.first_upload).toLocaleDateString() : 'Unknown'} | 
+                                    <strong>Last Upload:</strong> ${fingerprint.last_upload ? new Date(fingerprint.last_upload).toLocaleDateString() : 'Unknown'}
+                                </div>
+                            </div>
+                            <button class="action-button" style="margin: 0; padding: 5px 10px; font-size: 0.8em;" 
+                                    onclick="searchPhotosByDevice('${fingerprint.device_fingerprint}')">
+                                🔍 Find Photos
+                            </button>
+                        </div>
+                    `).join('');
+                }
+                
+                deviceFingerprintsList.style.display = 'block';
+                showStatus(`Loaded ${data.total} unique device fingerprints`, 'success');
+                
+            } catch (err) {
+                console.error('Error loading device fingerprints:', err);
+                showStatus(`Error loading device fingerprints: ${err.message}`, 'error');
+            }
+        }
+
+        async function searchPhotosByDevice(deviceFingerprint) {
+            try {
+                console.log('Searching photos for device fingerprint:', deviceFingerprint);
+                const response = await fetch(`/api/search-photos?device_fingerprint=${encodeURIComponent(deviceFingerprint)}`);
+                console.log('Device search response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const photos = await response.json();
+                console.log('Device search results:', photos);
+                
+                // Display the search results
+                const devicePhotosList = document.getElementById('devicePhotosList');
+                const deviceSearchResults = document.getElementById('deviceSearchResults');
+                
+                if (photos.length === 0) {
+                    devicePhotosList.innerHTML = '<div class="validation-item warning">No photos found for this device</div>';
+                } else {
+                    devicePhotosList.innerHTML = photos.map(photo => `
+                        <div class="validation-item success">
+                            <div style="flex: 1;">
+                                <div style="font-weight: bold; margin-bottom: 5px;">
+                                    📸 ${photo.filename}
+                                </div>
+                                <div style="font-size: 0.9em; color: #666; margin-bottom: 5px;">
+                                    <strong>Sail Number:</strong> ${photo.sail_number || 'N/A'} | 
+                                    <strong>Date:</strong> ${photo.date || 'N/A'} | 
+                                    <strong>Location:</strong> ${photo.location || 'N/A'}
+                                </div>
+                                <div style="font-size: 0.8em; color: #888;">
+                                    <strong>Uploaded:</strong> ${photo.created_at ? new Date(photo.created_at).toLocaleString() : 'Unknown'} | 
+                                    <strong>Device Type:</strong> ${photo.device_type || 'Unknown'}
+                                </div>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 5px;">
+                                <button class="action-button" style="margin: 0; padding: 5px 10px; font-size: 0.8em;" 
+                                        onclick="window.open('${photo.url}', '_blank')">
+                                    👁️ View
+                                </button>
+                                <button class="action-button" style="margin: 0; padding: 5px 10px; font-size: 0.8em;" 
+                                        onclick="downloadPhoto('${photo.url}', '${photo.filename}')">
+                                    ⬇️ Download
+                                </button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+                
+                deviceSearchResults.style.display = 'block';
+                showStatus(`Found ${photos.length} photos for this device`, 'success');
+                
+            } catch (err) {
+                console.error('Error searching photos by device:', err);
+                showStatus(`Error searching photos by device: ${err.message}`, 'error');
+            }
+        }
+
+        function clearDeviceSearch() {
+            document.getElementById('deviceFingerprintsList').style.display = 'none';
+            document.getElementById('deviceSearchResults').style.display = 'none';
+            showStatus('Device search results cleared', 'success');
+        }
+
+        function downloadPhoto(url, filename) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
         }
 
         // Load stats when page loads

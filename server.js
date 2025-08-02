@@ -607,7 +607,13 @@ async function createPhotoMetadataTable() {
             { name: 'photo_timestamp', type: 'TIMESTAMP' },
             { name: 'gps_latitude', type: 'DECIMAL' },
             { name: 'gps_longitude', type: 'DECIMAL' },
-            { name: 'gps_altitude', type: 'DECIMAL' }
+            { name: 'gps_altitude', type: 'DECIMAL' },
+            { name: 'device_fingerprint', type: 'TEXT' },
+            { name: 'device_type', type: 'TEXT' },
+            { name: 'user_agent', type: 'TEXT' },
+            { name: 'screen_resolution', type: 'TEXT' },
+            { name: 'timezone', type: 'TEXT' },
+            { name: 'upload_timestamp', type: 'TIMESTAMP' }
         ];
 
         for (const column of columnsToAdd) {
@@ -667,7 +673,13 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
         photographer_name: req.body.photographer_name,
         photographer_website: req.body.photographer_website,
         location: req.body.location,
-        additional_tags: req.body.additional_tags ? req.body.additional_tags.split(',').map(tag => tag.trim()) : []
+        additional_tags: req.body.additional_tags ? req.body.additional_tags.split(',').map(tag => tag.trim()) : [],
+        device_fingerprint: req.body.device_fingerprint,
+        device_type: req.body.device_type,
+        user_agent: req.body.user_agent,
+        screen_resolution: req.body.screen_resolution,
+        timezone: req.body.timezone,
+        upload_timestamp: req.body.upload_timestamp || new Date().toISOString()
     };
 
     try {
@@ -829,8 +841,9 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                     `INSERT INTO photo_metadata (
                         filename, sail_number, date, regatta_name, 
                         photographer_name, photographer_website, 
-                        location, additional_tags, file_checksum, photo_timestamp, gps_latitude, gps_longitude, gps_altitude
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+                        location, additional_tags, file_checksum, photo_timestamp, gps_latitude, gps_longitude, gps_altitude,
+                        device_fingerprint, device_type, user_agent, screen_resolution, timezone, upload_timestamp
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
                     [
                         file.newFilename,
                         file.sailNumber,
@@ -844,7 +857,13 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                         exifData.photo_timestamp || null,
                         exifData.gps_latitude || null,
                         exifData.gps_longitude || null,
-                        exifData.gps_altitude || null
+                        exifData.gps_altitude || null,
+                        metadata.device_fingerprint || null,
+                        metadata.device_type || null,
+                        metadata.user_agent || null,
+                        metadata.screen_resolution || null,
+                        metadata.timezone || null,
+                        metadata.upload_timestamp || null
                     ]
                 );
                 console.log(`Successfully inserted metadata for file: ${file.newFilename}, rows affected: ${result.rowCount}`);
@@ -1364,7 +1383,9 @@ app.get('/api/search-photos', async (req, res) => {
             photo_timestamp_end,
             gps_latitude,
             gps_longitude,
-            radius_km
+            radius_km,
+            device_fingerprint,
+            device_type
         } = req.query;
 
         let query = `
@@ -1420,6 +1441,16 @@ app.get('/api/search-photos', async (req, res) => {
             )`;
             params.push(parseFloat(gps_latitude), parseFloat(gps_longitude), parseFloat(radius_km));
             paramCount += 3;
+        }
+        if (device_fingerprint) {
+            query += ` AND device_fingerprint = $${paramCount}`;
+            params.push(device_fingerprint);
+            paramCount++;
+        }
+        if (device_type) {
+            query += ` AND device_type = $${paramCount}`;
+            params.push(device_type);
+            paramCount++;
         }
 
         query += ` ORDER BY created_at DESC`;
@@ -1507,6 +1538,35 @@ app.get('/api/s3-count', async (req, res) => {
     } catch (err) {
         console.error('Error counting S3 objects:', err);
         res.status(500).json({ error: 'Error counting S3 objects' });
+    }
+});
+
+// Add endpoint to get unique device fingerprints
+app.get('/api/device-fingerprints', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT DISTINCT 
+                device_fingerprint,
+                device_type,
+                user_agent,
+                screen_resolution,
+                timezone,
+                COUNT(*) as photo_count,
+                MIN(upload_timestamp) as first_upload,
+                MAX(upload_timestamp) as last_upload
+            FROM photo_metadata 
+            WHERE device_fingerprint IS NOT NULL 
+            GROUP BY device_fingerprint, device_type, user_agent, screen_resolution, timezone
+            ORDER BY photo_count DESC, last_upload DESC
+        `);
+        
+        res.json({ 
+            fingerprints: result.rows,
+            total: result.rows.length
+        });
+    } catch (err) {
+        console.error('Error fetching device fingerprints:', err);
+        res.status(500).json({ error: err.message });
     }
 });
 

@@ -12,26 +12,14 @@
             overflow-x: hidden;
         }
 
-        .header {
-            width: 100%;
-            margin: 0 0 30px 0;
-            padding: 0;
-            position: relative;
-            background: #f0f0f0;
-        }
 
-        .logo {
-            width: 100%;
-            height: auto;
-            display: block;
-            object-fit: cover;
-        }
 
         body {
             font-family: Arial, sans-serif;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            background-color: #020053;
         }
 
         .upload-section {
@@ -407,20 +395,7 @@
             user-select: none;
         }
 
-        .footer {
-            text-align: center;
-            padding: 20px;
-            margin-top: 40px;
-            background: #ffffff;
-            border-top: 1px solid #dee2e6;
-        }
 
-        .footer img {
-            max-height: 100px;
-            width: auto;
-            margin: 0 auto;
-            display: block;
-        }
 
         .content-wrapper {
             flex: 1;
@@ -428,70 +403,269 @@
             /* Add padding to content wrapper */
         }
 
+        /* Mobile App Style - No Scrolling */
         @media (max-width: 768px) {
-            .metadata-section {
-                padding: 10px;
-                margin: 0;
-            }
 
-            .metadata-section>div {
-                grid-template-columns: 1fr !important;
-                gap: 10px !important;
-            }
-
-            .upload-section {
-                padding: 15px;
-                margin: 10px 0;
-            }
-
-            .download-section {
-                display: none;
+            html,
+            body {
+                height: 100vh;
+                overflow: hidden;
+                position: fixed;
+                width: 100%;
+                -webkit-overflow-scrolling: touch;
+                -webkit-tap-highlight-color: transparent;
             }
 
             .main-container {
+                height: 100vh;
+                /* No footer */
                 padding: 0;
                 margin: 0;
                 width: 100%;
+                overflow: hidden;
             }
 
             .content-wrapper {
-                padding: 0 10px;
+                height: 100%;
+                padding: 10px;
                 width: 100%;
                 box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
             }
 
-            .file-item {
-                padding: 10px;
-                margin: 5px 0;
+            /* Mobile Tab Navigation */
+            .mobile-tabs {
+                display: flex;
+                background: #f8f9fa;
+                border-radius: 10px 10px 0 0;
+                margin: 0 -10px;
+                padding: 0 10px;
+                border-bottom: 2px solid #0066cc;
+            }
+
+            .mobile-tab {
+                flex: 1;
+                padding: 12px 8px;
+                text-align: center;
+                background: transparent;
+                border: none;
+                color: #666;
+                font-weight: 500;
+                font-size: 14px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                border-bottom: 3px solid transparent;
+                min-height: 44px;
+                -webkit-tap-highlight-color: transparent;
+                touch-action: manipulation;
+            }
+
+            .mobile-tab.active {
+                color: #0066cc;
+                background: white;
+                border-bottom-color: #0066cc;
+                border-radius: 10px 10px 0 0;
+            }
+
+            .mobile-tab-content {
+                display: none;
+                height: calc(100% - 50px);
+                overflow-y: auto;
+                padding: 15px;
+                background: white;
+                border-radius: 0 0 10px 10px;
+            }
+
+            .mobile-tab-content.active {
+                display: block;
+            }
+
+            /* Upload Section Mobile */
+            .upload-section {
+                padding: 15px;
+                margin: 0 0 15px 0;
+                border-radius: 10px;
+            }
+
+            .upload-section h2 {
+                font-size: 18px;
+                margin: 0 0 10px 0;
             }
 
             .upload-section input[type="file"] {
                 width: 100%;
                 max-width: none;
                 box-sizing: border-box;
+                padding: 12px;
+                font-size: 14px;
+                min-height: 44px;
+                -webkit-tap-highlight-color: transparent;
+            }
+
+            .upload-section p {
+                font-size: 12px;
+                margin: 8px 0;
+            }
+
+            /* Metadata Section Mobile */
+            .metadata-section {
+                padding: 10px;
+                margin: 0 0 15px 0;
+                border-radius: 10px;
+            }
+
+            .metadata-section>div {
+                grid-template-columns: 1fr !important;
+                gap: 8px !important;
             }
 
             .metadata-input {
                 width: 100%;
                 box-sizing: border-box;
+                padding: 10px;
+                font-size: 14px;
+                min-height: 44px;
+                -webkit-tap-highlight-color: transparent;
             }
 
-            .autocomplete {
-                width: 100%;
+            .metadata-header h3 {
+                font-size: 16px;
             }
 
-            .header {
-                margin: 0;
+            /* Results Section Mobile */
+            .results-list {
+                gap: 10px;
+                margin-top: 10px;
             }
 
-            .logo {
-                width: 100%;
-                height: auto;
+            .result-card {
+                padding: 12px;
+                margin-bottom: 10px;
+                border-radius: 8px;
             }
 
-            body {
-                padding: 0;
-                margin: 0;
+            .result-card h3 {
+                font-size: 16px;
+                margin: 0 0 8px 0;
+            }
+
+            .sail-number-item {
+                padding: 8px;
+                margin: 3px 0;
+                font-size: 14px;
+            }
+
+            .sailor-info {
+                padding: 8px;
+                margin: 3px 0;
+                font-size: 13px;
+            }
+
+            /* Compact File Items */
+            .file-item {
+                padding: 8px;
+                margin: 3px 0;
+                font-size: 13px;
+            }
+
+
+
+            /* Hide desktop elements on mobile */
+            .download-section {
+                display: none;
+            }
+
+            /* Compact metadata display */
+            .result-metadata-grid {
+                grid-template-columns: 1fr;
+                gap: 8px;
+                padding: 10px;
+            }
+
+            .result-metadata-item {
+                padding: 6px 10px;
+                font-size: 12px;
+            }
+
+            /* Compact processing status */
+            .processing-status {
+                padding: 6px 10px;
+                margin-bottom: 8px;
+                font-size: 13px;
+            }
+
+            /* Compact debug panel */
+            .debug-panel {
+                font-size: 12px;
+            }
+
+            .debug-content {
+                max-height: 200px;
+                padding: 10px;
+            }
+
+            .debug-section {
+                margin-bottom: 10px;
+                padding: 8px;
+            }
+
+            .debug-section h4 {
+                font-size: 14px;
+                margin: 0 0 5px 0;
+            }
+
+            .debug-section pre {
+                font-size: 11px;
+                padding: 8px;
+            }
+
+            /* Mobile processing indicator */
+            .mobile-processing-indicator {
+                position: fixed;
+                top: 10px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: rgba(0, 102, 204, 0.9);
+                color: white;
+                padding: 8px 16px;
+                border-radius: 20px;
+                font-size: 12px;
+                font-weight: 500;
+                z-index: 1000;
+                display: none;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            }
+
+            .mobile-processing-indicator.show {
+                display: block;
+                animation: slideDown 0.3s ease;
+            }
+
+            @keyframes slideDown {
+                from {
+                    transform: translateX(-50%) translateY(-100%);
+                    opacity: 0;
+                }
+
+                to {
+                    transform: translateX(-50%) translateY(0);
+                    opacity: 1;
+                }
+            }
+        }
+
+        /* Desktop styles remain unchanged */
+        @media (min-width: 769px) {
+            .mobile-tabs {
+                display: none;
+            }
+
+            .mobile-tab-content {
+                display: block !important;
+                height: auto !important;
+                overflow: visible !important;
             }
         }
 
@@ -654,145 +828,193 @@
 </head>
 
 <body>
-    <div class="header">
-        <img src="lovesailing-header.jpg" alt="LoveSailing Header" class="logo">
+    <!-- Mobile Processing Indicator -->
+    <div id="mobileProcessingIndicator" class="mobile-processing-indicator">
+        Processing photos...
     </div>
 
     <div class="main-container">
         <div class="content-wrapper">
-            <div class="upload-section">
-                <h2>Upload Sail Photos</h2>
-                <input type="file" id="imageInput" accept="image/*" multiple>
-                <p>Select one or more images to analyze</p>
+            <!-- Mobile Tab Navigation -->
+            <div class="mobile-tabs">
+                <button class="mobile-tab active" onclick="switchTab('upload')">📤 Upload</button>
+                <button class="mobile-tab" onclick="switchTab('results')">📊 Results</button>
+                <button class="mobile-tab" onclick="switchTab('debug')">🔧 Debug</button>
             </div>
 
-            <div class="metadata-section"
-                style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
-                <div class="metadata-header" onclick="toggleMetadataSection()">
-                    <h3 style="margin: 0;">Photo Information (Optional)</h3>
-                    <span id="metadataToggle" class="metadata-toggle"
-                        style="font-size: 18px; font-weight: bold; color: #0066cc;">▼</span>
+            <!-- Upload Tab Content -->
+            <div id="uploadTab" class="mobile-tab-content active">
+                <div class="upload-section">
+                    <h2>Upload Sail Photos</h2>
+                    <input type="file" id="imageInput" accept="image/*" multiple>
+                    <p>Select one or more images to analyze</p>
                 </div>
-                <div id="metadataContent" class="metadata-content" style="display: none;">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                        <div>
-                            <label for="date">Date:</label>
-                            <input type="date" id="date" class="metadata-input">
+
+                <div class="metadata-section"
+                    style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
+                    <div class="metadata-header" onclick="toggleMetadataSection()">
+                        <h3 style="margin: 0;">Photo Information (Optional)</h3>
+                        <span id="metadataToggle" class="metadata-toggle"
+                            style="font-size: 18px; font-weight: bold; color: #0066cc;">▼</span>
+                    </div>
+                    <div id="metadataContent" class="metadata-content" style="display: none;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div>
+                                <label for="date">Date:</label>
+                                <input type="date" id="date" class="metadata-input">
+                            </div>
+                            <div>
+                                <label for="regattaName">Regatta Name:</label>
+                                <input type="text" id="regattaName" class="metadata-input"
+                                    placeholder="Enter regatta name">
+                            </div>
+                            <div>
+                                <label for="yachtClub">Yacht Club:</label>
+                                <input type="text" id="yachtClub" class="metadata-input" list="yachtClubList">
+                                <datalist id="yachtClubList">
+                                    <option value="Alamitos Bay Yacht Club">
+                                    <option value="American Yacht Club">
+                                    <option value="Annapolis Yacht Club">
+                                    <option value="Atlanta Yacht Club">
+                                    <option value="Austin Yacht Club">
+                                    <option value="Avalon Yacht Club">
+                                    <option value="Bay Head Yacht Club">
+                                    <option value="Beverly Yacht Club">
+                                    <option value="Chicago Yacht Club">
+                                    <option value="Corinthian Yacht Club">
+                                    <option value="Eastern Yacht Club">
+                                    <option value="Fort Worth Yacht Club">
+                                    <option value="Houston Yacht Club">
+                                    <option value="Lake Norman Yacht Club">
+                                    <option value="Larchmont Yacht Club">
+                                    <option value="Long Beach Yacht Club">
+                                    <option value="New York Yacht Club">
+                                    <option value="Newport Harbor Yacht Club">
+                                    <option value="San Diego Yacht Club">
+                                    <option value="San Francisco Yacht Club">
+                                    <option value="Seattle Yacht Club">
+                                    <option value="St. Francis Yacht Club">
+                                        <!-- Add more options as needed -->
+                                </datalist>
+                            </div>
+                            <div>
+                                <label for="photographerName">Photographer Name:</label>
+                                <input type="text" id="photographerName" class="metadata-input"
+                                    placeholder="Enter photographer name">
+                            </div>
+                            <div>
+                                <label for="photographerWebsite">Photographer Website:</label>
+                                <input type="url" id="photographerWebsite" class="metadata-input"
+                                    placeholder="Enter website URL">
+                            </div>
+                            <div>
+                                <label for="location">Location:</label>
+                                <input type="text" id="location" class="metadata-input" placeholder="Enter location">
+                            </div>
+                            <div>
+                                <label for="additionalTags">Additional Tags:</label>
+                                <input type="text" id="additionalTags" class="metadata-input"
+                                    placeholder="Enter tags (comma separated)">
+                            </div>
                         </div>
-                        <div>
-                            <label for="regattaName">Regatta Name:</label>
-                            <input type="text" id="regattaName" class="metadata-input" placeholder="Enter regatta name">
-                        </div>
-                        <div>
-                            <label for="yachtClub">Yacht Club:</label>
-                            <input type="text" id="yachtClub" class="metadata-input" list="yachtClubList">
-                            <datalist id="yachtClubList">
-                                <option value="Alamitos Bay Yacht Club">
-                                <option value="American Yacht Club">
-                                <option value="Annapolis Yacht Club">
-                                <option value="Atlanta Yacht Club">
-                                <option value="Austin Yacht Club">
-                                <option value="Avalon Yacht Club">
-                                <option value="Bay Head Yacht Club">
-                                <option value="Beverly Yacht Club">
-                                <option value="Chicago Yacht Club">
-                                <option value="Corinthian Yacht Club">
-                                <option value="Eastern Yacht Club">
-                                <option value="Fort Worth Yacht Club">
-                                <option value="Houston Yacht Club">
-                                <option value="Lake Norman Yacht Club">
-                                <option value="Larchmont Yacht Club">
-                                <option value="Long Beach Yacht Club">
-                                <option value="New York Yacht Club">
-                                <option value="Newport Harbor Yacht Club">
-                                <option value="San Diego Yacht Club">
-                                <option value="San Francisco Yacht Club">
-                                <option value="Seattle Yacht Club">
-                                <option value="St. Francis Yacht Club">
-                                    <!-- Add more options as needed -->
-                            </datalist>
-                        </div>
-                        <div>
-                            <label for="photographerName">Photographer Name:</label>
-                            <input type="text" id="photographerName" class="metadata-input"
-                                placeholder="Enter photographer name">
-                        </div>
-                        <div>
-                            <label for="photographerWebsite">Photographer Website:</label>
-                            <input type="url" id="photographerWebsite" class="metadata-input"
-                                placeholder="Enter website URL">
-                        </div>
-                        <div>
-                            <label for="location">Location:</label>
-                            <input type="text" id="location" class="metadata-input" placeholder="Enter location">
-                        </div>
-                        <div>
-                            <label for="additionalTags">Additional Tags:</label>
-                            <input type="text" id="additionalTags" class="metadata-input"
-                                placeholder="Enter tags (comma separated)">
-                        </div>
+                    </div>
+                </div>
+
+                <div id="batchProgress" class="batch-progress" style="display: none;">
+                    <div class="progress-header">
+                        <span class="progress-title">Processing Files</span>
+                        <span class="progress-count">0/0 files complete</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill"></div>
                     </div>
                 </div>
             </div>
 
-            <div id="topResultsBox" class="sail-number-display">
-                <h2>Results</h2>
-                <div class="results-list"></div>
-            </div>
-
-            <img id="preview" style="display: none;">
-            <div id="loading" class="loading">Analyzing image...</div>
-
-            <div id="results"></div>
-            <div id="sailNumberBox" class="sail-number-display" style="display: none;">
-                <h2>Detected Sail Number</h2>
-                <div class="sail-number-value">--</div>
-                <div class="sail-number-confidence"></div>
-            </div>
-
-            <div id="debugPanel" class="debug-panel">
-                <div class="debug-header">
-                    <h3>Debug Information</h3>
-                    <label>
-                        <input type="checkbox" id="debugToggle" checked> Show Debug Info
-                    </label>
+            <!-- Results Tab Content -->
+            <div id="resultsTab" class="mobile-tab-content">
+                <div id="topResultsBox" class="sail-number-display">
+                    <h2>Results</h2>
+                    <div class="results-list"></div>
                 </div>
-                <div class="debug-content">
-                    <div class="debug-section">
-                        <h4>Azure Vision Processing Status</h4>
-                        <div id="processingStatus" class="processing-status">Waiting to start...</div>
-                        <pre id="azureDebug">Waiting for scan...</pre>
-                    </div>
-                    <div class="debug-section">
-                        <h4>Raw Text Detected</h4>
-                        <pre id="rawTextDebug">Waiting for scan...</pre>
-                    </div>
-                    <div class="debug-section">
-                        <h4>Number Processing</h4>
-                        <pre id="numberDebug">Waiting for scan...</pre>
-                    </div>
+
+                <img id="preview" style="display: none;">
+                <div id="loading" class="loading">Analyzing image...</div>
+
+                <div id="results"></div>
+                <div id="sailNumberBox" class="sail-number-display" style="display: none;">
+                    <h2>Detected Sail Number</h2>
+                    <div class="sail-number-value">--</div>
+                    <div class="sail-number-confidence"></div>
                 </div>
             </div>
 
-            <div id="batchProgress" class="batch-progress" style="display: none;">
-                <div class="progress-header">
-                    <span class="progress-title">Processing Files</span>
-                    <span class="progress-count">0/0 files complete</span>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill"></div>
+            <!-- Debug Tab Content -->
+            <div id="debugTab" class="mobile-tab-content">
+                <div id="debugPanel" class="debug-panel">
+                    <div class="debug-header">
+                        <h3>Debug Information</h3>
+                        <label>
+                            <input type="checkbox" id="debugToggle" checked> Show Debug Info
+                        </label>
+                    </div>
+                    <div class="debug-content">
+                        <div class="debug-section">
+                            <h4>Azure Vision Processing Status</h4>
+                            <div id="processingStatus" class="processing-status">Waiting to start...</div>
+                            <pre id="azureDebug">Waiting for scan...</pre>
+                        </div>
+                        <div class="debug-section">
+                            <h4>Raw Text Detected</h4>
+                            <pre id="rawTextDebug">Waiting for scan...</pre>
+                        </div>
+                        <div class="debug-section">
+                            <h4>Number Processing</h4>
+                            <pre id="numberDebug">Waiting for scan...</pre>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="footer">
-        <a href="https://thomad99.wixstudio.com/lab007" target="_blank">
-            <img src="LAB007-FOOTER.JPG" alt="LAB007 Footer">
-        </a>
-    </div>
+
 
     <script>
+        // Mobile tab switching function
+        function switchTab(tabName) {
+            // Hide all tab contents
+            const tabContents = document.querySelectorAll('.mobile-tab-content');
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+            });
+
+            // Remove active class from all tabs
+            const tabs = document.querySelectorAll('.mobile-tab');
+            tabs.forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Show selected tab content
+            const selectedTab = document.getElementById(tabName + 'Tab');
+            if (selectedTab) {
+                selectedTab.classList.add('active');
+            }
+
+            // Add active class to selected tab
+            const selectedTabButton = document.querySelector(`[onclick="switchTab('${tabName}')"]`);
+            if (selectedTabButton) {
+                selectedTabButton.classList.add('active');
+            }
+
+            // Auto-switch to results tab when processing starts
+            if (tabName === 'upload' && window.processedFiles && window.processedFiles.length > 0) {
+                setTimeout(() => {
+                    switchTab('results');
+                }, 1000);
+            }
+        }
+
         const imageInput = document.getElementById('imageInput');
         const preview = document.getElementById('preview');
         const topResultsBox = document.getElementById('topResultsBox');
@@ -807,6 +1029,7 @@
         const resultsContainer = document.querySelector('.results-list');
         window.processedFiles = [];
         const batchProgress = document.getElementById('batchProgress');
+        const mobileProcessingIndicator = document.getElementById('mobileProcessingIndicator');
         let totalFiles = 0;
         let completedFiles = 0;
         const RATE_LIMIT_DELAY = 26000; // 26 seconds to be safe
@@ -938,6 +1161,13 @@
 
             if (files.length > 0) {
                 try {
+                    // Auto-switch to results tab on mobile when files are selected
+                    if (window.innerWidth <= 768) {
+                        setTimeout(() => {
+                            switchTab('results');
+                        }, 300);
+                    }
+
                     // Call cleanup before starting new batch
                     const cleanupResponse = await fetch('/api/cleanup', {
                         method: 'POST'
@@ -947,6 +1177,11 @@
                     // batchActions.style.display = 'block'; // This line is removed
                     batchProgress.style.display = 'block';
                     updateBatchProgress();
+
+                    // Show mobile processing indicator
+                    if (window.innerWidth <= 768) {
+                        mobileProcessingIndicator.classList.add('show');
+                    }
 
                     // Create result cards for all files first
                     files.forEach(file => {
@@ -965,9 +1200,19 @@
                     console.log('Final processedFiles array length:', window.processedFiles.length);
                     console.log('Files:', window.processedFiles.map(f => f.newFilename));
 
+                    // Hide mobile processing indicator
+                    if (window.innerWidth <= 768) {
+                        mobileProcessingIndicator.classList.remove('show');
+                    }
+
                 } catch (err) {
                     console.error('Error during file processing:', err);
                     alert('An error occurred while processing files. Please try again.');
+
+                    // Hide mobile processing indicator on error
+                    if (window.innerWidth <= 768) {
+                        mobileProcessingIndicator.classList.remove('show');
+                    }
                 }
             }
         }
@@ -1005,6 +1250,13 @@
             const contentDiv = resultCard.querySelector('.content');
 
             try {
+                // Auto-switch to results tab on mobile when processing starts
+                if (window.innerWidth <= 768) {
+                    setTimeout(() => {
+                        switchTab('results');
+                    }, 500);
+                }
+
                 // Update status to processing with animations
                 statusDiv.className = 'processing-status status-processing';
                 statusDiv.innerHTML = `
@@ -1019,6 +1271,9 @@
                 const formData = new FormData();
                 formData.append('image', file);
 
+                // Generate device fingerprint
+                const deviceFingerprint = generateDeviceFingerprint();
+
                 // Add metadata to formData
                 formData.append('date', document.getElementById('date').value);
                 formData.append('regatta_name', document.getElementById('regattaName').value);
@@ -1026,6 +1281,14 @@
                 formData.append('photographer_website', document.getElementById('photographerWebsite').value);
                 formData.append('location', document.getElementById('location').value);
                 formData.append('additional_tags', document.getElementById('additionalTags').value);
+
+                // Add device fingerprinting data
+                formData.append('device_fingerprint', deviceFingerprint.fingerprint);
+                formData.append('device_type', deviceFingerprint.deviceType);
+                formData.append('user_agent', deviceFingerprint.userAgent);
+                formData.append('screen_resolution', deviceFingerprint.screenResolution);
+                formData.append('timezone', deviceFingerprint.timezone);
+                formData.append('upload_timestamp', deviceFingerprint.timestamp);
 
                 const response = await fetch('/api/scan', {
                     method: 'POST',
@@ -1171,10 +1434,48 @@
             }
         }
 
+        // Function to generate device fingerprint
+        function generateDeviceFingerprint() {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.textBaseline = 'top';
+            ctx.font = '14px Arial';
+            ctx.fillText('Device fingerprint', 2, 2);
+
+            const fingerprint = {
+                userAgent: navigator.userAgent,
+                language: navigator.language,
+                platform: navigator.platform,
+                screenResolution: `${screen.width}x${screen.height}`,
+                colorDepth: screen.colorDepth,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                canvasHash: canvas.toDataURL(),
+                deviceType: isMobileDevice() ? 'Mobile' : 'Desktop',
+                timestamp: new Date().toISOString()
+            };
+
+            // Create a hash from the fingerprint data
+            const fingerprintString = JSON.stringify(fingerprint);
+            let hash = 0;
+            for (let i = 0; i < fingerprintString.length; i++) {
+                const char = fingerprintString.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash; // Convert to 32-bit integer
+            }
+
+            return {
+                ...fingerprint,
+                fingerprint: Math.abs(hash).toString(36) + Date.now().toString(36)
+            };
+        }
+
         // Function to generate metadata section for results
         function generateMetadataSection(data, file) {
             const metadataId = `metadata-${file.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
             const contentId = `metadata-content-${file.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+            // Generate device fingerprint
+            const deviceFingerprint = generateDeviceFingerprint();
 
             // Get form data
             const formData = {
@@ -1188,7 +1489,12 @@
                 additional_tags: document.getElementById('additionalTags').value,
                 file_size: file.size,
                 file_type: file.type,
-                upload_timestamp: new Date().toISOString()
+                upload_timestamp: new Date().toISOString(),
+                device_fingerprint: deviceFingerprint.fingerprint,
+                device_type: deviceFingerprint.deviceType,
+                user_agent: deviceFingerprint.userAgent,
+                screen_resolution: deviceFingerprint.screenResolution,
+                timezone: deviceFingerprint.timezone
             };
 
             // Add any additional data from the server response
@@ -1219,7 +1525,12 @@
                 { key: 'file_size', label: 'File Size', formatter: (value) => value ? `${(value / 1024 / 1024).toFixed(2)} MB` : null },
                 { key: 'file_type', label: 'File Type' },
                 { key: 'upload_timestamp', label: 'Upload Time', formatter: (value) => value ? new Date(value).toLocaleString() : null },
-                { key: 'processing_status', label: 'Processing Status' }
+                { key: 'processing_status', label: 'Processing Status' },
+                { key: 'device_fingerprint', label: 'Device Fingerprint' },
+                { key: 'device_type', label: 'Device Type' },
+                { key: 'user_agent', label: 'User Agent' },
+                { key: 'screen_resolution', label: 'Screen Resolution' },
+                { key: 'timezone', label: 'Timezone' }
             ];
 
             const metadataItems = metadataFields.map(field => {
@@ -1250,6 +1561,15 @@
                         <span class="result-metadata-toggle" id="toggle-${metadataId}">▼</span>
                     </div>
                     <div class="result-metadata-content" id="${contentId}">
+                        <div style="background: #e3f2fd; padding: 10px; border-radius: 5px; margin-bottom: 15px; border-left: 4px solid #2196f3;">
+                            <div style="font-weight: bold; color: #1976d2; margin-bottom: 5px;">🖥️ Device Tracking Information</div>
+                            <div style="font-size: 12px; color: #666;">
+                                <strong>Device Fingerprint:</strong> ${formData.device_fingerprint}<br>
+                                <strong>Device Type:</strong> ${formData.device_type}<br>
+                                <strong>Screen:</strong> ${formData.screen_resolution}<br>
+                                <strong>Timezone:</strong> ${formData.timezone}
+                            </div>
+                        </div>
                         <div class="result-metadata-grid">
                             ${metadataItems}
                         </div>
