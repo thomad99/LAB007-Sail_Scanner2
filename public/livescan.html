@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>LAB007-Scan-Live</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
     <script src='https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js'></script>
     <script src="script.js"></script>
     <style>
@@ -11,27 +13,33 @@
             padding: 20px;
             font-family: Arial, sans-serif;
         }
+
         .container {
             max-width: 800px;
             margin: 0 auto;
         }
+
         #video {
             width: 100%;
             max-width: 640px;
             margin: 20px 0;
         }
+
         #canvas {
             display: none;
         }
+
         .button-group {
             margin: 20px 0;
         }
+
         button {
             padding: 10px 20px;
             margin-right: 10px;
             font-size: 16px;
             cursor: pointer;
         }
+
         #result {
             white-space: pre-wrap;
             font-family: monospace;
@@ -40,6 +48,7 @@
             border-radius: 5px;
             margin: 20px 0;
         }
+
         #debug {
             display: none;
             white-space: pre-wrap;
@@ -50,35 +59,44 @@
             margin-top: 20px;
             border-left: 4px solid #0066cc;
         }
+
         #debug.visible {
             display: block;
         }
+
         .status-box {
             padding: 10px;
             margin: 10px 0;
             border-radius: 5px;
         }
+
         .status-scanning {
             background: #e6f3ff;
             border-left: 4px solid #0066cc;
         }
+
         .status-success {
             background: #e6ffe6;
             border-left: 4px solid #2d8a2d;
         }
+
         .status-error {
             background: #ffe6e6;
             border-left: 4px solid #cc0000;
         }
+
         .confidence-high {
             color: #2d8a2d;
         }
+
         .confidence-medium {
             color: #b37400;
         }
+
         .confidence-low {
             color: #cc0000;
         }
+
         .sail-number-display {
             background: #fff;
             border: 3px solid #0066cc;
@@ -86,32 +104,33 @@
             padding: 20px;
             margin: 20px 0;
             text-align: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
-        
+
         .sail-number-display h2 {
             margin: 0 0 10px 0;
             color: #0066cc;
         }
-        
+
         .sail-number-value {
             font-size: 48px;
             font-weight: bold;
             margin: 10px 0;
             font-family: monospace;
         }
-        
+
         .sail-number-confidence {
             font-size: 14px;
             color: #666;
         }
-        
+
         .confidence-indicator {
             display: inline-block;
             padding: 3px 8px;
             border-radius: 3px;
             margin-left: 5px;
         }
+
         .flash-overlay {
             position: fixed;
             top: 0;
@@ -154,15 +173,18 @@
             font-size: 16px;
             color: #666;
         }
+
         .result-info {
             display: flex;
             align-items: center;
             gap: 10px;
         }
+
         .skipper-info {
             color: #0066cc;
             font-size: 18px;
         }
+
         .no-match {
             color: #666;
             font-size: 16px;
@@ -170,12 +192,13 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>LAB007-Scan-Live</h1>
         <video id="video" playsinline></video>
         <canvas id="canvas"></canvas>
-        
+
         <div class="button-group">
             <button id="startBtn">Start Scanning</button>
             <button id="stopBtn">Stop</button>
@@ -200,7 +223,8 @@
             <p>Upload an image and enter the correct sail number:</p>
             <input type="file" id="trainImage" accept="image/*" style="margin: 10px 0;">
             <br>
-            <input type="text" id="correctNumber" placeholder="Enter correct sail number" style="margin: 10px 0; padding: 5px;">
+            <input type="text" id="correctNumber" placeholder="Enter correct sail number"
+                style="margin: 10px 0; padding: 5px;">
             <br>
             <canvas id="trainCanvas" style="max-width: 100%; margin: 10px 0;"></canvas>
             <br>
@@ -209,4 +233,5 @@
         </div>
     </div>
 </body>
-</html> 
+
+</html>
