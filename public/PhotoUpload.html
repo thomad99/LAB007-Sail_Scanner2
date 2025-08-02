@@ -5,6 +5,8 @@
     <title>LAB007 - LOVESAILING PHOTO SCANNER</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/x-icon" href="Images/favicon.ico">
+    <link rel="shortcut icon" type="image/x-icon" href="Images/favicon.ico">
+    <link rel="apple-touch-icon" href="Images/favicon.ico">
     <style>
         html,
         body {
@@ -50,12 +52,17 @@
         .upload-section input[type="file"] {
             display: block;
             margin: 10px auto;
-            padding: 60px;
+            padding: 120px;
             border: 1px solid #ddd;
             border-radius: 5px;
             background: #f8f8f8;
             width: 80%;
             max-width: 400px;
+            color: transparent;
+        }
+
+        .upload-section input[type="file"]::file-selector-button {
+            color: #333;
         }
 
         .upload-section input[type="file"]:hover {
@@ -458,10 +465,15 @@
                 width: 100%;
                 max-width: none;
                 box-sizing: border-box;
-                padding: 36px;
+                padding: 72px;
                 font-size: 16px;
-                min-height: 132px;
+                min-height: 264px;
                 -webkit-tap-highlight-color: transparent;
+                color: transparent;
+            }
+
+            .upload-section input[type="file"]::file-selector-button {
+                color: #333;
             }
 
             .upload-section p {

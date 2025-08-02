@@ -405,6 +405,14 @@ app.get('/favicon.ico', (req, res) => {
     res.redirect('/Images/favicon.ico');
 });
 
+// Serve favicon directly with proper headers
+app.get('/Images/favicon.ico', (req, res) => {
+    const faviconPath = path.join(__dirname, 'public', 'Images', 'favicon.ico');
+    res.setHeader('Content-Type', 'image/x-icon');
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+    res.sendFile(faviconPath);
+});
+
 // Define multer storage configurations
 const trainUpload = multer({
     dest: 'training_data/',
