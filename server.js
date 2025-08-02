@@ -395,9 +395,10 @@ pool.connect()
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(UPLOAD_DIR));
-app.use('/Images', express.static(PROCESSED_DIR));
-// Serve website images from public/Images directory
-app.use('/website-images', express.static(path.join(__dirname, 'public', 'Images')));
+// Serve website images from public/Images directory first
+app.use('/Images', express.static(path.join(__dirname, 'public', 'Images')));
+// Then serve processed images from processed_images directory
+app.use('/processed-images', express.static(PROCESSED_DIR));
 
 // Define multer storage configurations
 const trainUpload = multer({
@@ -1209,7 +1210,7 @@ async function processImage(file) {
                 processedFiles.push({
                     originalFilename: file.originalname,
                     newFilename: newFilename,
-                    downloadUrl: `/Images/${newFilename}`,
+                    downloadUrl: `/processed-images/${newFilename}`,
                     sailNumber: sailData.number,
                     sailorName: sailorName
                 });
@@ -1309,8 +1310,8 @@ app.post('/api/cleanup-processed', async (req, res) => {
     }
 });
 
-// Update the download endpoint to serve files from the Images directory
-app.get('/Images/:filename', async (req, res) => {
+// Update the download endpoint to serve files from the processed-images directory
+app.get('/processed-images/:filename', async (req, res) => {
     try {
         const filename = req.params.filename;
         const filePath = path.join(PROCESSED_DIR, filename);
