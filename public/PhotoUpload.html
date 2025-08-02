@@ -811,9 +811,11 @@
                 <div class="metadata-section"
                     style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
                     <div class="metadata-header" onclick="toggleMetadataSection()">
-                        <h3 style="margin: 0;">Photo Information (Optional)</h3>
-                        <span id="metadataToggle" class="metadata-toggle"
-                            style="font-size: 18px; font-weight: bold; color: #0066cc;">▼</span>
+                        <h3 style="margin: 0; display: flex; align-items: center; justify-content: space-between;">
+                            Add Photo Information
+                            <span id="metadataToggle" class="metadata-toggle"
+                                style="font-size: 18px; font-weight: bold; color: #0066cc;">▼</span>
+                        </h3>
                     </div>
                     <div id="metadataContent" class="metadata-content" style="display: none;">
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
@@ -1294,7 +1296,7 @@
                 statusDiv.className = 'processing-status status-processing';
                 statusDiv.innerHTML = `
                     <span class="processing-spinner"></span>
-                    Analyzing Image with LoveSailing AI
+                    Analyzing Image<br>with LoveSailing AI
                     <span class="progress-dots">
                         <span></span><span></span><span></span>
                     </span>
@@ -1544,6 +1546,11 @@
             }
 
             const metadataFields = [
+                { key: 'location', label: 'Location' },
+                { key: 'sail_numbers', label: 'Detected Sail Numbers' },
+                { key: 'upload_timestamp', label: 'Upload Time', formatter: (value) => value ? new Date(value).toLocaleString() : null },
+                { key: 'file_size', label: 'File Size', formatter: (value) => value ? `${(value / 1024 / 1024).toFixed(2)} MB` : null },
+                { key: 'timezone', label: 'Timezone' },
                 { key: 'filename', label: 'Original Filename' },
                 { key: 'new_filename', label: 'Processed Filename' },
                 { key: 'date', label: 'Date' },
@@ -1551,19 +1558,14 @@
                 { key: 'yacht_club', label: 'Yacht Club' },
                 { key: 'photographer_name', label: 'Photographer' },
                 { key: 'photographer_website', label: 'Photographer Website' },
-                { key: 'location', label: 'Location' },
                 { key: 'additional_tags', label: 'Additional Tags' },
-                { key: 'sail_numbers', label: 'Detected Sail Numbers' },
                 { key: 'confidence_scores', label: 'Confidence Scores' },
-                { key: 'file_size', label: 'File Size', formatter: (value) => value ? `${(value / 1024 / 1024).toFixed(2)} MB` : null },
                 { key: 'file_type', label: 'File Type' },
-                { key: 'upload_timestamp', label: 'Upload Time', formatter: (value) => value ? new Date(value).toLocaleString() : null },
                 { key: 'processing_status', label: 'Processing Status' },
                 { key: 'device_fingerprint', label: 'Device Fingerprint' },
                 { key: 'device_type', label: 'Device Type' },
                 { key: 'user_agent', label: 'User Agent' },
-                { key: 'screen_resolution', label: 'Screen Resolution' },
-                { key: 'timezone', label: 'Timezone' }
+                { key: 'screen_resolution', label: 'Screen Resolution' }
             ];
 
             const metadataItems = metadataFields.map(field => {

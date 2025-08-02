@@ -2056,6 +2056,65 @@ app.get('/api/debug-database', async (req, res) => {
     }
 });
 
+// Delete photo endpoint
+app.delete('/api/delete-photo/:id', async (req, res) => {
+    try {
+        const photoId = req.params.id;
+
+        // Get photo details from database
+        const photoResult = await pool.query(
+            'SELECT filename, file_path FROM photo_metadata WHERE id = $1',
+            [photoId]
+        );
+
+        if (photoResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Photo not found' });
+        }
+
+        const photo = photoResult.rows[0];
+        const filename = photo.filename;
+        const filePath = photo.file_path;
+
+        // Delete from database
+        await pool.query('DELETE FROM photo_metadata WHERE id = $1', [photoId]);
+
+        // Delete file from storage
+        try {
+            if (filePath) {
+                // Try to delete from local storage
+                const fullPath = path.join(PROCESSED_DIR, filePath);
+                if (fs.existsSync(fullPath)) {
+                    fs.unlinkSync(fullPath);
+                    console.log(`Deleted local file: ${fullPath}`);
+                }
+
+                // Try to delete from S3 if configured
+                if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+                    try {
+                        await deleteFromS3(filePath);
+                        console.log(`Deleted S3 file: ${filePath}`);
+                    } catch (s3Error) {
+                        console.log(`S3 deletion failed for ${filePath}:`, s3Error.message);
+                    }
+                }
+            }
+        } catch (fileError) {
+            console.log(`File deletion failed for ${filename}:`, fileError.message);
+            // Continue even if file deletion fails - database entry is already deleted
+        }
+
+        res.json({
+            success: true,
+            message: `Photo "${filename}" deleted successfully`,
+            deletedId: photoId
+        });
+
+    } catch (err) {
+        console.error('Error deleting photo:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Helper function to extract EXIF data from image buffer
 function extractExifData(buffer) {
     try {

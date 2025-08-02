@@ -308,6 +308,22 @@
                 <button class="action-button" onclick="clearDeviceSearch()">🗑️ Clear Search Results</button>
             </div>
 
+            <!-- This Device Fingerprint Section -->
+            <div class="admin-section" style="margin-top: 30px;">
+                <h2>📱 This Device Fingerprint</h2>
+                <p>Manage photos uploaded from this specific device</p>
+
+                <div id="thisDeviceResults" style="margin: 20px 0; display: none;">
+                    <h3>Photos from This Device</h3>
+                    <div id="thisDevicePhotosList" class="validation-list"></div>
+                </div>
+
+                <button class="action-button" onclick="loadThisDevicePhotos()">📱 This Device Fingerprint</button>
+                <button class="action-button danger-button" onclick="deleteAllThisDevicePhotos()" id="deleteAllButton"
+                    style="display: none;">🗑️ Delete ALL</button>
+                <button class="action-button" onclick="clearThisDeviceSearch()">🗑️ Clear Results</button>
+            </div>
+
             <div id="statusMessage" class="status-message"></div>
 
             <div style="margin-top: 30px;">
@@ -852,6 +868,184 @@
                 console.error('Error loading current device fingerprint:', err);
                 showStatus(`Error loading current device fingerprint: ${err.message}`, 'error');
             }
+        }
+
+        // Function to load photos from this device (for the new section)
+        async function loadThisDevicePhotos() {
+            try {
+                console.log('Loading photos from this device...');
+                const deviceFingerprint = generateDeviceFingerprint();
+                console.log('Current device fingerprint:', deviceFingerprint.fingerprint);
+
+                // Show device info
+                showStatus(`Loading photos from: ${deviceFingerprint.deviceType} (${deviceFingerprint.screenResolution})`, 'info');
+
+                // Search for photos uploaded by this device
+                await searchThisDevicePhotos(deviceFingerprint.fingerprint);
+
+            } catch (err) {
+                console.error('Error loading this device photos:', err);
+                showStatus(`Error loading this device photos: ${err.message}`, 'error');
+            }
+        }
+
+        // Function to search photos from this device (with view/delete options only)
+        async function searchThisDevicePhotos(deviceFingerprint) {
+            try {
+                console.log('Searching photos for this device fingerprint:', deviceFingerprint);
+                const response = await fetch(`/api/search-photos?device_fingerprint=${encodeURIComponent(deviceFingerprint)}`);
+                console.log('This device search response status:', response.status);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const photos = await response.json();
+                console.log('This device search results:', photos);
+
+                // Display the search results
+                const thisDevicePhotosList = document.getElementById('thisDevicePhotosList');
+                const thisDeviceResults = document.getElementById('thisDeviceResults');
+                const deleteAllButton = document.getElementById('deleteAllButton');
+
+                if (photos.length === 0) {
+                    thisDevicePhotosList.innerHTML = '<div class="validation-item warning">No photos found for this device</div>';
+                    deleteAllButton.style.display = 'none';
+                } else {
+                    thisDevicePhotosList.innerHTML = photos.map(photo => `
+                        <div class="validation-item success">
+                            <div style="flex: 1;">
+                                <div style="font-weight: bold; margin-bottom: 5px;">
+                                    📸 ${photo.filename}
+                                </div>
+                                <div style="font-size: 0.9em; color: #666; margin-bottom: 5px;">
+                                    <strong>Sail Number:</strong> ${photo.sail_number || 'N/A'} | 
+                                    <strong>Date:</strong> ${photo.date || 'N/A'} | 
+                                    <strong>Location:</strong> ${photo.location || 'N/A'}
+                                </div>
+                                <div style="font-size: 0.8em; color: #888;">
+                                    <strong>Uploaded:</strong> ${photo.created_at ? new Date(photo.created_at).toLocaleString() : 'Unknown'} | 
+                                    <strong>Device Type:</strong> ${photo.device_type || 'Unknown'}
+                                </div>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 5px;">
+                                <button class="action-button" style="margin: 0; padding: 5px 10px; font-size: 0.8em;" 
+                                        onclick="window.open('${photo.url}', '_blank')">
+                                    👁️ View
+                                </button>
+                                <button class="action-button danger-button" style="margin: 0; padding: 5px 10px; font-size: 0.8em;" 
+                                        onclick="deletePhoto('${photo.id}', '${photo.filename}')">
+                                    🗑️ Delete
+                                </button>
+                            </div>
+                        </div>
+                    `).join('');
+
+                    // Show delete all button with photo count
+                    deleteAllButton.style.display = 'inline-block';
+                    deleteAllButton.textContent = `🗑️ Delete ALL (${photos.length} photos)`;
+                }
+
+                thisDeviceResults.style.display = 'block';
+                showStatus(`Found ${photos.length} photos from this device`, 'success');
+
+            } catch (err) {
+                console.error('Error searching this device photos:', err);
+                showStatus(`Error searching this device photos: ${err.message}`, 'error');
+            }
+        }
+
+        // Function to delete a single photo
+        async function deletePhoto(photoId, filename) {
+            if (!confirm(`Are you sure you want to delete "${filename}"?`)) {
+                return;
+            }
+
+            try {
+                console.log('Deleting photo:', photoId, filename);
+                const response = await fetch(`/api/delete-photo/${photoId}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                console.log('Delete result:', result);
+
+                showStatus(`Photo "${filename}" deleted successfully`, 'success');
+
+                // Refresh the this device photos list
+                await loadThisDevicePhotos();
+
+                // Refresh stats
+                loadStats();
+
+            } catch (err) {
+                console.error('Error deleting photo:', err);
+                showStatus(`Error deleting photo: ${err.message}`, 'error');
+            }
+        }
+
+        // Function to delete all photos from this device
+        async function deleteAllThisDevicePhotos() {
+            try {
+                const deviceFingerprint = generateDeviceFingerprint();
+                const response = await fetch(`/api/search-photos?device_fingerprint=${encodeURIComponent(deviceFingerprint.fingerprint)}`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const photos = await response.json();
+
+                if (photos.length === 0) {
+                    showStatus('No photos found to delete', 'warning');
+                    return;
+                }
+
+                const confirmMessage = `Are you sure you want to delete ALL ${photos.length} photos uploaded from this device?\n\nThis action cannot be undone.`;
+
+                if (!confirm(confirmMessage)) {
+                    return;
+                }
+
+                showStatus(`Deleting ${photos.length} photos...`, 'info');
+
+                // Delete each photo
+                let deletedCount = 0;
+                for (const photo of photos) {
+                    try {
+                        const deleteResponse = await fetch(`/api/delete-photo/${photo.id}`, {
+                            method: 'DELETE'
+                        });
+
+                        if (deleteResponse.ok) {
+                            deletedCount++;
+                        }
+                    } catch (err) {
+                        console.error(`Error deleting photo ${photo.filename}:`, err);
+                    }
+                }
+
+                showStatus(`Successfully deleted ${deletedCount} out of ${photos.length} photos`, 'success');
+
+                // Clear the results and refresh stats
+                clearThisDeviceSearch();
+                loadStats();
+
+            } catch (err) {
+                console.error('Error deleting all photos:', err);
+                showStatus(`Error deleting all photos: ${err.message}`, 'error');
+            }
+        }
+
+        // Function to clear this device search results
+        function clearThisDeviceSearch() {
+            document.getElementById('thisDeviceResults').style.display = 'none';
+            document.getElementById('deleteAllButton').style.display = 'none';
+            showStatus('This device search results cleared', 'success');
         }
 
         // Load stats when page loads
