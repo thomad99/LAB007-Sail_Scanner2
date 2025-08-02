@@ -354,14 +354,20 @@
         }
 
         .main-container {
-            max-width: 50%;
             margin: 0 auto;
-            width: 50%;
             padding: 0 20px;
             display: flex;
             flex-direction: column;
             flex: 1;
             background: transparent;
+        }
+
+        /* Desktop styles - narrow width only on PC */
+        @media (min-width: 769px) {
+            .main-container {
+                max-width: 50%;
+                width: 50%;
+            }
         }
 
         .debug-toggle {

@@ -393,16 +393,8 @@ pool.connect()
     });
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/uploads', express.static(UPLOAD_DIR));
-// Serve website images from public/Images directory first
-app.use('/Images', express.static(path.join(__dirname, 'public', 'Images')));
-// Then serve processed images from processed_images directory
-app.use('/processed-images', express.static(PROCESSED_DIR));
 
-
-
-// Serve favicon directly with proper headers
+// Serve favicon directly with proper headers (BEFORE static file serving)
 app.get('/Images/favicon.ico', (req, res) => {
     const faviconPath = path.join(__dirname, 'public', 'Images', 'favicon.ico');
     res.setHeader('Content-Type', 'image/x-icon');
@@ -434,6 +426,8 @@ app.get('/favicon.ico', (req, res) => {
         res.status(404).send('Favicon not found');
     }
 });
+
+
 
 // Define multer storage configurations
 const trainUpload = multer({
@@ -693,14 +687,7 @@ async function ensureDirectories() {
     }
 }
 
-// Call this when the server starts
-app.listen(port, async () => {
-    console.log(`Server running on port ${port}`);
-    await ensureDirectories();
-    await createPhotoMetadataTable();
-    await createUserTables();
-    await testS3Connection();
-});
+// Call this when the server starts (moved to end of file)
 
 // Update the scan endpoint to include metadata
 app.post('/api/scan', upload.single('image'), async (req, res) => {
@@ -2250,3 +2237,20 @@ async function checkForDuplicate(checksum) {
         return null;
     }
 }
+
+// Static file serving (AFTER all API routes)
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(UPLOAD_DIR));
+// Serve website images from public/Images directory first
+app.use('/Images', express.static(path.join(__dirname, 'public', 'Images')));
+// Then serve processed images from processed_images directory
+app.use('/processed-images', express.static(PROCESSED_DIR));
+
+// Start the server (AFTER all routes are defined)
+app.listen(port, async () => {
+    console.log(`Server running on port ${port}`);
+    await ensureDirectories();
+    await createPhotoMetadataTable();
+    await createUserTables();
+    await testS3Connection();
+});
