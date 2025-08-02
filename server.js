@@ -400,17 +400,39 @@ app.use('/Images', express.static(path.join(__dirname, 'public', 'Images')));
 // Then serve processed images from processed_images directory
 app.use('/processed-images', express.static(PROCESSED_DIR));
 
-// Handle favicon requests - redirect to the correct location
-app.get('/favicon.ico', (req, res) => {
-    res.redirect('/Images/favicon.ico');
-});
+
 
 // Serve favicon directly with proper headers
 app.get('/Images/favicon.ico', (req, res) => {
     const faviconPath = path.join(__dirname, 'public', 'Images', 'favicon.ico');
     res.setHeader('Content-Type', 'image/x-icon');
-    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); // Prevent caching for debugging
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.sendFile(faviconPath);
+});
+
+// Fallback favicon route - try root public directory
+app.get('/favicon.ico', (req, res) => {
+    const faviconPath = path.join(__dirname, 'public', 'favicon.ico');
+    const imagesFaviconPath = path.join(__dirname, 'public', 'Images', 'favicon.ico');
+
+    // Try root public directory first, then Images directory
+    if (require('fs').existsSync(faviconPath)) {
+        res.setHeader('Content-Type', 'image/x-icon');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.sendFile(faviconPath);
+    } else if (require('fs').existsSync(imagesFaviconPath)) {
+        res.setHeader('Content-Type', 'image/x-icon');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.sendFile(imagesFaviconPath);
+    } else {
+        res.status(404).send('Favicon not found');
+    }
 });
 
 // Define multer storage configurations
