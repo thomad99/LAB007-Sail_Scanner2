@@ -613,39 +613,7 @@
 
 
 
-            /* Mobile processing indicator */
-            .mobile-processing-indicator {
-                position: fixed;
-                top: 10px;
-                left: 50%;
-                transform: translateX(-50%);
-                background: rgba(0, 102, 204, 0.9);
-                color: white;
-                padding: 24px 48px;
-                border-radius: 30px;
-                font-size: 18px;
-                font-weight: 600;
-                z-index: 1000;
-                display: none;
-                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-            }
 
-            .mobile-processing-indicator.show {
-                display: block;
-                animation: slideDown 0.3s ease;
-            }
-
-            @keyframes slideDown {
-                from {
-                    transform: translateX(-50%) translateY(-100%);
-                    opacity: 0;
-                }
-
-                to {
-                    transform: translateX(-50%) translateY(0);
-                    opacity: 1;
-                }
-            }
         }
 
         /* Desktop styles remain unchanged */
@@ -813,22 +781,13 @@
             margin-left: 5px;
             font-size: 15px;
         }
-
-        .result-metadata-item .no-data {
-            color: #6c757d;
-            font-style: italic;
-            font-size: 15px;
-        }
     </style>
     <script src="https://js.stripe.com/v3/"></script>
     <script src="https://cdn.jsdelivr.net/npm/exif-js@2.3.0/exif.min.js"></script>
 </head>
 
 <body>
-    <!-- Mobile Processing Indicator -->
-    <div id="mobileProcessingIndicator" class="mobile-processing-indicator">
-        Processing photos...
-    </div>
+
 
     <!-- Metadata Overlay Backdrop -->
     <div id="metadataOverlayBackdrop" class="metadata-overlay-backdrop"></div>
@@ -997,7 +956,7 @@
         const resultsContainer = document.querySelector('.results-list');
         window.processedFiles = [];
         const batchProgress = document.getElementById('batchProgress');
-        const mobileProcessingIndicator = document.getElementById('mobileProcessingIndicator');
+
         let totalFiles = 0;
         let completedFiles = 0;
         const RATE_LIMIT_DELAY = 26000; // 26 seconds to be safe
@@ -1261,10 +1220,7 @@
                     batchProgress.style.display = 'block';
                     updateBatchProgress();
 
-                    // Show mobile processing indicator
-                    if (window.innerWidth <= 768) {
-                        mobileProcessingIndicator.classList.add('show');
-                    }
+
 
                     // Create result cards for all files first
                     files.forEach(file => {
@@ -1283,19 +1239,13 @@
                     console.log('Final processedFiles array length:', window.processedFiles.length);
                     console.log('Files:', window.processedFiles.map(f => f.newFilename));
 
-                    // Hide mobile processing indicator
-                    if (window.innerWidth <= 768) {
-                        mobileProcessingIndicator.classList.remove('show');
-                    }
+
 
                 } catch (err) {
                     console.error('Error during file processing:', err);
                     alert('An error occurred while processing files. Please try again.');
 
-                    // Hide mobile processing indicator on error
-                    if (window.innerWidth <= 768) {
-                        mobileProcessingIndicator.classList.remove('show');
-                    }
+
                 }
             }
         }
@@ -1620,6 +1570,7 @@
                 const value = formData[field.key];
                 const formattedValue = field.formatter ? field.formatter(value) : value;
 
+                // Only include fields that have actual data
                 if (formattedValue && formattedValue !== 'null' && formattedValue !== 'undefined' && formattedValue !== '') {
                     return `
                         <div class="result-metadata-item">
@@ -1628,14 +1579,26 @@
                         </div>
                     `;
                 } else {
-                    return `
-                        <div class="result-metadata-item">
-                            <strong>${field.label}:</strong>
-                            <span class="no-data">Not provided</span>
-                        </div>
-                    `;
+                    // Return empty string for fields with no data
+                    return '';
                 }
-            }).join('');
+            }).filter(item => item !== '').join('');
+
+            // Build device tracking information only if we have device data
+            const deviceInfo = [];
+            if (formData.device_fingerprint) deviceInfo.push(`<strong>Device Fingerprint:</strong> ${formData.device_fingerprint}`);
+            if (formData.device_type) deviceInfo.push(`<strong>Device Type:</strong> ${formData.device_type}`);
+            if (formData.screen_resolution) deviceInfo.push(`<strong>Screen:</strong> ${formData.screen_resolution}`);
+            if (formData.timezone) deviceInfo.push(`<strong>Timezone:</strong> ${formData.timezone}`);
+
+            const deviceTrackingSection = deviceInfo.length > 0 ? `
+                <div style="background: #e3f2fd; padding: 10px; border-radius: 5px; margin-bottom: 15px; border-left: 4px solid #2196f3;">
+                    <div style="font-weight: bold; color: #1976d2; margin-bottom: 5px;">🖥️ Device Tracking Information</div>
+                    <div style="font-size: 12px; color: #666;">
+                        ${deviceInfo.join('<br>')}
+                    </div>
+                </div>
+            ` : '';
 
             return `
                 <div class="result-metadata-section" id="${metadataId}">
@@ -1644,15 +1607,7 @@
                         <span class="result-metadata-toggle" id="toggle-${metadataId}">▼</span>
                     </div>
                     <div class="result-metadata-content" id="${contentId}">
-                        <div style="background: #e3f2fd; padding: 10px; border-radius: 5px; margin-bottom: 15px; border-left: 4px solid #2196f3;">
-                            <div style="font-weight: bold; color: #1976d2; margin-bottom: 5px;">🖥️ Device Tracking Information</div>
-                            <div style="font-size: 12px; color: #666;">
-                                <strong>Device Fingerprint:</strong> ${formData.device_fingerprint}<br>
-                                <strong>Device Type:</strong> ${formData.device_type}<br>
-                                <strong>Screen:</strong> ${formData.screen_resolution}<br>
-                                <strong>Timezone:</strong> ${formData.timezone}
-                            </div>
-                        </div>
+                        ${deviceTrackingSection}
                         <div class="result-metadata-grid">
                             ${metadataItems}
                         </div>

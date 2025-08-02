@@ -356,11 +356,7 @@
             font-size: 14px;
         }
 
-        .metadata-item .no-data {
-            color: #6c757d;
-            font-style: italic;
-            font-size: 14px;
-        }
+
 
         /* No results styling */
         .no-results {
@@ -721,22 +717,16 @@
                 const value = photo[field.key];
                 const formattedValue = field.formatter ? field.formatter(value) : value;
 
-                const metadataItem = document.createElement('div');
-                metadataItem.className = 'metadata-item';
-
-                if (formattedValue && formattedValue !== 'null' && formattedValue !== 'undefined') {
+                // Only create metadata item if we have actual data
+                if (formattedValue && formattedValue !== 'null' && formattedValue !== 'undefined' && formattedValue !== '') {
+                    const metadataItem = document.createElement('div');
+                    metadataItem.className = 'metadata-item';
                     metadataItem.innerHTML = `
                         <strong>${field.label}:</strong>
                         <span class="value">${formattedValue}</span>
                     `;
-                } else {
-                    metadataItem.innerHTML = `
-                        <strong>${field.label}:</strong>
-                        <span class="no-data">Not available</span>
-                    `;
+                    metadataContent.appendChild(metadataItem);
                 }
-
-                metadataContent.appendChild(metadataItem);
             });
 
             modal.style.display = 'flex';
