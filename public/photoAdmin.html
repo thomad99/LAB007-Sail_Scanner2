@@ -313,12 +313,24 @@
                 <h2>📱 This Device Fingerprint</h2>
                 <p>Manage photos uploaded from this specific device</p>
 
+                <div id="thisDeviceInfo"
+                    style="margin: 20px 0; padding: 15px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px;">
+                    <h3>Current Device Information</h3>
+                    <div id="currentDeviceDetails" style="text-align: left; font-family: monospace; font-size: 0.9em;">
+                        <div><strong>Device Type:</strong> <span id="deviceType">Loading...</span></div>
+                        <div><strong>Screen Resolution:</strong> <span id="screenResolution">Loading...</span></div>
+                        <div><strong>Device Fingerprint:</strong> <span id="deviceFingerprint">Loading...</span></div>
+                        <div><strong>User Agent:</strong> <span id="userAgent">Loading...</span></div>
+                        <div><strong>Timezone:</strong> <span id="timezone">Loading...</span></div>
+                    </div>
+                </div>
+
                 <div id="thisDeviceResults" style="margin: 20px 0; display: none;">
                     <h3>Photos from This Device</h3>
                     <div id="thisDevicePhotosList" class="validation-list"></div>
                 </div>
 
-                <button class="action-button" onclick="loadThisDevicePhotos()">📱 This Device Fingerprint</button>
+                <button class="action-button" onclick="loadThisDevicePhotos()">📱 Load Photos from This Device</button>
                 <button class="action-button danger-button" onclick="deleteAllThisDevicePhotos()" id="deleteAllButton"
                     style="display: none;">🗑️ Delete ALL</button>
                 <button class="action-button" onclick="clearThisDeviceSearch()">🗑️ Clear Results</button>
@@ -870,18 +882,43 @@
             }
         }
 
+        // Function to populate current device information
+        function populateCurrentDeviceInfo() {
+            try {
+                const deviceFingerprint = generateDeviceFingerprint();
+
+                // Update the device info display
+                document.getElementById('deviceType').textContent = deviceFingerprint.deviceType;
+                document.getElementById('screenResolution').textContent = deviceFingerprint.screenResolution;
+                document.getElementById('deviceFingerprint').textContent = deviceFingerprint.fingerprint;
+                document.getElementById('userAgent').textContent = deviceFingerprint.userAgent.substring(0, 80) + (deviceFingerprint.userAgent.length > 80 ? '...' : '');
+                document.getElementById('timezone').textContent = deviceFingerprint.timezone;
+
+                console.log('Current device fingerprint populated:', deviceFingerprint.fingerprint);
+
+                // Store the fingerprint for use in other functions
+                window.currentDeviceFingerprint = deviceFingerprint.fingerprint;
+
+            } catch (err) {
+                console.error('Error populating device info:', err);
+                document.getElementById('deviceType').textContent = 'Error loading device info';
+            }
+        }
+
         // Function to load photos from this device (for the new section)
         async function loadThisDevicePhotos() {
             try {
                 console.log('Loading photos from this device...');
-                const deviceFingerprint = generateDeviceFingerprint();
-                console.log('Current device fingerprint:', deviceFingerprint.fingerprint);
+
+                // Use the stored fingerprint or generate a new one
+                const deviceFingerprint = window.currentDeviceFingerprint || generateDeviceFingerprint().fingerprint;
+                console.log('Current device fingerprint:', deviceFingerprint);
 
                 // Show device info
-                showStatus(`Loading photos from: ${deviceFingerprint.deviceType} (${deviceFingerprint.screenResolution})`, 'info');
+                showStatus(`Loading photos from current device (${deviceFingerprint.substring(0, 20)}...)`, 'info');
 
                 // Search for photos uploaded by this device
-                await searchThisDevicePhotos(deviceFingerprint.fingerprint);
+                await searchThisDevicePhotos(deviceFingerprint);
 
             } catch (err) {
                 console.error('Error loading this device photos:', err);
@@ -991,8 +1028,9 @@
         // Function to delete all photos from this device
         async function deleteAllThisDevicePhotos() {
             try {
-                const deviceFingerprint = generateDeviceFingerprint();
-                const response = await fetch(`/api/search-photos?device_fingerprint=${encodeURIComponent(deviceFingerprint.fingerprint)}`);
+                // Use the stored fingerprint or generate a new one
+                const deviceFingerprint = window.currentDeviceFingerprint || generateDeviceFingerprint().fingerprint;
+                const response = await fetch(`/api/search-photos?device_fingerprint=${encodeURIComponent(deviceFingerprint)}`);
 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -1048,8 +1086,11 @@
             showStatus('This device search results cleared', 'success');
         }
 
-        // Load stats when page loads
-        document.addEventListener('DOMContentLoaded', loadStats);
+        // Load stats and populate device info when page loads
+        document.addEventListener('DOMContentLoaded', function () {
+            loadStats();
+            populateCurrentDeviceInfo();
+        });
     </script>
 </body>
 
