@@ -1,14 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sail Number Scanner - Love Sailing</title>
-    <meta name="description" content="Love Sailing's Sail Number Scanner helps identify boats by their sail numbers, providing race history and performance data for sailboats in USA racing events.">
-    <meta name="keywords" content="sail number scanner, sailboat identification, boat racing history, sail number lookup, regatta results, race performance">
+    <meta name="description"
+        content="Love Sailing's Sail Number Scanner helps identify boats by their sail numbers, providing race history and performance data for sailboats in USA racing events.">
+    <meta name="keywords"
+        content="sail number scanner, sailboat identification, boat racing history, sail number lookup, regatta results, race performance">
     <meta name="robots" content="index, follow">
     <meta property="og:title" content="Sail Number Scanner - Love Sailing">
-    <meta property="og:description" content="Identify boats and access race history by scanning sail numbers with our innovative sailing tool.">
+    <meta property="og:description"
+        content="Identify boats and access race history by scanning sail numbers with our innovative sailing tool.">
     <meta property="og:type" content="website">
     <style>
         body {
@@ -22,17 +26,20 @@
             align-items: center;
             min-height: 100vh;
         }
+
         .logo {
             margin-top: 50px;
             max-width: 600px;
             width: 90%;
         }
+
         .content {
             margin-top: 50px;
             text-align: center;
             width: 80%;
             max-width: 800px;
         }
+
         .button-container {
             display: flex;
             flex-direction: column;
@@ -40,6 +47,7 @@
             margin-top: 40px;
             width: 100%;
         }
+
         .scan-button {
             padding: 25px 30px;
             font-size: 1.8em;
@@ -56,19 +64,22 @@
             align-items: center;
             justify-content: center;
         }
+
         .scan-button:hover {
             background-color: #0088ff;
             transform: scale(1.05);
         }
+
         .back-link {
             margin-top: 40px;
             color: white;
             text-decoration: none;
         }
+
         .back-link:hover {
             text-decoration: underline;
         }
-        
+
         /* Mobile menu styling */
         .hamburger-menu {
             display: none;
@@ -81,6 +92,7 @@
             padding: 10px;
             border-radius: 5px;
         }
+
         .hamburger-menu span {
             display: block;
             width: 30px;
@@ -89,6 +101,7 @@
             background-color: white;
             transition: all 0.3s ease;
         }
+
         .mobile-menu {
             display: none;
             position: fixed;
@@ -103,6 +116,7 @@
             align-items: center;
             text-align: center;
         }
+
         .mobile-menu a {
             display: block;
             padding: 20px;
@@ -116,20 +130,24 @@
             background-color: rgba(255, 255, 255, 0.1);
             transition: all 0.3s ease;
         }
+
         .mobile-menu a:hover {
             background-color: rgba(255, 255, 255, 0.2);
         }
+
         .mobile-menu img {
             width: 80px;
             height: auto;
             margin-bottom: 10px;
         }
+
         .mobile-menu .menu-item {
             display: flex;
             flex-direction: column;
             align-items: center;
             margin-bottom: 30px;
         }
+
         .close-menu {
             position: absolute;
             top: 20px;
@@ -144,18 +162,22 @@
             .hamburger-menu {
                 display: block;
             }
+
             .logo {
                 margin-top: 20px;
                 max-width: 80%;
             }
+
             .content {
                 margin-top: 20px;
                 width: 90%;
             }
+
             .button-container {
                 gap: 15px;
                 margin-top: 20px;
             }
+
             .scan-button {
                 padding: 20px 15px;
                 font-size: 1.3em;
@@ -164,16 +186,17 @@
         }
     </style>
 </head>
+
 <body>
     <img src="Images/LOVE SAILING LOGO.JPEG" alt="Love Sailing Logo" class="logo">
-    
+
     <div class="content">
         <div class="button-container">
-            <a href="https://lab007-sail-scanner2.onrender.com/PhotoUpload.html" class="scan-button">Upload Photos</a>
-            <a href="https://lab007-sail-scanner2.onrender.com/PhotoSearch.html" class="scan-button">Photo Search</a>
+            <a href="PhotoUpload.html" class="scan-button">Upload Photos</a>
+            <a href="PhotoSearch.html" class="scan-button">Photo Search</a>
         </div>
     </div>
-    
+
     <!-- Hamburger menu icon -->
     <div class="hamburger-menu" onclick="toggleMenu()">
         <span></span>
@@ -184,7 +207,7 @@
     <!-- Mobile menu -->
     <div class="mobile-menu" id="mobileMenu">
         <div class="close-menu" onclick="toggleMenu()">✕</div>
-        
+
         <a href="index.html">Home</a>
         <a href="https://lovesailing.ai/SailScan.html">Photo Database</a>
         <a href="https://lovesailing-chatbot.onrender.com/chat">ChatBot</a>
@@ -203,4 +226,5 @@
         }
     </script>
 </body>
-</html> 
+
+</html>

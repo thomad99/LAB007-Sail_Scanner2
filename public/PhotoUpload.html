@@ -124,65 +124,7 @@
             font-style: italic;
         }
 
-        .debug-panel {
-            display: none;
-            margin-top: 15px;
-            padding: 10px;
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-        }
 
-        .debug-header {
-            padding: 10px;
-            background: #0066cc;
-            color: white;
-            border-top-left-radius: 5px;
-            border-top-right-radius: 5px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .debug-header h3 {
-            margin: 0;
-        }
-
-        .debug-header label {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .debug-content {
-            padding: 15px;
-            max-height: 600px;
-            overflow-y: auto;
-        }
-
-        .debug-section {
-            margin-bottom: 20px;
-            padding: 10px;
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-
-        .debug-section h4 {
-            margin: 0 0 10px 0;
-            color: #0066cc;
-        }
-
-        .debug-section pre {
-            margin: 0;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            background: #f5f5f5;
-            padding: 10px;
-            border-radius: 4px;
-            font-size: 14px;
-            font-family: monospace;
-        }
 
         .highlight {
             background: #fff3cd;
@@ -191,11 +133,13 @@
         }
 
         .processing-status {
-            padding: 8px;
-            margin-bottom: 10px;
-            border-radius: 4px;
+            padding: 24px;
+            margin-bottom: 30px;
+            border-radius: 12px;
             position: relative;
             overflow: hidden;
+            font-size: 18px;
+            font-weight: 500;
         }
 
         .status-waiting {
@@ -250,13 +194,13 @@
 
         .processing-spinner {
             display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid #856404;
+            width: 24px;
+            height: 24px;
+            border: 3px solid #856404;
             border-radius: 50%;
             border-top-color: transparent;
             animation: spin 1s linear infinite;
-            margin-right: 8px;
+            margin-right: 12px;
         }
 
         @keyframes spin {
@@ -272,11 +216,11 @@
 
         .progress-dots span {
             display: inline-block;
-            width: 4px;
-            height: 4px;
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
             background-color: #856404;
-            margin: 0 2px;
+            margin: 0 3px;
             animation: dots 1.4s infinite ease-in-out;
         }
 
@@ -660,35 +604,14 @@
 
             /* Compact processing status */
             .processing-status {
-                padding: 6px 10px;
-                margin-bottom: 8px;
-                font-size: 15px;
+                padding: 18px 30px;
+                margin-bottom: 24px;
+                font-size: 18px;
+                border-radius: 12px;
+                font-weight: 500;
             }
 
-            /* Compact debug panel */
-            .debug-panel {
-                font-size: 14px;
-            }
 
-            .debug-content {
-                max-height: 200px;
-                padding: 10px;
-            }
-
-            .debug-section {
-                margin-bottom: 10px;
-                padding: 8px;
-            }
-
-            .debug-section h4 {
-                font-size: 16px;
-                margin: 0 0 5px 0;
-            }
-
-            .debug-section pre {
-                font-size: 13px;
-                padding: 8px;
-            }
 
             /* Mobile processing indicator */
             .mobile-processing-indicator {
@@ -698,13 +621,13 @@
                 transform: translateX(-50%);
                 background: rgba(0, 102, 204, 0.9);
                 color: white;
-                padding: 8px 16px;
-                border-radius: 20px;
-                font-size: 14px;
-                font-weight: 500;
+                padding: 24px 48px;
+                border-radius: 30px;
+                font-size: 18px;
+                font-weight: 600;
                 z-index: 1000;
                 display: none;
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
             }
 
             .mobile-processing-indicator.show {
@@ -916,7 +839,6 @@
             <div class="mobile-tabs">
                 <button class="mobile-tab active" onclick="switchTab('upload')">📤 Upload</button>
                 <button class="mobile-tab" onclick="switchTab('results')">📊 Results</button>
-                <button class="mobile-tab" onclick="switchTab('debug')">🔧 Debug</button>
             </div>
 
             <!-- Upload Tab Content -->
@@ -1026,32 +948,7 @@
                 </div>
             </div>
 
-            <!-- Debug Tab Content -->
-            <div id="debugTab" class="mobile-tab-content">
-                <div id="debugPanel" class="debug-panel">
-                    <div class="debug-header">
-                        <h3>Debug Information</h3>
-                        <label>
-                            <input type="checkbox" id="debugToggle" checked> Show Debug Info
-                        </label>
-                    </div>
-                    <div class="debug-content">
-                        <div class="debug-section">
-                            <h4>Azure Vision Processing Status</h4>
-                            <div id="processingStatus" class="processing-status">Waiting to start...</div>
-                            <pre id="azureDebug">Waiting for scan...</pre>
-                        </div>
-                        <div class="debug-section">
-                            <h4>Raw Text Detected</h4>
-                            <pre id="rawTextDebug">Waiting for scan...</pre>
-                        </div>
-                        <div class="debug-section">
-                            <h4>Number Processing</h4>
-                            <pre id="numberDebug">Waiting for scan...</pre>
-                        </div>
-                    </div>
-                </div>
-            </div>
+
         </div>
     </div>
 
@@ -1097,12 +994,6 @@
         const topResultsBox = document.getElementById('topResultsBox');
         const topResultsContent = topResultsBox.querySelector('.top-results-content');
         const loading = document.getElementById('loading');
-        const debugPanel = document.getElementById('debugPanel');
-        const azureDebug = document.getElementById('azureDebug');
-        const rawTextDebug = document.getElementById('rawTextDebug');
-        const numberDebug = document.getElementById('numberDebug');
-        const debugToggle = document.getElementById('debugToggle');
-        const processingStatus = document.getElementById('processingStatus');
         const resultsContainer = document.querySelector('.results-list');
         window.processedFiles = [];
         const batchProgress = document.getElementById('batchProgress');
@@ -1207,9 +1098,7 @@
             }
         });
 
-        debugToggle.addEventListener('change', (e) => {
-            document.querySelector('.debug-content').style.display = e.target.checked ? 'block' : 'none';
-        });
+
 
         imageInput.addEventListener('change', handleFiles);
 
@@ -1823,10 +1712,7 @@
             }
         }
 
-        function toggleDebug(checkbox) {
-            const debugPanel = document.getElementById('debugPanel');
-            debugPanel.style.display = checkbox.checked ? 'block' : 'none';
-        }
+
 
         // Add this at the beginning of your script section
         function isMobileDevice() {
