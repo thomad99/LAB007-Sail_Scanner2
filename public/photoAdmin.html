@@ -858,8 +858,8 @@
                 const deviceFingerprint = generateDeviceFingerprint();
                 console.log('Current device fingerprint:', deviceFingerprint.fingerprint);
 
-                // Show device info
-                showStatus(`Current device: ${deviceFingerprint.deviceType} (${deviceFingerprint.screenResolution})`, 'info');
+                // Show device info with fingerprint for debugging
+                showStatus(`Current device: ${deviceFingerprint.deviceType} (${deviceFingerprint.screenResolution}) | Fingerprint: ${deviceFingerprint.fingerprint}`, 'info');
 
                 // Search for photos uploaded by this device
                 await searchPhotosByDevice(deviceFingerprint.fingerprint);
