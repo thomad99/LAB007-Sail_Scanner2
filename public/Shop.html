@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Love Sailing Shop</title>
+    <meta name="description" content="Love Sailing Shop offers sailing gear, equipment, and accessories for sailors and sailing enthusiasts. Find everything you need for your sailing adventures.">
+    <meta name="keywords" content="sailing shop, sailing gear, sailing equipment, sailing accessories, sailing clothes, boat equipment">
+    <meta name="robots" content="index, follow">
+    <meta property="og:title" content="Love Sailing Shop">
+    <meta property="og:description" content="Shop for sailing gear, equipment, and accessories. Everything you need for your sailing adventures.">
+    <meta property="og:type" content="website">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #020053;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            gap: 0;
+        }
+        .logo-container {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            margin-top: 10px;
+            margin-bottom: 0;
+        }
+        .logo {
+            max-width: 450px;
+            margin: 0;
+            padding: 0;
+            width: 90%;
+        }
+        .content {
+            margin-top: -50px;
+            padding-top: 0;
+            text-align: center;
+            width: 80%;
+            max-width: 800px;
+        }
+        .shop-button {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 15px 30px;
+            font-size: 1.2em;
+            background-color: #FF9900;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            text-align: center;
+        }
+        .shop-button:hover {
+            background-color: #FFB347;
+            transform: scale(1.05);
+        }
+        .shop-image {
+            max-width: 125px;
+            transition: transform 0.3s ease;
+        }
+        .shop-image:hover {
+            transform: scale(1.05);
+        }
+        .shop-icon-link {
+            display: inline-block;
+            margin: 0;
+            padding: 0;
+        }
+        
+        /* Mobile menu styling */
+        .hamburger-menu {
+            display: none;
+            cursor: pointer;
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background-color: rgba(2, 0, 83, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .hamburger-menu span {
+            display: block;
+            width: 30px;
+            height: 3px;
+            margin: 6px 0;
+            background-color: white;
+            transition: all 0.3s ease;
+        }
+        .mobile-menu {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #020053;
+            z-index: 999;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+        .mobile-menu a {
+            display: block;
+            padding: 20px;
+            margin: 10px 0;
+            font-size: 1.5em;
+            color: white;
+            text-decoration: none;
+            width: 80%;
+            text-align: center;
+            border-radius: 8px;
+            background-color: rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+        .mobile-menu a:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        .mobile-menu img {
+            width: 80px;
+            height: auto;
+            margin-bottom: 10px;
+        }
+        .mobile-menu .menu-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        .close-menu {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 24px;
+            color: white;
+            cursor: pointer;
+        }
+
+        /* Responsive styles */
+        @media (max-width: 768px) {
+            .hamburger-menu {
+                display: block;
+            }
+            .logo-container {
+                margin-top: 20px;
+            }
+            .logo {
+                max-width: 80%;
+            }
+            .content {
+                margin-top: -20px;
+                width: 90%;
+            }
+            .shop-button {
+                padding: 12px 20px;
+                font-size: 1em;
+                width: 80%;
+            }
+            ul[style] {
+                width: 100% !important;
+            }
+            li[style] a[style] {
+                padding: 10px !important;
+                font-size: 0.9em !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="logo-container">
+        <img src="Images/LOVE SAILING LOGO.JPEG" alt="Love Sailing Logo" class="logo">
+    </div>
+    
+    <div class="content">
+        <a href="https://amzn.to/43VZ07J" class="shop-icon-link">
+            <img src="Images/Love Sailing Shop Shopping Basket Icon.jpg" alt="Love Sailing Shop" class="shop-image">
+        </a>
+        
+        <p>Please use our Amazon Store link here. Using the link will give a small commission back to support SYS.</p>
+        
+        <div>
+            <a href="https://amzn.to/43VZ07J" class="shop-button">Visit Our Amazon Store</a>
+        </div>
+        
+        <div style="margin-top: 30px; text-align: left; max-width: 400px; margin-left: auto; margin-right: auto;">
+            <h3 style="text-align: center; margin-bottom: 20px;">Popular Sailing Gear</h3>
+            <ul style="list-style-type: none; padding: 0;">
+                <li style="margin-bottom: 12px;"><a href="https://amzn.to/4czadgA" style="color: white; text-decoration: none; display: block; padding: 8px 15px; background-color: rgba(255,255,255,0.1); border-radius: 5px; transition: all 0.2s ease;">Life Vests</a></li>
+                <li style="margin-bottom: 12px;"><a href="https://amzn.to/4cvTdrG" style="color: white; text-decoration: none; display: block; padding: 8px 15px; background-color: rgba(255,255,255,0.1); border-radius: 5px; transition: all 0.2s ease;">Gloves</a></li>
+                <li style="margin-bottom: 12px;"><a href="https://amzn.to/4jsohei" style="color: white; text-decoration: none; display: block; padding: 8px 15px; background-color: rgba(255,255,255,0.1); border-radius: 5px; transition: all 0.2s ease;">Water Shoes</a></li>
+                <li style="margin-bottom: 12px;"><a href="https://amzn.to/44tFVtM" style="color: white; text-decoration: none; display: block; padding: 8px 15px; background-color: rgba(255,255,255,0.1); border-radius: 5px; transition: all 0.2s ease;">Sunglasses</a></li>
+                <li style="margin-bottom: 12px;"><a href="https://amzn.to/4jxgzzr" style="color: white; text-decoration: none; display: block; padding: 8px 15px; background-color: rgba(255,255,255,0.1); border-radius: 5px; transition: all 0.2s ease;">Various Sail Gear</a></li>
+            </ul>
+        </div>
+    </div>
+    
+    <!-- Hamburger menu icon -->
+    <div class="hamburger-menu" onclick="toggleMenu()">
+        <span></span>
+        <span></span>
+        <span></span>
+    </div>
+
+    <!-- Mobile menu -->
+    <div class="mobile-menu" id="mobileMenu">
+        <div class="close-menu" onclick="toggleMenu()">✕</div>
+        
+        <a href="index.html">Home</a>
+        <a href="https://lovesailing.ai/SailScan.html">Photo Database</a>
+        <a href="https://lovesailing-chatbot.onrender.com/chat">ChatBot</a>
+        <a href="game.html">GAME</a>
+    </div>
+
+    <script>
+        function toggleMenu() {
+            const mobileMenu = document.getElementById('mobileMenu');
+            if (mobileMenu.style.display === 'flex') {
+                mobileMenu.style.display = 'none';
+            } else {
+                mobileMenu.style.display = 'flex';
+            }
+        }
+    </script>
+</body>
+</html> 

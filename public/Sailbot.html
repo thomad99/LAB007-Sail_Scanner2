@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Love Sailing - Sailboat Racing Results Database & Sailing Resource Tool</title>
-    <meta name="description" content="Love Sailing is a sailboat racing results database and sailing resource tool. Access USA race data, sail number scanner, sailing chatbot, AI tools, and live/historic regatta results from Regatta Network and ClubSpot.">
-    <meta name="keywords" content="sailing, sailboat racing, regatta results, sail number scanner, sailing chatbot, AI sailing tools, Regatta Network, ClubSpot">
+    <title>Sailing Chatbot - Love Sailing</title>
+    <meta name="description" content="The Love Sailing Chatbot provides sailing information, race data insights, and assistance for sailors. Get answers to your sailing questions with our AI-powered sailing assistant.">
+    <meta name="keywords" content="sailing chatbot, sailing assistant, AI sailing, sailing information, regatta help, sailboat racing">
     <meta name="robots" content="index, follow">
-    <meta property="og:title" content="Love Sailing - Sailboat Racing Database">
-    <meta property="og:description" content="Access USA sailboat race data, sail number scanner, sailing chatbot, AI tools, and live/historic regatta results.">
+    <meta property="og:title" content="Sailing Chatbot - Love Sailing">
+    <meta property="og:description" content="Get sailing information and race data insights with our AI-powered sailing chatbot.">
     <meta property="og:type" content="website">
     <style>
         body {
@@ -27,28 +27,19 @@
             max-width: 600px;
             width: 90%;
         }
-        .navigation {
-            display: flex;
-            justify-content: center;
-            gap: 50px;
+        .content {
             margin-top: 50px;
-            flex-wrap: wrap;
-        }
-        .nav-item {
             text-align: center;
+            width: 80%;
+            max-width: 800px;
+        }
+        .back-link {
+            margin-top: 20px;
+            color: white;
             text-decoration: none;
         }
-        .nav-item img {
-            width: 200px;
-            transition: transform 0.3s ease;
-        }
-        .nav-item img:hover {
-            transform: scale(1.1);
-        }
-        .tagline {
-            margin-top: 50px;
-            font-size: 1em;
-            color: white;
+        .back-link:hover {
+            text-decoration: underline;
         }
         
         /* Mobile menu styling */
@@ -101,17 +92,6 @@
         .mobile-menu a:hover {
             background-color: rgba(255, 255, 255, 0.2);
         }
-        .mobile-menu img {
-            width: 80px;
-            height: auto;
-            margin-bottom: 10px;
-        }
-        .mobile-menu .menu-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            margin-bottom: 30px;
-        }
         .close-menu {
             position: absolute;
             top: 20px;
@@ -123,9 +103,6 @@
 
         /* Responsive styles */
         @media (max-width: 768px) {
-            .navigation {
-                display: none;
-            }
             .hamburger-menu {
                 display: block;
             }
@@ -133,10 +110,9 @@
                 margin-top: 30px;
                 max-width: 80%;
             }
-            .tagline {
+            .content {
                 margin-top: 30px;
-                text-align: center;
-                padding: 0 20px;
+                width: 90%;
             }
         }
     </style>
@@ -144,25 +120,13 @@
 <body>
     <img src="Images/LOVE SAILING LOGO.JPEG" alt="Love Sailing Logo" class="logo">
     
-    <div class="navigation">
-        <a href="https://lovesailing-chatbot.onrender.com/chat" class="nav-item">
-            <img src="Images/Chatbot-icon.jpg" alt="ChatBot">
-        </a>
-        <a href="SailScan.html" class="nav-item">
-            <img src="Images/Sailscan-icon.jpg" alt="Sail Scan">
-        </a>
-        <a href="Shop.html" class="nav-item">
-            <img src="Images/Love Sailing Shop Shopping Basket Icon.jpg" alt="Love Sailing Shop">
-        </a>
-        <a href="https://lab007-sail-scanner2.onrender.com/PhotoSearch.html" class="nav-item">
-            <img src="Images/Photos-icon.jpg" alt="Photo Database">
-        </a>
+    <div class="content">
+        <h1>Sailbot</h1>
+        <p>Welcome to the Sailbot page</p>
     </div>
 
-    <div class="tagline">
-        
-    </div>
-
+    <a href="index.html" class="back-link">Back to Home</a>
+    
     <!-- Hamburger menu icon -->
     <div class="hamburger-menu" onclick="toggleMenu()">
         <span></span>
