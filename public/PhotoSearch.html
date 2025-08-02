@@ -15,140 +15,208 @@
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://lovesailing.ai/">
     <meta property="og:image" content="https://lovesailing.ai/lovesailing-header.jpg">
+    <link rel="icon" type="image/png" href="sail_logo_trans.png">
     <style>
-        /* Reuse the same styles from PhotoUpload.html */
+        /* Mobile app styling - same as PhotoUpload.html */
         html,
         body {
             margin: 0;
             padding: 0;
-            overflow-x: hidden;
-        }
-
-        .header {
+            height: 100vh;
+            overflow: hidden;
+            position: fixed;
             width: 100%;
-            margin: 0 0 30px 0;
-            padding: 0;
-            position: relative;
-            background: #f0f0f0;
-        }
-
-        .logo {
-            width: 100%;
-            height: auto;
-            display: block;
-            object-fit: cover;
-        }
-
-        body {
+            background-color: #020053;
             font-family: Arial, sans-serif;
-            min-height: 100vh;
+        }
+
+        .main-container {
+            height: 100vh;
             display: flex;
             flex-direction: column;
+            background: transparent;
         }
 
-        .search-section {
-            background: #fff;
-            border: 3px solid #0066cc;
+        .content-wrapper {
+            flex: 1;
+            overflow: hidden;
+            background: transparent;
+        }
+
+        /* Mobile tabs */
+        .mobile-tabs {
+            display: flex;
+            background: rgba(255, 255, 255, 0.1);
             border-radius: 10px;
+            margin: 10px;
+            padding: 5px;
+        }
+
+        .mobile-tab {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: white;
+            padding: 12px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .mobile-tab.active {
+            background: rgba(255, 255, 255, 0.2);
+            font-weight: bold;
+        }
+
+        .mobile-tab-content {
+            display: none;
+            height: calc(100vh - 80px);
+            overflow-y: auto;
+            padding: 10px;
+            background: transparent;
+        }
+
+        .mobile-tab-content.active {
+            display: block;
+        }
+
+        /* Search section styling */
+        .search-section {
+            background: rgba(255, 255, 255, 0.95);
+            border: 3px solid #0066cc;
+            border-radius: 15px;
             padding: 20px;
-            margin: 20px auto;
+            margin: 10px 0;
             text-align: left;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-            max-width: 800px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
         }
 
         .search-section h2 {
-            margin: 0 0 20px 0;
+            margin: 0 0 15px 0;
             color: #0066cc;
             text-align: center;
+            font-size: 22px;
         }
 
         .search-form-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(auto, 300px));
-            gap: 20px;
+            grid-template-columns: 1fr;
+            gap: 15px;
             margin-bottom: 20px;
-            justify-content: center;
         }
 
         .search-input {
             width: 100%;
-            max-width: 250px;
-            padding: 8px;
-            margin: 5px 0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
             box-sizing: border-box;
-        }
-
-        .search-label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-            color: #333;
-        }
-
-        .search-row {
-            margin-bottom: 10px;
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-        }
-
-        .search-buttons {
-            margin-top: 20px;
-            text-align: center;
-            grid-column: 1 / -1;
+            background: white;
         }
 
         .search-input:focus {
             border-color: #0066cc;
             outline: none;
+            box-shadow: 0 0 5px rgba(0, 102, 204, 0.3);
+        }
+
+        .search-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #333;
+            font-size: 16px;
+        }
+
+        .search-row {
+            margin-bottom: 10px;
+            width: 100%;
+        }
+
+        .search-buttons {
+            margin-top: 20px;
+            text-align: center;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .search-button,
+        .clear-button {
+            flex: 1;
+            max-width: 150px;
+            padding: 16px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            min-height: 44px;
+            transition: all 0.3s;
         }
 
         .search-button {
             background: #0066cc;
             color: white;
-            border: none;
-            padding: 16px 16px;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-top: 15px;
-            min-width: 120px;
-            font-size: 14px;
         }
 
         .search-button:hover {
             background: #0052a3;
+            transform: translateY(-2px);
+        }
+
+        .clear-button {
+            background: #dc3545;
+            color: white;
+        }
+
+        .clear-button:hover {
+            background: #c82333;
+            transform: translateY(-2px);
+        }
+
+        /* Results section */
+        .results-section {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 15px;
+            margin: 10px 0;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .photo-count {
+            text-align: center;
+            color: #666;
+            font-size: 16px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(0, 102, 204, 0.1);
+            border-radius: 8px;
         }
 
         .photo-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            padding: 20px;
-            width: 100%;
-            box-sizing: border-box;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            padding: 10px 0;
         }
 
         .photo-card {
-            border: 1px solid #ddd;
-            border-radius: 8px;
+            border: 2px solid #ddd;
+            border-radius: 12px;
             overflow: hidden;
             background: white;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
-            display: flex;
-            flex-direction: column;
-            height: 100%;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
             cursor: pointer;
-            transition: box-shadow 0.2s;
-            position: relative;
+            transition: all 0.3s;
         }
 
         .photo-card:hover {
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+            border-color: #0066cc;
         }
 
         .photo-card img {
@@ -159,11 +227,44 @@
         }
 
         .photo-info {
-            margin-top: 10px;
-            font-size: 0.9em;
-            color: #666;
+            padding: 10px;
+            font-size: 14px;
+            color: #333;
         }
 
+        .photo-info p {
+            margin: 4px 0;
+            font-size: 14px;
+            line-height: 1.3;
+        }
+
+        .photo-info strong {
+            color: #0066cc;
+            font-size: 14px;
+        }
+
+        .view-button {
+            display: block;
+            width: 100%;
+            background: #0066cc;
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            text-decoration: none;
+            text-align: center;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            margin-top: 8px;
+            transition: background 0.3s;
+        }
+
+        .view-button:hover {
+            background: #0052a3;
+        }
+
+        /* Modal styling */
         .modal {
             display: none;
             position: fixed;
@@ -171,450 +272,300 @@
             left: 0;
             width: 100vw;
             height: 100vh;
-            background: rgba(0, 0, 0, 0.85);
-            z-index: 1000;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 2000;
             align-items: center;
             justify-content: center;
         }
 
         .modal-content {
             display: flex;
-            flex-direction: row;
-            background: none;
-            max-width: 90vw;
+            flex-direction: column;
+            background: white;
+            max-width: 95vw;
             max-height: 90vh;
-            margin: auto;
+            border-radius: 15px;
+            overflow: hidden;
             position: relative;
         }
 
         .modal-image-container {
             position: relative;
-            background: #fff;
-            border-radius: 8px 0 0 8px;
-            overflow: hidden;
+            background: #000;
             display: flex;
             align-items: center;
             justify-content: center;
-            min-width: 300px;
             min-height: 300px;
         }
 
         .modal-image {
-            max-width: 70vw;
-            max-height: 80vh;
+            max-width: 100%;
+            max-height: 60vh;
             display: block;
-            border-radius: 8px 0 0 8px;
-        }
-
-        .modal-watermark {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 75%;
-            height: 75%;
-            transform: translate(-50%, -50%);
-            opacity: 0.4;
-            pointer-events: none;
-            background-image: url('watermark.png');
-            background-size: contain;
-            background-repeat: no-repeat;
-            background-position: center;
-            z-index: 2;
-        }
-
-        .modal-side-banner {
-            display: none !important;
-        }
-
-        .purchase-modal-button {
-            background: #28a745;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 4px;
-            font-size: 16px;
-            cursor: pointer;
-            margin-top: 20px;
-            transition: background 0.2s;
-        }
-
-        .purchase-modal-button:hover {
-            background: #218838;
+            border-radius: 15px 15px 0 0;
         }
 
         .close-button {
             position: absolute;
-            top: 10px;
-            right: 10px;
+            top: 15px;
+            right: 15px;
             color: #fff;
             font-size: 32px;
             cursor: pointer;
             z-index: 10;
-            background: rgba(0, 0, 0, 0.3);
+            background: rgba(0, 0, 0, 0.5);
             border-radius: 50%;
             width: 40px;
             height: 40px;
             display: flex;
             align-items: center;
             justify-content: center;
-        }
-
-        .main-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            width: 100%;
-            padding: 0 20px;
-            box-sizing: border-box;
-        }
-
-        .footer {
-            text-align: center;
-            padding: 20px;
-            margin-top: 40px;
-            background: #ffffff;
-            border-top: 1px solid #dee2e6;
-        }
-
-        .footer img {
-            max-height: 100px;
-            width: auto;
-            margin: 0 auto;
-            display: block;
-        }
-
-        .clear-button {
-            background: #dc3545;
-            color: white;
             border: none;
-            padding: 16px 16px;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-top: 15px;
-            min-width: 120px;
-            font-size: 14px;
         }
 
-        .clear-button:hover {
-            background: #c82333;
-        }
-
-        @media (max-width: 768px) {
-            .search-form-grid {
-                grid-template-columns: 1fr;
-                gap: 10px;
-            }
-
-            .search-input {
-                max-width: 100%;
-            }
-
-            .search-button,
-            .clear-button {
-                width: 100%;
-                margin: 10px 0;
-            }
-        }
-
-        @media (max-width: 900px) {
-            .modal-content {
-                flex-direction: column;
-                max-width: 98vw;
-            }
-
-            .modal-image-container,
-            .modal-image {
-                border-radius: 8px 8px 0 0;
-                min-width: 200px;
-            }
-
-            .modal-side-banner {
-                border-radius: 0 0 8px 8px;
-                min-width: unset;
-                width: 100%;
-                padding: 20px 10px;
-            }
-        }
-
-        .photo-error {
-            width: 100%;
-            height: 180px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #f8f9fa;
-            color: #dc3545;
-        }
-
-        .photo-details {
-            padding: 10px;
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .photo-details p {
-            margin: 4px 0;
-            font-size: 0.9em;
-            line-height: 1.4;
-        }
-
-        .view-button {
-            display: inline-block;
-            background: #0066cc;
-            color: white;
-            padding: 8px 16px;
-            border-radius: 4px;
-            text-decoration: none;
-            margin-top: 8px;
-            text-align: center;
-            border: none;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        .view-button:hover {
-            background: #0052a3;
-        }
-
-        .download-button {
-            display: inline-block;
-            background: #0066cc;
-            color: white;
-            padding: 8px 16px;
-            border-radius: 4px;
-            text-decoration: none;
-            margin-top: auto;
-            text-align: center;
-            transition: background-color 0.2s;
-        }
-
-        .download-button:hover {
-            background: #0052a3;
-        }
-
-        @media (min-width: 1200px) {
-            .photo-grid {
-                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            }
-        }
-
-
-
-        .watermark-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-
-        .photo-wrapper:hover .watermark-overlay {
-            opacity: 1;
-        }
-
-        .remove-watermark-button {
-            background: #28a745;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-top: 10px;
-            font-size: 14px;
-        }
-
-        .remove-watermark-price {
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-
-        /* Add floating purchase button styles */
-        .purchase-fab {
-            position: absolute;
-            bottom: 24px;
-            right: 24px;
-            background: #28a745;
-            color: white;
-            border: none;
-            padding: 16px 28px;
-            border-radius: 32px;
-            font-size: 18px;
-            font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-            z-index: 20;
-            transition: background 0.2s;
-        }
-
-        .purchase-fab:hover {
-            background: #218838;
-        }
-
-        /* Add metadata styles */
         .modal-metadata {
-            margin-top: 20px;
             padding: 20px;
             background: #f8f9fa;
-            border-radius: 8px;
-            border: 1px solid #dee2e6;
+            max-height: 30vh;
+            overflow-y: auto;
+        }
+
+        .modal-metadata h3 {
+            margin: 0 0 15px 0;
+            color: #0066cc;
+            font-size: 18px;
         }
 
         .metadata-item {
-            padding: 8px 12px;
+            padding: 10px;
             background: white;
-            border-radius: 4px;
-            border-left: 3px solid #0066cc;
+            border-radius: 8px;
+            border-left: 4px solid #0066cc;
             margin-bottom: 8px;
         }
 
         .metadata-item strong {
             color: #0066cc;
             font-weight: 600;
+            font-size: 14px;
         }
 
         .metadata-item .value {
             color: #333;
             margin-left: 5px;
+            font-size: 14px;
         }
 
         .metadata-item .no-data {
             color: #6c757d;
             font-style: italic;
+            font-size: 14px;
         }
 
-        /* Add thumbnail watermark CSS */
-        .thumbnail-watermark {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 120%;
-            height: 80%;
-            transform: translate(-50%, -50%);
-            opacity: 0.25;
-            pointer-events: none;
-            background-image: url('watermark.png');
-            background-size: contain;
-            background-repeat: no-repeat;
-            background-position: center;
-            z-index: 2;
+        /* No results styling */
+        .no-results {
+            text-align: center;
+            padding: 40px 20px;
+            color: #666;
+            font-size: 18px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 15px;
+            margin: 20px 0;
+        }
+
+        /* Loading styling */
+        .loading {
+            text-align: center;
+            padding: 40px 20px;
+            color: #0066cc;
+            font-size: 18px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 15px;
+            margin: 20px 0;
+        }
+
+        /* Desktop styles */
+        @media (min-width: 769px) {
+            .mobile-tabs {
+                display: none;
+            }
+
+            .mobile-tab-content {
+                display: block;
+                height: 100vh;
+                overflow-y: auto;
+            }
+
+            .search-form-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 20px;
+            }
+
+            .photo-grid {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 20px;
+            }
+
+            .modal-content {
+                flex-direction: row;
+                max-width: 90vw;
+            }
+
+            .modal-image-container {
+                min-width: 400px;
+                border-radius: 15px 0 0 15px;
+            }
+
+            .modal-image {
+                border-radius: 15px 0 0 15px;
+            }
+
+            .modal-metadata {
+                min-width: 300px;
+                max-height: none;
+            }
+        }
+
+        /* Touch-friendly improvements */
+        .search-input,
+        .search-button,
+        .clear-button,
+        .view-button {
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+
+        .mobile-tab-content {
+            -webkit-overflow-scrolling: touch;
         }
     </style>
     <script src="https://js.stripe.com/v3/"></script>
 </head>
 
 <body>
-    <div class="header">
-        <img src="lovesailing-header.jpg" alt="LoveSailing Header" class="logo">
-    </div>
-
-
-
     <div class="main-container">
-        <div class="search-section">
-            <h2>Search Photos</h2>
-            <div id="photoCount" style="margin-bottom: 20px; color: #666; font-size: 0.9em; text-align: center;">
-                Loading photo count...
+        <div class="content-wrapper">
+            <!-- Mobile tabs -->
+            <div class="mobile-tabs">
+                <button class="mobile-tab active" onclick="switchTab('search')">Search</button>
+                <button class="mobile-tab" onclick="switchTab('results')">Results</button>
             </div>
-            <div class="search-form-grid">
-                <div class="search-row">
-                    <label for="sailNumber" class="search-label">Sail Number</label>
-                    <input type="text" id="sailNumber" class="search-input">
+
+            <!-- Search tab -->
+            <div id="searchTab" class="mobile-tab-content active">
+                <div class="search-section">
+                    <h2>Search Photos</h2>
+                    <div id="photoCount" class="photo-count">
+                        Loading photo count...
+                    </div>
+                    <div class="search-form-grid">
+                        <div class="search-row">
+                            <label for="sailNumber" class="search-label">Sail Number</label>
+                            <input type="text" id="sailNumber" class="search-input">
+                        </div>
+                        <div class="search-row">
+                            <label for="date" class="search-label">Date</label>
+                            <input type="date" id="date" class="search-input">
+                        </div>
+                        <div class="search-row">
+                            <label for="regattaName" class="search-label">Regatta Name</label>
+                            <input type="text" id="regattaName" class="search-input">
+                        </div>
+                        <div class="search-row">
+                            <label for="yachtClub" class="search-label">Yacht Club</label>
+                            <input type="text" id="yachtClub" class="search-input" list="yachtClubList">
+                            <datalist id="yachtClubList">
+                                <option value="Alamitos Bay Yacht Club">
+                                <option value="American Yacht Club">
+                                <option value="Annapolis Yacht Club">
+                                <option value="Atlanta Yacht Club">
+                                <option value="Austin Yacht Club">
+                                <option value="Avalon Yacht Club">
+                                <option value="Bay Head Yacht Club">
+                                <option value="Beverly Yacht Club">
+                                <option value="Chicago Yacht Club">
+                                <option value="Corinthian Yacht Club">
+                                <option value="Eastern Yacht Club">
+                                <option value="Fort Worth Yacht Club">
+                                <option value="Houston Yacht Club">
+                                <option value="Lake Norman Yacht Club">
+                                <option value="Larchmont Yacht Club">
+                                <option value="Long Beach Yacht Club">
+                                <option value="New York Yacht Club">
+                                <option value="Newport Harbor Yacht Club">
+                                <option value="San Diego Yacht Club">
+                                <option value="San Francisco Yacht Club">
+                                <option value="Seattle Yacht Club">
+                                <option value="St. Francis Yacht Club">
+                            </datalist>
+                        </div>
+                        <div class="search-row">
+                            <label for="photographerName" class="search-label">Photographer</label>
+                            <input type="text" id="photographerName" class="search-input">
+                        </div>
+                        <div class="search-row">
+                            <label for="location" class="search-label">Location</label>
+                            <input type="text" id="location" class="search-input">
+                        </div>
+                        <div class="search-buttons">
+                            <button class="search-button" onclick="searchPhotos()">Search</button>
+                            <button class="clear-button" onclick="clearSearch()">Clear</button>
+                        </div>
+                    </div>
                 </div>
-                <div class="search-row">
-                    <label for="date" class="search-label">Date</label>
-                    <input type="date" id="date" class="search-input">
-                </div>
-                <div class="search-row">
-                    <label for="regattaName" class="search-label">Regatta Name</label>
-                    <input type="text" id="regattaName" class="search-input">
-                </div>
-                <div class="search-row">
-                    <label for="yachtClub" class="search-label">Yacht Club</label>
-                    <input type="text" id="yachtClub" class="search-input" list="yachtClubList">
-                    <datalist id="yachtClubList">
-                        <option value="Alamitos Bay Yacht Club">
-                        <option value="American Yacht Club">
-                        <option value="Annapolis Yacht Club">
-                        <option value="Atlanta Yacht Club">
-                        <option value="Austin Yacht Club">
-                        <option value="Avalon Yacht Club">
-                        <option value="Bay Head Yacht Club">
-                        <option value="Beverly Yacht Club">
-                        <option value="Chicago Yacht Club">
-                        <option value="Corinthian Yacht Club">
-                        <option value="Eastern Yacht Club">
-                        <option value="Fort Worth Yacht Club">
-                        <option value="Houston Yacht Club">
-                        <option value="Lake Norman Yacht Club">
-                        <option value="Larchmont Yacht Club">
-                        <option value="Long Beach Yacht Club">
-                        <option value="New York Yacht Club">
-                        <option value="Newport Harbor Yacht Club">
-                        <option value="San Diego Yacht Club">
-                        <option value="San Francisco Yacht Club">
-                        <option value="Seattle Yacht Club">
-                        <option value="St. Francis Yacht Club">
-                    </datalist>
-                </div>
-                <div class="search-row">
-                    <label for="photographerName" class="search-label">Photographer</label>
-                    <input type="text" id="photographerName" class="search-input">
-                </div>
-                <div class="search-row">
-                    <label for="location" class="search-label">Location</label>
-                    <input type="text" id="location" class="search-input">
-                </div>
-                <div class="search-buttons">
-                    <button class="search-button" onclick="searchPhotos()">Search</button>
-                    <button class="clear-button" onclick="clearSearch()">Clear</button>
+            </div>
+
+            <!-- Results tab -->
+            <div id="resultsTab" class="mobile-tab-content">
+                <div class="results-section">
+                    <div id="results"></div>
                 </div>
             </div>
         </div>
-
-        <div id="results"></div>
     </div>
 
+    <!-- Modal -->
     <div id="imageModal" class="modal" tabindex="-1" aria-modal="true" role="dialog">
         <div class="close-button" onclick="closeModal()">&times;</div>
         <div class="modal-content" id="modalContent">
-            <div class="modal-image-container" id="modalImageContainer" style="position:relative;">
+            <div class="modal-image-container" id="modalImageContainer">
                 <img id="modalImage" class="modal-image" src="" alt="Preview">
-                <div class="modal-watermark" id="modalWatermark"></div>
-                <button id="purchaseFab" class="purchase-fab" style="display:none;">Purchase Photo</button>
             </div>
-            <div class="modal-metadata" id="modalMetadata"
-                style="margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
-                <h3 style="margin: 0 0 15px 0; color: #0066cc;">Photo Metadata</h3>
-                <div id="metadataContent"
-                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+            <div class="modal-metadata" id="modalMetadata">
+                <h3>Photo Metadata</h3>
+                <div id="metadataContent">
                     <!-- Metadata will be populated here -->
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="footer">
-        <a href="https://thomad99.wixstudio.com/lab007" target="_blank">
-            <img src="LAB007-FOOTER.JPG" alt="LAB007 Footer">
-        </a>
-    </div>
-
     <script>
+        // Tab switching function
+        function switchTab(tabName) {
+            // Hide all tab contents
+            const tabContents = document.querySelectorAll('.mobile-tab-content');
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+            });
+
+            // Remove active class from all tabs
+            const tabs = document.querySelectorAll('.mobile-tab');
+            tabs.forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Show selected tab content
+            document.getElementById(tabName + 'Tab').classList.add('active');
+
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+        }
+
         // Call this when the page loads
         document.addEventListener('DOMContentLoaded', async () => {
             loadPhotoCount();
         });
-
-
 
         async function loadPhotoCount() {
             try {
@@ -630,7 +581,14 @@
 
         async function searchPhotos() {
             const resultsDiv = document.getElementById('results');
-            resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px;">Searching...</div>';
+            resultsDiv.innerHTML = '<div class="loading">Searching...</div>';
+
+            // Switch to results tab on mobile
+            if (window.innerWidth <= 768) {
+                setTimeout(() => {
+                    switchTab('results');
+                }, 300);
+            }
 
             const params = new URLSearchParams({
                 sail_number: document.getElementById('sailNumber').value,
@@ -646,14 +604,14 @@
                 const photos = await response.json();
 
                 if (photos.length === 0) {
-                    resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px;">No photos found matching your criteria.</div>';
+                    resultsDiv.innerHTML = '<div class="no-results">No photos found matching your criteria.</div>';
                     return;
                 }
 
                 displaySearchResults(photos);
             } catch (err) {
                 console.error('Error searching photos:', err);
-                resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: red;">Error searching photos. Please try again.</div>';
+                resultsDiv.innerHTML = '<div class="no-results" style="color: red;">Error searching photos. Please try again.</div>';
             }
         }
 
@@ -662,7 +620,7 @@
             resultsContainer.innerHTML = '';
 
             if (photos.length === 0) {
-                resultsContainer.innerHTML = '<p class="no-results">No photos found matching your search criteria.</p>';
+                resultsContainer.innerHTML = '<div class="no-results">No photos found matching your search criteria.</div>';
                 return;
             }
 
@@ -677,9 +635,7 @@
             }, []);
 
             const matchCount = document.createElement('div');
-            matchCount.style.textAlign = 'center';
-            matchCount.style.marginBottom = '20px';
-            matchCount.style.color = '#666';
+            matchCount.className = 'photo-count';
             matchCount.innerHTML = `Found ${uniquePhotos.length} unique photo${uniquePhotos.length !== 1 ? 's' : ''}`;
             resultsContainer.appendChild(matchCount);
 
@@ -690,10 +646,6 @@
                 const card = document.createElement('div');
                 card.className = 'photo-card';
                 card.onclick = () => openModal(photo);
-
-                const photoWrapper = document.createElement('div');
-                photoWrapper.className = 'photo-wrapper';
-                photoWrapper.style.position = 'relative';
 
                 const img = document.createElement('img');
                 img.src = photo.url;
@@ -707,25 +659,23 @@
                 const info = document.createElement('div');
                 info.className = 'photo-info';
                 info.innerHTML = `
-                    <p><strong>Sail Number:</strong> ${photo.sail_number}</p>
+                    <p><strong>Sail:</strong> ${photo.sail_number}</p>
                     <p><strong>Date:</strong> ${new Date(photo.date).toLocaleDateString()}</p>
                     <p><strong>Location:</strong> ${photo.location || 'Not specified'}</p>
                     <p><strong>Photographer:</strong> ${photo.photographer_name || 'Not specified'}</p>
                     <p><strong>Yacht Club:</strong> ${photo.yacht_club || 'Not specified'}</p>
                     <p><strong>Regatta:</strong> ${photo.regatta_name || 'Not specified'}</p>
-                    <p><strong>Tags:</strong> ${photo.tags || 'None'}</p>
                 `;
 
                 const viewButton = document.createElement('button');
                 viewButton.className = 'view-button';
-                viewButton.innerHTML = '<i class="fas fa-eye"></i> View Photo';
+                viewButton.innerHTML = 'View Photo';
                 viewButton.onclick = (e) => {
                     e.stopPropagation();
                     openModal(photo);
                 };
 
-                photoWrapper.appendChild(img);
-                card.appendChild(photoWrapper);
+                card.appendChild(img);
                 card.appendChild(info);
                 card.appendChild(viewButton);
                 grid.appendChild(card);
@@ -740,7 +690,6 @@
             currentModalPhoto = photo;
             const modal = document.getElementById('imageModal');
             const modalImg = document.getElementById('modalImage');
-            const modalWatermark = document.getElementById('modalWatermark');
             const modalMetadata = document.getElementById('modalMetadata');
             const metadataContent = document.getElementById('metadataContent');
 
@@ -790,11 +739,6 @@
                 metadataContent.appendChild(metadataItem);
             });
 
-            // Hide watermark and purchase button for now
-            modalWatermark.style.display = 'none';
-            const purchaseFab = document.getElementById('purchaseFab');
-            if (purchaseFab) purchaseFab.style.display = 'none';
-
             modal.style.display = 'flex';
         }
 
@@ -816,7 +760,19 @@
             document.getElementById('results').innerHTML = '';
         }
 
+        // Close modal when clicking outside
+        document.getElementById('imageModal').addEventListener('click', function (e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
 
+        // Close modal with Escape key
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
     </script>
 </body>
 
