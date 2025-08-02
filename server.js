@@ -1547,6 +1547,15 @@ app.get('/api/s3-count', async (req, res) => {
 // Add endpoint to get unique device fingerprints
 app.get('/api/device-fingerprints', async (req, res) => {
     try {
+        // First, let's check if we have any photos with device fingerprints
+        const checkResult = await pool.query(`
+            SELECT COUNT(*) as total_photos, 
+                   COUNT(device_fingerprint) as photos_with_fingerprint
+            FROM photo_metadata
+        `);
+        
+        console.log('Device fingerprint check:', checkResult.rows[0]);
+
         const result = await pool.query(`
             SELECT DISTINCT 
                 device_fingerprint,
@@ -1563,9 +1572,15 @@ app.get('/api/device-fingerprints', async (req, res) => {
             ORDER BY photo_count DESC, last_upload DESC
         `);
 
+        console.log(`Found ${result.rows.length} unique device fingerprints`);
+
         res.json({
             fingerprints: result.rows,
-            total: result.rows.length
+            total: result.rows.length,
+            debug: {
+                total_photos: checkResult.rows[0].total_photos,
+                photos_with_fingerprint: checkResult.rows[0].photos_with_fingerprint
+            }
         });
     } catch (err) {
         console.error('Error fetching device fingerprints:', err);

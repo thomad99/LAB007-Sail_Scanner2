@@ -885,23 +885,46 @@
         // Function to populate current device information
         function populateCurrentDeviceInfo() {
             try {
+                console.log('Starting to populate current device info...');
                 const deviceFingerprint = generateDeviceFingerprint();
+                console.log('Generated device fingerprint:', deviceFingerprint);
+
+                // Check if elements exist
+                const deviceTypeElement = document.getElementById('deviceType');
+                const screenResolutionElement = document.getElementById('screenResolution');
+                const deviceFingerprintElement = document.getElementById('deviceFingerprint');
+                const userAgentElement = document.getElementById('userAgent');
+                const timezoneElement = document.getElementById('timezone');
+
+                if (!deviceTypeElement || !screenResolutionElement || !deviceFingerprintElement || !userAgentElement || !timezoneElement) {
+                    console.error('One or more device info elements not found:', {
+                        deviceType: !!deviceTypeElement,
+                        screenResolution: !!screenResolutionElement,
+                        deviceFingerprint: !!deviceFingerprintElement,
+                        userAgent: !!userAgentElement,
+                        timezone: !!timezoneElement
+                    });
+                    return;
+                }
 
                 // Update the device info display
-                document.getElementById('deviceType').textContent = deviceFingerprint.deviceType;
-                document.getElementById('screenResolution').textContent = deviceFingerprint.screenResolution;
-                document.getElementById('deviceFingerprint').textContent = deviceFingerprint.fingerprint;
-                document.getElementById('userAgent').textContent = deviceFingerprint.userAgent.substring(0, 80) + (deviceFingerprint.userAgent.length > 80 ? '...' : '');
-                document.getElementById('timezone').textContent = deviceFingerprint.timezone;
+                deviceTypeElement.textContent = deviceFingerprint.deviceType;
+                screenResolutionElement.textContent = deviceFingerprint.screenResolution;
+                deviceFingerprintElement.textContent = deviceFingerprint.fingerprint;
+                userAgentElement.textContent = deviceFingerprint.userAgent.substring(0, 80) + (deviceFingerprint.userAgent.length > 80 ? '...' : '');
+                timezoneElement.textContent = deviceFingerprint.timezone;
 
-                console.log('Current device fingerprint populated:', deviceFingerprint.fingerprint);
+                console.log('Current device fingerprint populated successfully:', deviceFingerprint.fingerprint);
 
                 // Store the fingerprint for use in other functions
                 window.currentDeviceFingerprint = deviceFingerprint.fingerprint;
 
             } catch (err) {
                 console.error('Error populating device info:', err);
-                document.getElementById('deviceType').textContent = 'Error loading device info';
+                const deviceTypeElement = document.getElementById('deviceType');
+                if (deviceTypeElement) {
+                    deviceTypeElement.textContent = 'Error loading device info';
+                }
             }
         }
 
@@ -1088,8 +1111,11 @@
 
         // Load stats and populate device info when page loads
         document.addEventListener('DOMContentLoaded', function () {
+            console.log('DOMContentLoaded event fired - starting page initialization...');
             loadStats();
+            console.log('loadStats() called, now calling populateCurrentDeviceInfo()...');
             populateCurrentDeviceInfo();
+            console.log('Page initialization complete');
         });
     </script>
 </body>
