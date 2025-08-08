@@ -2243,6 +2243,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(UPLOAD_DIR));
 // Serve website images from public/Images directory first
 app.use('/Images', express.static(path.join(__dirname, 'public', 'Images')));
+// Also serve common alias paths to be resilient across hosts/configs
+app.use('/images', express.static(path.join(__dirname, 'public', 'Images')));
+app.use('/public/Images', express.static(path.join(__dirname, 'public', 'Images')));
+app.use('/public/images', express.static(path.join(__dirname, 'public', 'Images')));
 // Then serve processed images from processed_images directory
 app.use('/processed-images', express.static(PROCESSED_DIR));
 
