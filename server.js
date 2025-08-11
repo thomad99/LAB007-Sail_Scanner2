@@ -394,15 +394,7 @@ pool.connect()
 
 app.use(express.json());
 
-// Serve favicon directly with proper headers (BEFORE static file serving)
-app.get('/Images/favicon.ico', (req, res) => {
-    const faviconPath = path.join(__dirname, 'public', 'Images', 'favicon.ico');
-    res.setHeader('Content-Type', 'image/x-icon');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); // Prevent caching for debugging
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.sendFile(faviconPath);
-});
+
 
 // Fallback favicon route - try root public directory
 app.get('/favicon.ico', (req, res) => {
@@ -2249,6 +2241,16 @@ app.use('/public/Images', express.static(path.join(__dirname, 'public', 'Images'
 app.use('/public/images', express.static(path.join(__dirname, 'public', 'Images')));
 // Then serve processed images from processed_images directory
 app.use('/processed-images', express.static(PROCESSED_DIR));
+
+// Serve favicon directly with proper headers (AFTER static file serving)
+app.get('/Images/favicon.ico', (req, res) => {
+    const faviconPath = path.join(__dirname, 'public', 'Images', 'favicon.ico');
+    res.setHeader('Content-Type', 'image/x-icon');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); // Prevent caching for debugging
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.sendFile(faviconPath);
+});
 
 // Start the server (AFTER all routes are defined)
 app.listen(port, async () => {
