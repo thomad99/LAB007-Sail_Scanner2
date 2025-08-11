@@ -2240,18 +2240,18 @@ app.use((req, res, next) => {
     next();
 });
 
-// Serve website images from public/Images directory first
-app.use('/Images', express.static(path.join(__dirname, 'public', 'Images')));
+// Serve website images from Images directory (since Render serves from repo root)
+app.use('/Images', express.static(path.join(__dirname, 'Images')));
 // Also serve common alias paths to be resilient across hosts/configs
-app.use('/images', express.static(path.join(__dirname, 'public', 'Images')));
-app.use('/public/Images', express.static(path.join(__dirname, 'public', 'Images')));
-app.use('/public/images', express.static(path.join(__dirname, 'public', 'Images')));
+app.use('/images', express.static(path.join(__dirname, 'Images')));
+app.use('/public/Images', express.static(path.join(__dirname, 'Images')));
+app.use('/public/images', express.static(path.join(__dirname, 'Images')));
 // Then serve processed images from processed_images directory
 app.use('/processed-images', express.static(PROCESSED_DIR));
 
 // Test route to verify Images directory is accessible
 app.get('/test-images', (req, res) => {
-    const imagesDir = path.join(__dirname, 'public', 'Images');
+    const imagesDir = path.join(__dirname, 'Images');
     const fs = require('fs');
 
     try {
@@ -2275,7 +2275,7 @@ app.get('/test-images', (req, res) => {
 
 // Serve favicon directly with proper headers (AFTER static file serving)
 app.get('/Images/favicon.ico', (req, res) => {
-    const faviconPath = path.join(__dirname, 'public', 'Images', 'favicon.ico');
+    const faviconPath = path.join(__dirname, 'Images', 'favicon.ico');
     res.setHeader('Content-Type', 'image/x-icon');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); // Prevent caching for debugging
     res.setHeader('Pragma', 'no-cache');
