@@ -2233,6 +2233,13 @@ async function checkForDuplicate(checksum) {
 // Static file serving (AFTER all API routes)
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(UPLOAD_DIR));
+
+// Debug middleware to log all requests
+app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    next();
+});
+
 // Serve website images from public/Images directory first
 app.use('/Images', express.static(path.join(__dirname, 'public', 'Images')));
 // Also serve common alias paths to be resilient across hosts/configs
@@ -2241,6 +2248,30 @@ app.use('/public/Images', express.static(path.join(__dirname, 'public', 'Images'
 app.use('/public/images', express.static(path.join(__dirname, 'public', 'Images')));
 // Then serve processed images from processed_images directory
 app.use('/processed-images', express.static(PROCESSED_DIR));
+
+// Test route to verify Images directory is accessible
+app.get('/test-images', (req, res) => {
+    const imagesDir = path.join(__dirname, 'public', 'Images');
+    const fs = require('fs');
+
+    try {
+        const files = fs.readdirSync(imagesDir);
+        res.json({
+            success: true,
+            imagesDir: imagesDir,
+            fileCount: files.length,
+            files: files.slice(0, 10), // First 10 files
+            exists: fs.existsSync(imagesDir)
+        });
+    } catch (error) {
+        res.json({
+            success: false,
+            error: error.message,
+            imagesDir: imagesDir,
+            exists: fs.existsSync(imagesDir)
+        });
+    }
+});
 
 // Serve favicon directly with proper headers (AFTER static file serving)
 app.get('/Images/favicon.ico', (req, res) => {
