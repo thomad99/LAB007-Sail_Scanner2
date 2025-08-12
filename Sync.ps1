@@ -23,3 +23,10 @@ if ($changes) {
 else {
     Write-Output "🟢 No changes to sync."
 }
+
+# Ensure Images folder is tracked
+if (Test-Path "Images") {
+    git add Images/ -f
+    Write-Output "Images folder staged"
+}
+
