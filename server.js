@@ -2252,25 +2252,21 @@ app.use('/processed-images', express.static(PROCESSED_DIR));
 // Test route to verify Images directory is accessible
 app.get('/test-images', (req, res) => {
     const imagesDir = path.join(__dirname, 'Images');
+    const publicImagesDir = path.join(__dirname, 'public', 'Images');
     const fs = require('fs');
 
-    try {
-        const files = fs.readdirSync(imagesDir);
-        res.json({
-            success: true,
+    res.json({
+        debug: {
+            __dirname: __dirname,
             imagesDir: imagesDir,
-            fileCount: files.length,
-            files: files.slice(0, 10), // First 10 files
-            exists: fs.existsSync(imagesDir)
-        });
-    } catch (error) {
-        res.json({
-            success: false,
-            error: error.message,
-            imagesDir: imagesDir,
-            exists: fs.existsSync(imagesDir)
-        });
-    }
+            publicImagesDir: publicImagesDir,
+            imagesExists: fs.existsSync(imagesDir),
+            publicImagesExists: fs.existsSync(publicImagesDir),
+            currentWorkingDir: process.cwd()
+        },
+        success: fs.existsSync(imagesDir),
+        error: fs.existsSync(imagesDir) ? null : 'Images directory not found'
+    });
 });
 
 // Serve favicon directly with proper headers (AFTER static file serving)
