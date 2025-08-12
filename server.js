@@ -2246,6 +2246,9 @@ app.use('/Images', express.static(path.join(__dirname, 'Images')));
 app.use('/images', express.static(path.join(__dirname, 'Images')));
 app.use('/public/Images', express.static(path.join(__dirname, 'Images')));
 app.use('/public/images', express.static(path.join(__dirname, 'Images')));
+// Also serve from public/Images as backup
+app.use('/public/Images', express.static(path.join(__dirname, 'public', 'Images')));
+app.use('/public/images', express.static(path.join(__dirname, 'public', 'Images')));
 // Then serve processed images from processed_images directory
 app.use('/processed-images', express.static(PROCESSED_DIR));
 
@@ -2261,11 +2264,11 @@ app.get('/test-images', (req, res) => {
             imagesDir: imagesDir,
             publicImagesDir: publicImagesDir,
             imagesExists: fs.existsSync(imagesDir),
-            publicImagesExists: fs.existsSync(publicImagesDir),
+            publicImagesDirExists: fs.existsSync(publicImagesDir),
             currentWorkingDir: process.cwd()
         },
-        success: fs.existsSync(imagesDir),
-        error: fs.existsSync(imagesDir) ? null : 'Images directory not found'
+        success: fs.existsSync(imagesDir) || fs.existsSync(publicImagesDir),
+        error: (fs.existsSync(imagesDir) || fs.existsSync(publicImagesDir)) ? null : 'No Images directory found in either location'
     });
 });
 
