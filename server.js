@@ -2237,6 +2237,14 @@ app.use('/uploads', express.static(UPLOAD_DIR));
 // Debug middleware to log all requests
 app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+
+    // Special logging for image requests
+    if (req.url.startsWith('/Images/') || req.url.startsWith('/images/')) {
+        console.log(`🖼️  Image request: ${req.url}`);
+        console.log(`   Static path: ${path.join(__dirname, 'Images')}`);
+        console.log(`   File exists: ${require('fs').existsSync(path.join(__dirname, 'Images', req.url.replace(/^\/Images\//, '').replace(/^\/images\//, '')))}`);
+    }
+
     next();
 });
 
@@ -2270,6 +2278,24 @@ app.get('/test-images', (req, res) => {
         success: fs.existsSync(imagesDir) || fs.existsSync(publicImagesDir),
         error: (fs.existsSync(imagesDir) || fs.existsSync(publicImagesDir)) ? null : 'No Images directory found in either location'
     });
+});
+
+// Test route to serve a specific image
+app.get('/test-image/:filename', (req, res) => {
+    const filename = req.params.filename;
+    const imagePath = path.join(__dirname, 'Images', filename);
+    const fs = require('fs');
+
+    if (fs.existsSync(imagePath)) {
+        res.sendFile(imagePath);
+    } else {
+        res.status(404).json({
+            error: 'Image not found',
+            requestedFile: filename,
+            fullPath: imagePath,
+            exists: false
+        });
+    }
 });
 
 // Serve favicon directly with proper headers (AFTER static file serving)
