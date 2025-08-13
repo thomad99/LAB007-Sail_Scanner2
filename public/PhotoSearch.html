@@ -172,6 +172,11 @@
             transform: translateY(-2px);
         }
 
+        .search-button:active {
+            background: #004080;
+            transform: translateY(0);
+        }
+
         .clear-button {
             background: #dc3545;
             color: white;
@@ -448,8 +453,8 @@
         <div class="content-wrapper">
             <!-- Mobile tabs -->
             <div class="mobile-tabs">
-                <button class="mobile-tab active" onclick="switchTab('search')">Search</button>
-                <button class="mobile-tab" onclick="switchTab('results')">Results</button>
+                <button class="mobile-tab active" onclick="switchTab('search', event)">Search</button>
+                <button class="mobile-tab" onclick="switchTab('results', event)">Results</button>
             </div>
 
             <!-- Search tab -->
@@ -509,7 +514,8 @@
                             <input type="text" id="location" class="search-input">
                         </div>
                         <div class="search-buttons">
-                            <button class="search-button" onclick="searchPhotos()">Search</button>
+                            <button class="search-button" id="searchBtn"
+                                onclick="console.log('Search button onclick triggered'); searchPhotos();">Search</button>
                             <button class="clear-button" onclick="clearSearch()">Clear</button>
                         </div>
                     </div>
@@ -542,8 +548,11 @@
     </div>
 
     <script>
+        // API configuration - using relative URLs since mobile was working
+        console.log('Using relative API URLs');
+
         // Tab switching function
-        function switchTab(tabName) {
+        function switchTab(tabName, event) {
             // Hide all tab contents
             const tabContents = document.querySelectorAll('.mobile-tab-content');
             tabContents.forEach(content => {
@@ -559,21 +568,67 @@
             // Show selected tab content
             document.getElementById(tabName + 'Tab').classList.add('active');
 
-            // Add active class to clicked tab
-            event.target.classList.add('active');
+            // Add active class to clicked tab if event is provided
+            if (event && event.target) {
+                event.target.classList.add('active');
+            }
         }
 
         // Call this when the page loads
         document.addEventListener('DOMContentLoaded', async () => {
-            loadPhotoCount();
+            console.log('Page loaded, checking server connectivity...');
+            console.log('Window width:', window.innerWidth);
+            console.log('User agent:', navigator.userAgent);
+
+            // Test server connectivity first
+            try {
+                const testResponse = await fetch('/api/photo-count');
+                if (testResponse.ok) {
+                    console.log('Server is responding');
+                    loadPhotoCount();
+                } else {
+                    console.error('Server responded with error:', testResponse.status);
+                    document.getElementById('photoCount').innerHTML = 'Server error. Please try again.';
+                }
+            } catch (err) {
+                console.error('Server connectivity test failed:', err);
+                document.getElementById('photoCount').innerHTML = 'Cannot connect to server. Please check if the server is running.';
+            }
+
+            // Add additional event listener for search button
+            const searchBtn = document.getElementById('searchBtn');
+            if (searchBtn) {
+                console.log('Search button found, adding event listener');
+                console.log('Search button element:', searchBtn);
+                console.log('Search button onclick:', searchBtn.onclick);
+
+                searchBtn.addEventListener('click', (e) => {
+                    console.log('Search button clicked via event listener');
+                    searchPhotos();
+                });
+
+                // Test if the button is clickable
+                searchBtn.addEventListener('mousedown', (e) => {
+                    console.log('Search button mousedown event');
+                });
+
+                searchBtn.addEventListener('mouseup', (e) => {
+                    console.log('Search button mouseup event');
+                });
+            } else {
+                console.error('Search button not found!');
+            }
         });
 
         async function loadPhotoCount() {
             try {
+                console.log('Loading photo count...');
                 const response = await fetch('/api/photo-count');
+                console.log('Photo count response status:', response.status);
                 const data = await response.json();
+                console.log('Photo count data:', data);
                 const countDiv = document.getElementById('photoCount');
-                countDiv.innerHTML = `Total photos in database: ${data.total}`;
+                countDiv.innerHTML = `Total photo count: ${data.total}`;
             } catch (err) {
                 console.error('Error loading photo count:', err);
                 document.getElementById('photoCount').innerHTML = 'Error loading photo count';
@@ -581,38 +636,83 @@
         }
 
         async function searchPhotos() {
-            const resultsDiv = document.getElementById('results');
-            resultsDiv.innerHTML = '<div class="loading">Searching...</div>';
-
-            // Switch to results tab on mobile
-            if (window.innerWidth <= 768) {
-                setTimeout(() => {
-                    switchTab('results');
-                }, 300);
-            }
-
-            const params = new URLSearchParams({
-                sail_number: document.getElementById('sailNumber').value,
-                date: document.getElementById('date').value,
-                regatta_name: document.getElementById('regattaName').value,
-                yacht_club: document.getElementById('yachtClub').value,
-                photographer_name: document.getElementById('photographerName').value,
-                location: document.getElementById('location').value
-            });
+            console.log('=== SEARCH FUNCTION STARTED ===');
+            console.log('Search function called');
+            console.log('Window width:', window.innerWidth);
+            console.log('Is mobile:', window.innerWidth <= 768);
 
             try {
-                const response = await fetch(`/api/search-photos?${params}`);
-                const photos = await response.json();
-
-                if (photos.length === 0) {
-                    resultsDiv.innerHTML = '<div class="no-results">No photos found matching your criteria.</div>';
+                const resultsDiv = document.getElementById('results');
+                if (!resultsDiv) {
+                    console.error('Results div not found!');
                     return;
                 }
+                console.log('Results div found:', resultsDiv);
+                resultsDiv.innerHTML = '<div class="loading">Searching...</div>';
 
-                displaySearchResults(photos);
+                // Switch to results tab on mobile
+                if (window.innerWidth <= 768) {
+                    setTimeout(() => {
+                        switchTab('results');
+                    }, 300);
+                }
+
+                const params = new URLSearchParams({
+                    sail_number: document.getElementById('sailNumber').value,
+                    date: document.getElementById('date').value,
+                    regatta_name: document.getElementById('regattaName').value,
+                    yacht_club: document.getElementById('yachtClub').value,
+                    photographer_name: document.getElementById('photographerName').value,
+                    location: document.getElementById('location').value
+                });
+
+                try {
+                    console.log('Fetching from:', `/api/search-photos?${params}`);
+                    const response = await fetch(`/api/search-photos?${params}`);
+                    console.log('Response status:', response.status);
+                    const photos = await response.json();
+                    console.log('Photos received:', photos.length);
+
+                    if (photos.length === 0) {
+                        resultsDiv.innerHTML = '<div class="no-results">No photos found matching your criteria.</div>';
+                        return;
+                    }
+
+                    displaySearchResults(photos);
+
+                    // On desktop, scroll to results to make them visible
+                    if (window.innerWidth > 768) {
+                        setTimeout(() => {
+                            resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }, 100);
+
+                        // Show a brief success message on desktop
+                        const successMsg = document.createElement('div');
+                        successMsg.style.cssText = `
+                            position: fixed;
+                            top: 20px;
+                            right: 20px;
+                            background: #28a745;
+                            color: white;
+                            padding: 15px 20px;
+                            border-radius: 8px;
+                            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                            z-index: 1000;
+                            font-weight: bold;
+                        `;
+                        successMsg.textContent = `Found ${photos.length} photo${photos.length !== 1 ? 's' : ''}!`;
+                        document.body.appendChild(successMsg);
+
+                        setTimeout(() => {
+                            successMsg.remove();
+                        }, 3000);
+                    }
+                } catch (err) {
+                    console.error('Error searching photos:', err);
+                    resultsDiv.innerHTML = '<div class="no-results" style="color: red;">Error searching photos. Please try again.</div>';
+                }
             } catch (err) {
-                console.error('Error searching photos:', err);
-                resultsDiv.innerHTML = '<div class="no-results" style="color: red;">Error searching photos. Please try again.</div>';
+                console.error('Error in searchPhotos function:', err);
             }
         }
 
