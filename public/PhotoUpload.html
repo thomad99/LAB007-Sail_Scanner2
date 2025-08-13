@@ -1396,11 +1396,19 @@
             if (regattaInput) {
                 autocomplete(regattaInput);
             }
+
+            // Add event listener for file input
+            const imageInput = document.getElementById('imageInput');
+            if (imageInput) {
+                imageInput.addEventListener('change', handleFiles);
+            } else {
+                console.error('Image input element not found');
+            }
         });
 
 
 
-        imageInput.addEventListener('change', handleFiles);
+        // Event listener will be added in DOMContentLoaded
 
         async function waitForRateLimit() {
             const now = Date.now();

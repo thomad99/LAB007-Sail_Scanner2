@@ -338,6 +338,7 @@
             background: #f8f9fa;
             max-height: 30vh;
             overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
         .modal-metadata h3 {
@@ -429,6 +430,45 @@
             .modal-metadata {
                 min-width: 300px;
                 max-height: none;
+            }
+        }
+
+        /* Mobile modal improvements */
+        @media (max-width: 768px) {
+            .modal-content {
+                max-width: 95vw;
+                max-height: 95vh;
+                margin: 10px;
+            }
+
+            .modal-image-container {
+                min-height: 200px;
+                max-height: 50vh;
+            }
+
+            .modal-image {
+                max-height: 45vh;
+            }
+
+            .modal-metadata {
+                max-height: 40vh;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+                padding: 15px;
+            }
+
+            .metadata-item {
+                padding: 8px;
+                margin-bottom: 6px;
+                font-size: 14px;
+            }
+
+            .metadata-item strong {
+                font-size: 13px;
+            }
+
+            .metadata-item .value {
+                font-size: 13px;
             }
         }
 
