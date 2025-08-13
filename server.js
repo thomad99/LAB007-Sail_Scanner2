@@ -2098,7 +2098,7 @@ app.delete('/api/delete-photo/:id', async (req, res) => {
 
         // Get photo details from database
         const photoResult = await pool.query(
-            'SELECT filename, file_path FROM photo_metadata WHERE id = $1',
+            'SELECT filename FROM photo_metadata WHERE id = $1',
             [photoId]
         );
 
@@ -2108,29 +2108,26 @@ app.delete('/api/delete-photo/:id', async (req, res) => {
 
         const photo = photoResult.rows[0];
         const filename = photo.filename;
-        const filePath = photo.file_path;
 
         // Delete from database
         await pool.query('DELETE FROM photo_metadata WHERE id = $1', [photoId]);
 
         // Delete file from storage
         try {
-            if (filePath) {
-                // Try to delete from local storage
-                const fullPath = path.join(PROCESSED_DIR, filePath);
-                if (fs.existsSync(fullPath)) {
-                    fs.unlinkSync(fullPath);
-                    console.log(`Deleted local file: ${fullPath}`);
-                }
+            // Try to delete from local storage
+            const fullPath = path.join(PROCESSED_DIR, filename);
+            if (fs.existsSync(fullPath)) {
+                fs.unlinkSync(fullPath);
+                console.log(`Deleted local file: ${fullPath}`);
+            }
 
-                // Try to delete from S3 if configured
-                if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-                    try {
-                        await deleteFromS3(filePath);
-                        console.log(`Deleted S3 file: ${filePath}`);
-                    } catch (s3Error) {
-                        console.log(`S3 deletion failed for ${filePath}:`, s3Error.message);
-                    }
+            // Try to delete from S3 if configured
+            if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+                try {
+                    await deleteFromS3(filename);
+                    console.log(`Deleted S3 file: ${filename}`);
+                } catch (s3Error) {
+                    console.log(`S3 deletion failed for ${filename}:`, s3Error.message);
                 }
             }
         } catch (fileError) {
