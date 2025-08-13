@@ -89,13 +89,21 @@
         .upload-section input[type="file"] {
             display: block;
             margin: 10px auto;
-            padding: 120px;
+            padding: 40px;
             border: 1px solid #ddd;
             border-radius: 5px;
             background: #f8f8f8;
             width: 80%;
             max-width: 400px;
             color: transparent;
+        }
+
+        /* Desktop-specific styling for file input */
+        @media (min-width: 769px) {
+            .upload-section input[type="file"] {
+                padding: 20px;
+                min-height: 80px;
+            }
         }
 
         .upload-section input[type="file"]::file-selector-button {
