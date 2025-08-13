@@ -740,17 +740,16 @@
             matchCount.innerHTML = `Found ${uniquePhotos.length} unique photo${uniquePhotos.length !== 1 ? 's' : ''}`;
             resultsContainer.appendChild(matchCount);
 
-            // Add navigation buttons on desktop
+            // Add Back to Search button on desktop
             if (window.innerWidth > 768) {
-                // Add Back to Search button at the top
                 const backToSearchButton = document.createElement('button');
-                backToSearchButton.className = 'clear-button';
+                backToSearchButton.className = 'search-button';
                 backToSearchButton.style.cssText = `
                     margin: 0 auto 20px auto;
                     display: block;
-                    max-width: 200px;
-                    padding: 12px 25px;
-                    font-size: 14px;
+                    max-width: 300px;
+                    padding: 15px 30px;
+                    font-size: 16px;
                 `;
                 backToSearchButton.innerHTML = '← Back to Search';
                 backToSearchButton.onclick = () => {
@@ -758,27 +757,6 @@
                     document.getElementById('searchTab').scrollIntoView({ behavior: 'smooth', block: 'start' });
                 };
                 resultsContainer.appendChild(backToSearchButton);
-
-                // Add New Search button below results
-                const newSearchButton = document.createElement('button');
-                newSearchButton.className = 'search-button';
-                newSearchButton.style.cssText = `
-                    margin: 20px auto;
-                    display: block;
-                    max-width: 200px;
-                    padding: 15px 30px;
-                    font-size: 16px;
-                `;
-                newSearchButton.innerHTML = '🔍 New Search';
-                newSearchButton.onclick = () => {
-                    // Clear results
-                    resultsContainer.innerHTML = '';
-                    // Scroll back to search form
-                    document.getElementById('searchTab').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    // Clear search form
-                    clearSearch();
-                };
-                resultsContainer.appendChild(newSearchButton);
             }
 
             const grid = document.createElement('div');
