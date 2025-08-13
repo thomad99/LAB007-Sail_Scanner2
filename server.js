@@ -696,7 +696,7 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
         user_agent: req.body.user_agent,
         screen_resolution: req.body.screen_resolution,
         timezone: req.body.timezone,
-        upload_timestamp: req.body.upload_timestamp || new Date().toISOString()
+        upload_timestamp: req.body.upload_timestamp && req.body.upload_timestamp !== 'undefined' ? req.body.upload_timestamp : new Date().toISOString()
     };
 
     try {
@@ -839,7 +839,7 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             }
         }
 
-        // Store metadata for each processed file
+        // Store metadata for each processed file (only for photos with detected sail numbers)
         let dbInsertionSuccess = true;
 
         // Ensure the photo_metadata table exists
@@ -852,42 +852,47 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
         }
 
         for (const file of processedFiles) {
-            try {
-                console.log(`Attempting to insert metadata for file: ${file.newFilename}`);
-                const result = await pool.query(
-                    `INSERT INTO photo_metadata (
-                        filename, sail_number, date, regatta_name, 
-                        photographer_name, photographer_website, 
-                        location, additional_tags, file_checksum, photo_timestamp, gps_latitude, gps_longitude, gps_altitude,
-                        device_fingerprint, device_type, user_agent, screen_resolution, timezone, upload_timestamp
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
-                    [
-                        file.newFilename,
-                        file.sailNumber,
-                        metadata.date || null,
-                        metadata.regatta_name || null,
-                        metadata.photographer_name || null,
-                        metadata.photographer_website || null,
-                        metadata.location || null,
-                        metadata.additional_tags || [],
-                        fileChecksum,
-                        exifData.photo_timestamp || null,
-                        exifData.gps_latitude || null,
-                        exifData.gps_longitude || null,
-                        exifData.gps_altitude || null,
-                        metadata.device_fingerprint || null,
-                        metadata.device_type || null,
-                        metadata.user_agent || null,
-                        metadata.screen_resolution || null,
-                        metadata.timezone || null,
-                        metadata.upload_timestamp || null
-                    ]
-                );
-                console.log(`Successfully inserted metadata for file: ${file.newFilename}, rows affected: ${result.rowCount}`);
-            } catch (dbErr) {
-                console.error('Error storing metadata for file:', file.newFilename, dbErr);
-                dbInsertionSuccess = false;
-                // Don't throw here, but mark that insertion failed
+            // Only store metadata for photos with actual sail numbers (not NOSAIL)
+            if (file.sailNumber && file.sailNumber !== 'NOSAIL') {
+                try {
+                    console.log(`Attempting to insert metadata for file: ${file.newFilename} (Sail #${file.sailNumber})`);
+                    const result = await pool.query(
+                        `INSERT INTO photo_metadata (
+                            filename, sail_number, date, regatta_name, 
+                            photographer_name, photographer_website, 
+                            location, additional_tags, file_checksum, photo_timestamp, gps_latitude, gps_longitude, gps_altitude,
+                            device_fingerprint, device_type, user_agent, screen_resolution, timezone, upload_timestamp
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+                        [
+                            file.newFilename,
+                            file.sailNumber,
+                            metadata.date || null,
+                            metadata.regatta_name || null,
+                            metadata.photographer_name || null,
+                            metadata.photographer_website || null,
+                            metadata.location || null,
+                            metadata.additional_tags || [],
+                            fileChecksum,
+                            exifData.photo_timestamp || null,
+                            exifData.gps_latitude || null,
+                            exifData.gps_longitude || null,
+                            exifData.gps_altitude || null,
+                            metadata.device_fingerprint || null,
+                            metadata.device_type || null,
+                            metadata.user_agent || null,
+                            metadata.screen_resolution || null,
+                            metadata.timezone || null,
+                            metadata.upload_timestamp || null
+                        ]
+                    );
+                    console.log(`Successfully inserted metadata for file: ${file.newFilename}, rows affected: ${result.rowCount}`);
+                } catch (dbErr) {
+                    console.error('Error storing metadata for file:', file.newFilename, dbErr);
+                    dbInsertionSuccess = false;
+                    // Don't throw here, but mark that insertion failed
+                }
+            } else {
+                console.log(`Skipping database metadata storage for NOSAIL file: ${file.newFilename} (uploaded to S3 for backup only)`);
             }
         }
 
@@ -899,6 +904,7 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             success: true,
             sailNumbers: processingSteps.sailNumbers,
             processedFiles: processedFiles,
+            exifData: exifData, // Include EXIF data for client display
             stats: {
                 totalFiles: processedFiles.length,
                 filesWithSailNumbers: processingSteps.sailNumbers.numbers.length

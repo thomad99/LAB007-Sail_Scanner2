@@ -1082,6 +1082,186 @@
             opacity: 1 !important;
         }
 
+        /* Progress indicator styling */
+        .batch-progress {
+            background: #fff;
+            border: 2px solid #0066cc;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            position: relative;
+        }
+
+        .batch-progress::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, #0066cc, #0099ff, #0066cc);
+            border-radius: 12px;
+            z-index: -1;
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .progress-title {
+            font-weight: bold;
+            color: #0066cc;
+            font-size: 18px;
+        }
+
+        .progress-count {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #ddd;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #0066cc, #0099ff);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 10px;
+        }
+
+        /* Result metadata styling */
+        .result-metadata-section {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .result-metadata-header {
+            background: #f8f9fa;
+            padding: 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #ddd;
+            transition: background-color 0.2s ease;
+        }
+
+        .result-metadata-header:hover {
+            background: #e9ecef;
+        }
+
+        .result-metadata-header h4 {
+            margin: 0;
+            color: #0066cc;
+        }
+
+        .result-metadata-toggle {
+            font-size: 18px;
+            color: #666;
+            transition: transform 0.2s ease;
+        }
+
+        .result-metadata-toggle.expanded {
+            transform: rotate(180deg);
+        }
+
+        .result-metadata-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            background: #fff;
+        }
+
+        .result-metadata-content.expanded {
+            max-height: 1000px;
+        }
+
+        .result-metadata-grid {
+            padding: 20px;
+        }
+
+        .result-metadata-item {
+            margin-bottom: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .result-metadata-item:last-child {
+            border-bottom: none;
+        }
+
+        .result-metadata-item strong {
+            color: #0066cc;
+            display: inline-block;
+            min-width: 150px;
+        }
+
+        .result-metadata-item .value {
+            color: #333;
+        }
+
+        /* Mobile-specific metadata styling */
+        @media (max-width: 768px) {
+            .result-metadata-content.expanded {
+                max-height: 70vh;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .result-metadata-grid {
+                padding: 15px;
+            }
+
+            .result-metadata-item strong {
+                min-width: 120px;
+                font-size: 14px;
+            }
+
+            /* Mobile metadata close button */
+            .metadata-close-btn {
+                position: absolute;
+                top: 10px;
+                right: 15px;
+                background: #dc3545;
+                color: white;
+                border: none;
+                border-radius: 50%;
+                width: 30px;
+                height: 30px;
+                font-size: 18px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+            }
+
+            .metadata-close-btn:hover {
+                background: #c82333;
+            }
+
+            /* Ensure metadata content is scrollable on mobile */
+            .result-metadata-content {
+                position: relative;
+                max-height: 70vh;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+        }
+
         /* Navigation buttons styling */
         .navigation-buttons {
             display: flex;
@@ -1581,7 +1761,9 @@
 
                     // Update UI to show we're starting
                     // batchActions.style.display = 'block'; // This line is removed
+                    console.log('Showing progress indicator...');
                     batchProgress.style.display = 'block';
+                    console.log('Progress indicator display style:', batchProgress.style.display);
                     updateBatchProgress();
 
 
@@ -1645,6 +1827,9 @@
             const progressFill = batchProgress.querySelector('.progress-fill');
             const percentage = (completedFiles / totalFiles) * 100;
 
+            console.log(`Updating progress: ${completedFiles}/${totalFiles} (${percentage.toFixed(1)}%)`);
+            console.log('Progress indicator visible:', batchProgress.style.display !== 'none');
+
             progressCount.textContent = `${completedFiles}/${totalFiles} files complete`;
             progressFill.style.width = `${percentage}%`;
         }
@@ -1693,7 +1878,7 @@
                 formData.append('user_agent', deviceFingerprint.userAgent);
                 formData.append('screen_resolution', deviceFingerprint.screenResolution);
                 formData.append('timezone', deviceFingerprint.timezone);
-                formData.append('upload_timestamp', deviceFingerprint.timestamp);
+                formData.append('upload_timestamp', deviceFingerprint.generatedAt);
 
                 const response = await fetch('/api/scan', {
                     method: 'POST',
@@ -1935,6 +2120,16 @@
                 timezone: deviceFingerprint.timezone
             };
 
+            // Add EXIF data from server response if available
+            if (data && data.exifData) {
+                Object.assign(formData, {
+                    gps_latitude: data.exifData.gps_latitude,
+                    gps_longitude: data.exifData.gps_longitude,
+                    gps_altitude: data.exifData.gps_altitude,
+                    photo_timestamp: data.exifData.photo_timestamp
+                });
+            }
+
             // Add any additional data from the server response
             if (data && data.processedFiles && data.processedFiles.length > 0) {
                 const processedFile = data.processedFiles.find(pf => pf.originalFilename === file.name);
@@ -1968,7 +2163,11 @@
                 { key: 'device_fingerprint', label: 'Device Fingerprint' },
                 { key: 'device_type', label: 'Device Type' },
                 { key: 'user_agent', label: 'User Agent' },
-                { key: 'screen_resolution', label: 'Screen Resolution' }
+                { key: 'screen_resolution', label: 'Screen Resolution' },
+                { key: 'gps_latitude', label: 'GPS Latitude' },
+                { key: 'gps_longitude', label: 'GPS Longitude' },
+                { key: 'gps_altitude', label: 'GPS Altitude' },
+                { key: 'photo_timestamp', label: 'Photo Taken', formatter: (value) => value ? new Date(value).toLocaleString() : null }
             ];
 
             const metadataItems = metadataFields.map(field => {
