@@ -96,6 +96,7 @@
             width: 80%;
             max-width: 400px;
             color: transparent;
+            text-align: center;
         }
 
         /* Desktop-specific styling for file input */
@@ -118,6 +119,8 @@
             border-radius: 8px;
             cursor: pointer;
             transition: background-color 0.3s ease;
+            margin: 0 auto;
+            display: block;
         }
 
         .upload-section input[type="file"]::file-selector-button:hover {
@@ -701,6 +704,7 @@
                 min-height: 80px;
                 -webkit-tap-highlight-color: transparent;
                 color: transparent;
+                text-align: center;
             }
 
             .upload-section input[type="file"]::file-selector-button {
@@ -714,6 +718,8 @@
                 border-radius: 10px;
                 cursor: pointer;
                 transition: background-color 0.3s ease;
+                margin: 0 auto;
+                display: block;
             }
 
             .upload-section input[type="file"]::file-selector-button:hover {
@@ -1315,8 +1321,7 @@
         <div class="content-wrapper">
             <!-- Mobile Tab Navigation -->
             <div class="mobile-tabs">
-                <button class="mobile-tab active" onclick="switchTab('upload')">📤 Upload</button>
-                <button class="mobile-tab" onclick="switchTab('results')">📊 Results</button>
+                <button class="mobile-tab active" onclick="switchTab('results')">📊 Results</button>
             </div>
 
             <!-- Upload Tab Content -->
