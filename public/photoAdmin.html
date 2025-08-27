@@ -350,6 +350,24 @@
                 <button class="action-button success-button" onclick="exportImages()">Export All Images</button>
                 <button class="action-button" onclick="loadStats()">🔄 Refresh Stats</button>
             </div>
+
+            <!-- Share Section -->
+            <div class="admin-section" style="margin-top: 30px;">
+                <h2>📤 Share & Export</h2>
+                <p>Share this administration panel or export data for external use</p>
+
+                <div style="margin: 20px 0;">
+                    <button class="action-button" onclick="shareAdminPanel()">📤 Share Admin Panel</button>
+                    <button class="action-button" onclick="copyAdminLink()">🔗 Copy Link</button>
+                    <button class="action-button" onclick="generateQRCode()">📱 Generate QR Code</button>
+                    <button class="action-button success-button" onclick="exportAdminReport()">📊 Export Admin
+                        Report</button>
+                </div>
+
+                <div id="shareResults" style="margin: 20px 0; display: none;">
+                    <div id="shareContent"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1128,6 +1146,179 @@
             populateCurrentDeviceInfo();
             console.log('Page initialization complete');
         });
+
+        // Share functionality functions
+        async function shareAdminPanel() {
+            try {
+                const shareData = {
+                    title: 'LAB007 Photo Administration Panel',
+                    text: 'Access the LoveSailing photo administration and management system',
+                    url: window.location.href
+                };
+
+                if (navigator.share) {
+                    // Use native sharing if available (mobile devices)
+                    await navigator.share(shareData);
+                    showStatus('Shared successfully using native sharing', 'success');
+                } else {
+                    // Fallback for desktop browsers
+                    const shareResults = document.getElementById('shareResults');
+                    const shareContent = document.getElementById('shareContent');
+
+                    shareContent.innerHTML = `
+                        <div class="validation-item success">
+                            <div>
+                                <strong>Share Link:</strong>
+                                <div style="margin-top: 10px;">
+                                    <input type="text" value="${window.location.href}" 
+                                           style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace;" 
+                                           readonly>
+                                </div>
+                                <div style="margin-top: 10px;">
+                                    <button class="action-button" onclick="copyAdminLink()" style="margin: 5px;">Copy Link</button>
+                                    <button class="action-button" onclick="window.open('${window.location.href}', '_blank')" style="margin: 5px;">Open in New Tab</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
+                    shareResults.style.display = 'block';
+                    showStatus('Share options displayed', 'success');
+                }
+            } catch (err) {
+                console.error('Error sharing admin panel:', err);
+                showStatus('Error sharing admin panel', 'error');
+            }
+        }
+
+        function copyAdminLink() {
+            try {
+                navigator.clipboard.writeText(window.location.href).then(() => {
+                    showStatus('Admin panel link copied to clipboard!', 'success');
+                }).catch(() => {
+                    // Fallback for older browsers
+                    const textArea = document.createElement('textarea');
+                    textArea.value = window.location.href;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    showStatus('Admin panel link copied to clipboard!', 'success');
+                });
+            } catch (err) {
+                console.error('Error copying link:', err);
+                showStatus('Error copying link to clipboard', 'error');
+            }
+        }
+
+        function generateQRCode() {
+            try {
+                const shareResults = document.getElementById('shareResults');
+                const shareContent = document.getElementById('shareContent');
+
+                // Create QR code using a simple API
+                const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(window.location.href)}`;
+
+                shareContent.innerHTML = `
+                    <div class="validation-item success">
+                        <div>
+                            <strong>QR Code for Admin Panel:</strong>
+                            <div style="margin-top: 15px; text-align: center;">
+                                <img src="${qrApiUrl}" alt="QR Code" style="border: 1px solid #ddd; border-radius: 8px; max-width: 200px;">
+                            </div>
+                            <div style="margin-top: 15px; text-align: center;">
+                                <button class="action-button" onclick="downloadQRCode('${qrApiUrl}')" style="margin: 5px;">📥 Download QR Code</button>
+                                <button class="action-button" onclick="copyAdminLink()" style="margin: 5px;">🔗 Copy Link</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                shareResults.style.display = 'block';
+                showStatus('QR Code generated successfully', 'success');
+            } catch (err) {
+                console.error('Error generating QR code:', err);
+                showStatus('Error generating QR code', 'error');
+            }
+        }
+
+        function downloadQRCode(qrUrl) {
+            try {
+                const a = document.createElement('a');
+                a.href = qrUrl;
+                a.download = 'admin-panel-qr-code.png';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                showStatus('QR Code downloaded successfully', 'success');
+            } catch (err) {
+                console.error('Error downloading QR code:', err);
+                showStatus('Error downloading QR code', 'error');
+            }
+        }
+
+        async function exportAdminReport() {
+            try {
+                showStatus('Generating admin report...', 'info');
+
+                // Get current stats for the report
+                const stats = {
+                    timestamp: new Date().toISOString(),
+                    url: window.location.href,
+                    title: 'LAB007 Photo Administration Report',
+                    stats: {}
+                };
+
+                // Try to get current stats from the page
+                const statElements = ['dbCount', 'recentUpload', 'totalSize', 's3Count', 'uploadsCount', 'orphanedCount', 'deviceCount'];
+                statElements.forEach(id => {
+                    const element = document.getElementById(id);
+                    if (element) {
+                        stats.stats[id] = element.textContent;
+                    }
+                });
+
+                // Create report content
+                const reportContent = `
+LAB007 Photo Administration Report
+Generated: ${new Date().toLocaleString()}
+URL: ${window.location.href}
+
+Current Statistics:
+- Total Photos in Database: ${stats.stats.dbCount || 'N/A'}
+- Most Recent Upload: ${stats.stats.recentUpload || 'N/A'}
+- Total Storage Size: ${stats.stats.totalSize || 'N/A'}
+- Images in S3 Storage: ${stats.stats.s3Count || 'N/A'}
+- Images in Uploads Folder: ${stats.stats.uploadsCount || 'N/A'}
+- Orphaned Database Entries: ${stats.stats.orphanedCount || 'N/A'}
+- Unique Devices: ${stats.stats.deviceCount || 'N/A'}
+
+Device Information:
+- Current Device Type: ${document.getElementById('deviceType')?.textContent || 'N/A'}
+- Screen Resolution: ${document.getElementById('screenResolution')?.textContent || 'N/A'}
+- Device Fingerprint: ${document.getElementById('deviceFingerprint')?.textContent || 'N/A'}
+- Timezone: ${document.getElementById('timezone')?.textContent || 'N/A'}
+
+This report was generated from the LAB007 Photo Administration Panel.
+                `;
+
+                // Create and download the report
+                const blob = new Blob([reportContent], { type: 'text/plain' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `admin-report-${new Date().toISOString().split('T')[0]}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                showStatus('Admin report exported successfully', 'success');
+            } catch (err) {
+                console.error('Error exporting admin report:', err);
+                showStatus('Error exporting admin report', 'error');
+            }
+        }
     </script>
 </body>
 
