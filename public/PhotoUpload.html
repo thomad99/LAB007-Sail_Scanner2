@@ -634,7 +634,7 @@
                 border-radius: 10px 10px 0 0;
                 margin: 0 -10px;
                 padding: 0 10px;
-                border-bottom: 2px solid #0066cc;
+                border-bottom: none;
             }
 
             .mobile-tab {
@@ -1334,7 +1334,7 @@
                 <div class="metadata-section">
                     <div class="metadata-header" onclick="toggleMetadataSection()">
                         <h3 style="margin: 0; display: flex; align-items: center; justify-content: space-between;">
-                            Add Photo Information
+                            Detailed Info (optional)
                             <span id="metadataToggle" class="metadata-toggle"
                                 style="font-size: 18px; font-weight: bold; color: #0066cc;">▼</span>
                         </h3>
@@ -1354,6 +1354,9 @@
                                 <label for="yachtClub">Yacht Club:</label>
                                 <input type="text" id="yachtClub" class="metadata-input" list="yachtClubList">
                                 <datalist id="yachtClubList">
+                                    <option value="SYS">
+                                    <option value="Sarasota Sailing Squadron">
+                                    <option value="Sarasota Yacht Club">
                                     <option value="Alamitos Bay Yacht Club">
                                     <option value="American Yacht Club">
                                     <option value="Annapolis Yacht Club">
@@ -1604,6 +1607,16 @@
             } else {
                 console.error('Image input element not found');
             }
+
+            // Pre-populate date with today's date
+            const dateInput = document.getElementById('date');
+            if (dateInput) {
+                const today = new Date().toISOString().split('T')[0];
+                dateInput.value = today;
+            }
+
+            // Load remembered values for photographer name and website
+            loadRememberedValues();
         });
 
 
@@ -2368,6 +2381,55 @@
 
         // Restore values when the page loads
         document.addEventListener('DOMContentLoaded', restoreFormValues);
+
+        // Function to load remembered values for photographer name and website
+        function loadRememberedValues() {
+            const photographerName = localStorage.getItem('photoUpload_photographerName');
+            const photographerWebsite = localStorage.getItem('photoUpload_photographerWebsite');
+
+            if (photographerName) {
+                const nameInput = document.getElementById('photographerName');
+                if (nameInput) {
+                    nameInput.value = photographerName;
+                }
+            }
+
+            if (photographerWebsite) {
+                const websiteInput = document.getElementById('photographerWebsite');
+                if (websiteInput) {
+                    websiteInput.value = photographerWebsite;
+                }
+            }
+        }
+
+        // Function to save photographer values when they change
+        function savePhotographerValues() {
+            const photographerName = document.getElementById('photographerName').value;
+            const photographerWebsite = document.getElementById('photographerWebsite').value;
+
+            if (photographerName) {
+                localStorage.setItem('photoUpload_photographerName', photographerName);
+            }
+            if (photographerWebsite) {
+                localStorage.setItem('photoUpload_photographerWebsite', photographerWebsite);
+            }
+        }
+
+        // Add event listeners for photographer fields
+        document.addEventListener('DOMContentLoaded', function () {
+            const photographerNameInput = document.getElementById('photographerName');
+            const photographerWebsiteInput = document.getElementById('photographerWebsite');
+
+            if (photographerNameInput) {
+                photographerNameInput.addEventListener('change', savePhotographerValues);
+                photographerNameInput.addEventListener('input', savePhotographerValues);
+            }
+
+            if (photographerWebsiteInput) {
+                photographerWebsiteInput.addEventListener('change', savePhotographerValues);
+                photographerWebsiteInput.addEventListener('input', savePhotographerValues);
+            }
+        });
 
         function toggleMetadataSection() {
             const metadataContent = document.getElementById('metadataContent');
