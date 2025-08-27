@@ -152,13 +152,13 @@
         .clear-button {
             flex: 1;
             max-width: 150px;
-            padding: 32px 20px;
+            padding: 20px 20px;
             border-radius: 10px;
             cursor: pointer;
             font-size: 18px;
             font-weight: bold;
             border: none;
-            min-height: 88px;
+            min-height: 60px;
             transition: all 0.3s;
         }
 
@@ -178,12 +178,12 @@
         }
 
         .clear-button {
-            background: #dc3545;
+            background: #6c757d;
             color: white;
         }
 
         .clear-button:hover {
-            background: #c82333;
+            background: #5a6268;
             transform: translateY(-2px);
         }
 
@@ -403,9 +403,30 @@
                 overflow-y: auto;
             }
 
+            /* Desktop container constraints */
+            .search-section {
+                max-width: 800px;
+                margin: 20px auto;
+            }
+
             .search-form-grid {
                 grid-template-columns: repeat(2, 1fr);
                 gap: 20px;
+            }
+
+            /* Desktop input field sizing */
+            .search-input {
+                width: 20ch;
+                max-width: 100%;
+                min-width: 200px;
+            }
+
+            /* Desktop button sizing */
+            .search-button,
+            .clear-button {
+                padding: 20px 25px;
+                min-height: 60px;
+                max-width: 120px;
             }
 
             .photo-grid {
@@ -483,6 +504,30 @@
 
         .mobile-tab-content {
             -webkit-overflow-scrolling: touch;
+        }
+
+        /* Large desktop screens */
+        @media (min-width: 1200px) {
+            .search-section {
+                max-width: 900px;
+            }
+
+            .search-input {
+                width: 22ch;
+                min-width: 220px;
+            }
+        }
+
+        /* Extra large desktop screens */
+        @media (min-width: 1600px) {
+            .search-section {
+                max-width: 1000px;
+            }
+
+            .search-input {
+                width: 25ch;
+                min-width: 250px;
+            }
         }
     </style>
     <script src="https://js.stripe.com/v3/"></script>
