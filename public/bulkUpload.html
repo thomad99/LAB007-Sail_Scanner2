@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>LAB007 - LOVESAILING BULK PHOTO UPLOAD</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="apple-touch-icon" href="/favicon.ico">
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-color: #020053;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .main-container {
+            margin: 0 auto;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            background: transparent;
+            max-width: 100%;
+        }
+
+        .content-wrapper {
+            flex: 1;
+            padding: 0 20px;
+            background: transparent;
+        }
+
+        .upload-section {
+            background: #fff;
+            border: 3px solid #0066cc;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 0 0 20px 0;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            min-height: auto;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+        }
+
+        .upload-section::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, #0066cc, #0099ff, #0066cc);
+            border-radius: 12px;
+            z-index: -1;
+        }
+
+        .upload-section h2 {
+            margin: 0 0 10px 0;
+            color: #0066cc;
+        }
+
+        .upload-section p {
+            color: #666;
+            margin: 10px 0;
+        }
+
+        .upload-section input[type="file"] {
+            display: block;
+            margin: 2px auto;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: #f8f8f8;
+            width: 80%;
+            max-width: 400px;
+            color: transparent;
+            text-align: center;
+        }
+
+        .upload-section input[type="file"]::file-selector-button {
+            color: #333;
+            font-size: 18px;
+            font-weight: bold;
+            padding: 15px 25px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            margin: 0 auto;
+            display: block;
+        }
+
+        .upload-section input[type="file"]::file-selector-button:hover {
+            background: #0052a3;
+        }
+
+        .metadata-section {
+            background: #fff;
+            border: 2px solid #0066cc;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            position: relative;
+        }
+
+        .metadata-section::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, #0066cc, #0099ff, #0066cc);
+            border-radius: 12px;
+            z-index: -1;
+        }
+
+        .metadata-input {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .metadata-input:focus {
+            border-color: #0066cc;
+            outline: none;
+        }
+
+        .upload-progress {
+            background: #fff;
+            border: 2px solid #0066cc;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            position: relative;
+            display: none;
+        }
+
+        .upload-progress::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, #0066cc, #0099ff, #0066cc);
+            border-radius: 12px;
+            z-index: -1;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #ddd;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #0066cc, #0099ff);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 10px;
+        }
+
+        .job-status {
+            background: #fff;
+            border: 2px solid #28a745;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            position: relative;
+            display: none;
+        }
+
+        .job-status::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, #28a745, #20c997, #28a745);
+            border-radius: 12px;
+            z-index: -1;
+        }
+
+        .job-status h3 {
+            color: #28a745;
+            margin: 0 0 15px 0;
+        }
+
+        .job-progress {
+            margin: 15px 0;
+        }
+
+        .job-progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #ddd;
+            margin: 10px 0;
+        }
+
+        .job-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #20c997);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 10px;
+        }
+
+        .file-list {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .file-item {
+            padding: 5px 0;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .file-item:last-child {
+            border-bottom: none;
+        }
+
+        .file-name {
+            flex: 1;
+            margin-right: 10px;
+        }
+
+        .file-size {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .upload-status {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-uploading {
+            background: #cce5ff;
+            color: #004085;
+        }
+
+        .status-complete {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background: #0066cc;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0052a3;
+            transform: translateY(-2px);
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .notification {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            display: none;
+        }
+
+        .notification.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .notification.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .notification.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .job-id-display {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+
+        /* Mobile styles */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            .upload-section {
+                padding: 15px;
+            }
+
+            .upload-section input[type="file"] {
+                width: 100%;
+                max-width: none;
+                padding: 20px;
+                font-size: 16px;
+                min-height: 80px;
+            }
+
+            .upload-section input[type="file"]::file-selector-button {
+                font-size: 20px;
+                padding: 20px 30px;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .btn {
+                width: 100%;
+                padding: 15px;
+            }
+
+            .file-list {
+                max-height: 150px;
+            }
+        }
+
+        /* Desktop styles */
+        @media (min-width: 769px) {
+            body {
+                padding: 40px;
+            }
+
+            .main-container {
+                max-width: 800px;
+                width: 90%;
+                margin: 0 auto;
+            }
+
+            .upload-section {
+                padding: 40px;
+            }
+
+            .upload-section h2 {
+                font-size: 32px;
+                margin-bottom: 20px;
+            }
+
+            .upload-section input[type="file"] {
+                padding: 20px;
+                max-width: 600px;
+                min-height: 60px;
+            }
+
+            .upload-section input[type="file"]::file-selector-button {
+                font-size: 20px;
+                padding: 20px 35px;
+            }
+
+            .metadata-section {
+                padding: 25px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="main-container">
+        <div class="content-wrapper">
+            <div class="upload-section">
+                <h2>Bulk Photo Upload</h2>
+                <p>Select multiple photos to upload. Files will be stored first, then analyzed in the background.</p>
+                <input type="file" id="imageInput" accept="image/*" multiple>
+            </div>
+
+            <div class="metadata-section">
+                <h3>Photo Information (Optional)</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div>
+                        <label for="date">Date:</label>
+                        <input type="date" id="date" class="metadata-input">
+                    </div>
+                    <div>
+                        <label for="regattaName">Regatta Name:</label>
+                        <input type="text" id="regattaName" class="metadata-input" placeholder="Enter regatta name">
+                    </div>
+                    <div>
+                        <label for="yachtClub">Yacht Club:</label>
+                        <input type="text" id="yachtClub" class="metadata-input" list="yachtClubList">
+                        <datalist id="yachtClubList">
+                            <option value="SYS">
+                            <option value="Sarasota Sailing Squadron">
+                            <option value="Sarasota Yacht Club">
+                            <option value="Alamitos Bay Yacht Club">
+                            <option value="American Yacht Club">
+                            <option value="Annapolis Yacht Club">
+                            <option value="Atlanta Yacht Club">
+                            <option value="Austin Yacht Club">
+                            <option value="Avalon Yacht Club">
+                            <option value="Bay Head Yacht Club">
+                            <option value="Beverly Yacht Club">
+                            <option value="Chicago Yacht Club">
+                            <option value="Corinthian Yacht Club">
+                            <option value="Eastern Yacht Club">
+                            <option value="Fort Worth Yacht Club">
+                            <option value="Houston Yacht Club">
+                            <option value="Lake Norman Yacht Club">
+                            <option value="Larchmont Yacht Club">
+                            <option value="Long Beach Yacht Club">
+                            <option value="New York Yacht Club">
+                            <option value="Newport Harbor Yacht Club">
+                            <option value="San Diego Yacht Club">
+                            <option value="San Francisco Yacht Club">
+                            <option value="Seattle Yacht Club">
+                            <option value="St. Francis Yacht Club">
+                        </datalist>
+                    </div>
+                    <div>
+                        <label for="photographerName">Photographer Name:</label>
+                        <input type="text" id="photographerName" class="metadata-input"
+                            placeholder="Enter photographer name">
+                    </div>
+                    <div>
+                        <label for="photographerWebsite">Photographer Website:</label>
+                        <input type="url" id="photographerWebsite" class="metadata-input"
+                            placeholder="Enter website URL">
+                    </div>
+                    <div>
+                        <label for="location">Location:</label>
+                        <input type="text" id="location" class="metadata-input" placeholder="Enter location">
+                    </div>
+                    <div>
+                        <label for="additionalTags">Additional Tags:</label>
+                        <input type="text" id="additionalTags" class="metadata-input"
+                            placeholder="Enter tags (comma separated)">
+                    </div>
+                </div>
+            </div>
+
+            <div id="uploadProgress" class="upload-progress">
+                <h3>Uploading Files...</h3>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="uploadProgressFill"></div>
+                </div>
+                <div id="uploadStatus">Preparing upload...</div>
+                <div class="file-list" id="fileList"></div>
+            </div>
+
+            <div id="jobStatus" class="job-status">
+                <h3>Background Analysis Job</h3>
+                <div class="job-id-display">
+                    Job ID: <span id="jobId">-</span>
+                </div>
+                <div class="job-progress">
+                    <div class="job-progress-bar">
+                        <div class="job-progress-fill" id="jobProgressFill"></div>
+                    </div>
+                    <div id="jobStatusText">Job created successfully!</div>
+                </div>
+                <div class="file-list" id="jobFileList"></div>
+            </div>
+
+            <div id="notification" class="notification"></div>
+
+            <div class="action-buttons">
+                <button id="uploadBtn" class="btn btn-primary" onclick="startUpload()">
+                    <span class="spinner" id="uploadSpinner" style="display: none;"></span>
+                    Upload Files
+                </button>
+                <button id="createJobBtn" class="btn btn-success" onclick="createAnalysisJob()" style="display: none;">
+                    <span class="spinner" id="jobSpinner" style="display: none;"></span>
+                    Start Background Analysis
+                </button>
+                <button id="checkJobBtn" class="btn btn-secondary" onclick="checkJobStatus()" style="display: none;">
+                    Check Job Status
+                </button>
+                <a href="jobStatus.html" class="btn btn-secondary">Job Status Page</a>
+                <a href="SailScanAdmin.html" class="btn btn-secondary">Back to Admin</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let uploadedFiles = [];
+        let currentJobId = null;
+        let jobCheckInterval = null;
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function () {
+            // Pre-populate date with today's date
+            const dateInput = document.getElementById('date');
+            if (dateInput) {
+                const today = new Date().toISOString().split('T')[0];
+                dateInput.value = today;
+            }
+
+            // Load remembered values
+            loadRememberedValues();
+        });
+
+        function loadRememberedValues() {
+            const fields = ['regattaName', 'yachtClub', 'photographerName', 'photographerWebsite', 'location', 'additionalTags'];
+            fields.forEach(fieldId => {
+                const savedValue = localStorage.getItem(`bulkUpload_${fieldId}`);
+                if (savedValue) {
+                    const input = document.getElementById(fieldId);
+                    if (input) {
+                        input.value = savedValue;
+                    }
+                }
+            });
+        }
+
+        function saveFormValues() {
+            const fields = ['regattaName', 'yachtClub', 'photographerName', 'photographerWebsite', 'location', 'additionalTags'];
+            fields.forEach(fieldId => {
+                const value = document.getElementById(fieldId).value;
+                localStorage.setItem(`bulkUpload_${fieldId}`, value);
+            });
+        }
+
+        // Add event listeners to save values when they change
+        ['regattaName', 'yachtClub', 'photographerName', 'photographerWebsite', 'location', 'additionalTags'].forEach(fieldId => {
+            const input = document.getElementById(fieldId);
+            if (input) {
+                input.addEventListener('change', saveFormValues);
+                input.addEventListener('input', saveFormValues);
+            }
+        });
+
+        async function startUpload() {
+            const fileInput = document.getElementById('imageInput');
+            const files = Array.from(fileInput.files);
+
+            if (files.length === 0) {
+                showNotification('Please select files to upload', 'error');
+                return;
+            }
+
+            // Show upload progress
+            document.getElementById('uploadProgress').style.display = 'block';
+            document.getElementById('uploadBtn').disabled = true;
+            document.getElementById('uploadSpinner').style.display = 'inline-block';
+
+            uploadedFiles = [];
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = '';
+
+            // Create file list items
+            files.forEach(file => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.id = `file-${file.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                fileItem.innerHTML = `
+                    <div class="file-name">${file.name}</div>
+                    <div class="file-size">${formatFileSize(file.size)}</div>
+                    <div class="upload-status status-pending">Pending</div>
+                `;
+                fileList.appendChild(fileItem);
+            });
+
+            // Upload files one by one
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const fileItem = document.getElementById(`file-${file.name.replace(/[^a-zA-Z0-9]/g, '_')}`);
+                const statusDiv = fileItem.querySelector('.upload-status');
+
+                try {
+                    statusDiv.textContent = 'Uploading...';
+                    statusDiv.className = 'upload-status status-uploading';
+
+                    const formData = new FormData();
+                    formData.append('image', file);
+
+                    // Add metadata
+                    formData.append('date', document.getElementById('date').value);
+                    formData.append('regatta_name', document.getElementById('regattaName').value);
+                    formData.append('yacht_club', document.getElementById('yachtClub').value);
+                    formData.append('photographer_name', document.getElementById('photographerName').value);
+                    formData.append('photographer_website', document.getElementById('photographerWebsite').value);
+                    formData.append('location', document.getElementById('location').value);
+                    formData.append('additional_tags', document.getElementById('additionalTags').value);
+                    formData.append('bulk_upload', 'true'); // Flag for bulk upload
+
+                    const response = await fetch('/api/bulk-upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Upload failed: ${response.statusText}`);
+                    }
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        uploadedFiles.push({
+                            originalName: file.name,
+                            storedName: result.storedName,
+                            size: file.size
+                        });
+
+                        statusDiv.textContent = 'Complete';
+                        statusDiv.className = 'upload-status status-complete';
+                    } else {
+                        throw new Error(result.error || 'Upload failed');
+                    }
+
+                } catch (error) {
+                    console.error(`Error uploading ${file.name}:`, error);
+                    statusDiv.textContent = 'Error';
+                    statusDiv.className = 'upload-status status-error';
+                }
+
+                // Update progress
+                const progress = ((i + 1) / files.length) * 100;
+                document.getElementById('uploadProgressFill').style.width = `${progress}%`;
+                document.getElementById('uploadStatus').textContent = `Uploaded ${i + 1} of ${files.length} files`;
+            }
+
+            // Upload complete
+            document.getElementById('uploadBtn').disabled = false;
+            document.getElementById('uploadSpinner').style.display = 'none';
+            document.getElementById('createJobBtn').style.display = 'inline-block';
+
+            showNotification(`Successfully uploaded ${uploadedFiles.length} files`, 'success');
+        }
+
+        async function createAnalysisJob() {
+            if (uploadedFiles.length === 0) {
+                showNotification('No files uploaded yet', 'error');
+                return;
+            }
+
+            document.getElementById('createJobBtn').disabled = true;
+            document.getElementById('jobSpinner').style.display = 'inline-block';
+
+            try {
+                const response = await fetch('/api/create-analysis-job', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        files: uploadedFiles,
+                        metadata: {
+                            date: document.getElementById('date').value,
+                            regatta_name: document.getElementById('regattaName').value,
+                            yacht_club: document.getElementById('yachtClub').value,
+                            photographer_name: document.getElementById('photographerName').value,
+                            photographer_website: document.getElementById('photographerWebsite').value,
+                            location: document.getElementById('location').value,
+                            additional_tags: document.getElementById('additionalTags').value
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Job creation failed: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+
+                if (result.success) {
+                    currentJobId = result.jobId;
+                    document.getElementById('jobId').textContent = currentJobId;
+                    document.getElementById('jobStatus').style.display = 'block';
+                    document.getElementById('checkJobBtn').style.display = 'inline-block';
+
+                    showNotification('Analysis job created successfully! You can leave this page.', 'success');
+
+                    // Start checking job status
+                    startJobStatusCheck();
+                } else {
+                    throw new Error(result.error || 'Job creation failed');
+                }
+
+            } catch (error) {
+                console.error('Error creating analysis job:', error);
+                showNotification(`Error creating job: ${error.message}`, 'error');
+            }
+
+            document.getElementById('createJobBtn').disabled = false;
+            document.getElementById('jobSpinner').style.display = 'none';
+        }
+
+        async function checkJobStatus() {
+            if (!currentJobId) {
+                showNotification('No active job to check', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/job-status/${currentJobId}`);
+
+                if (!response.ok) {
+                    throw new Error(`Status check failed: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+
+                if (result.success) {
+                    updateJobStatusDisplay(result.job);
+                } else {
+                    throw new Error(result.error || 'Status check failed');
+                }
+
+            } catch (error) {
+                console.error('Error checking job status:', error);
+                showNotification(`Error checking status: ${error.message}`, 'error');
+            }
+        }
+
+        function updateJobStatusDisplay(job) {
+            const progressFill = document.getElementById('jobProgressFill');
+            const statusText = document.getElementById('jobStatusText');
+            const jobFileList = document.getElementById('jobFileList');
+
+            // Update progress
+            const progress = (job.completedFiles / job.totalFiles) * 100;
+            progressFill.style.width = `${progress}%`;
+
+            // Update status text
+            statusText.textContent = `${job.completedFiles} of ${job.totalFiles} files processed`;
+
+            // Update file list
+            jobFileList.innerHTML = '';
+            if (job.fileStatus) {
+                Object.entries(job.fileStatus).forEach(([filename, status]) => {
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item';
+                    fileItem.innerHTML = `
+                        <div class="file-name">${filename}</div>
+                        <div class="upload-status status-${status.toLowerCase()}">${status}</div>
+                    `;
+                    jobFileList.appendChild(fileItem);
+                });
+            }
+
+            // If job is complete, stop checking
+            if (job.status === 'completed') {
+                stopJobStatusCheck();
+                showNotification('Analysis job completed!', 'success');
+            }
+        }
+
+        function startJobStatusCheck() {
+            // Check status every 10 seconds
+            jobCheckInterval = setInterval(checkJobStatus, 10000);
+        }
+
+        function stopJobStatusCheck() {
+            if (jobCheckInterval) {
+                clearInterval(jobCheckInterval);
+                jobCheckInterval = null;
+            }
+        }
+
+        function showNotification(message, type) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type}`;
+            notification.style.display = 'block';
+
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 5000);
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Clean up interval when page is unloaded
+        window.addEventListener('beforeunload', function () {
+            stopJobStatusCheck();
+        });
+    </script>
+</body>
+
+</html>

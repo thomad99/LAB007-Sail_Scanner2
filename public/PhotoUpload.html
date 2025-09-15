@@ -655,8 +655,8 @@
             }
 
             .mobile-tab.active {
-                color: #0066cc;
-                background: white;
+                color: white !important;
+                background: rgba(255, 255, 255, 0.2);
                 border-bottom-color: #0066cc;
                 border-radius: 10px 10px 0 0;
             }
@@ -665,6 +665,8 @@
             .mobile-tab[onclick*="results"] {
                 display: none;
             }
+
+
 
             .mobile-tab-content {
                 display: none;
@@ -903,6 +905,34 @@
                 font-size: 18px;
                 min-width: 100%;
                 margin-bottom: 10px;
+            }
+
+            /* Mobile live summary styling */
+            .live-summary {
+                margin-top: 10px !important;
+                padding: 10px !important;
+            }
+
+            .live-summary h4 {
+                font-size: 14px !important;
+                margin-bottom: 8px !important;
+            }
+
+            .summary-stats {
+                grid-template-columns: repeat(3, 1fr) !important;
+                gap: 8px !important;
+            }
+
+            .stat-item {
+                padding: 6px !important;
+            }
+
+            .stat-number {
+                font-size: 16px !important;
+            }
+
+            .stat-label {
+                font-size: 10px !important;
             }
 
 
@@ -1419,6 +1449,36 @@
                     <div class="progress-bar">
                         <div class="progress-fill"></div>
                     </div>
+
+                    <!-- Live Summary Section -->
+                    <div class="live-summary"
+                        style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #0066cc;">
+                        <h4 style="margin: 0 0 10px 0; color: #0066cc; font-size: 16px;">📊 Live Analysis Summary</h4>
+                        <div class="summary-stats"
+                            style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px;">
+                            <div class="stat-item"
+                                style="text-align: center; padding: 8px; background: white; border-radius: 5px; border: 1px solid #dee2e6;">
+                                <div class="stat-number" id="sailNumbersFound"
+                                    style="font-size: 20px; font-weight: bold; color: #28a745;">0</div>
+                                <div class="stat-label" style="font-size: 12px; color: #666; margin-top: 2px;">Sail
+                                    Numbers Found</div>
+                            </div>
+                            <div class="stat-item"
+                                style="text-align: center; padding: 8px; background: white; border-radius: 5px; border: 1px solid #dee2e6;">
+                                <div class="stat-number" id="noSailNumbersFound"
+                                    style="font-size: 20px; font-weight: bold; color: #dc3545;">0</div>
+                                <div class="stat-label" style="font-size: 12px; color: #666; margin-top: 2px;">No Sail
+                                    Numbers</div>
+                            </div>
+                            <div class="stat-item"
+                                style="text-align: center; padding: 8px; background: white; border-radius: 5px; border: 1px solid #dee2e6;">
+                                <div class="stat-number" id="duplicatesFound"
+                                    style="font-size: 20px; font-weight: bold; color: #ffc107;">0</div>
+                                <div class="stat-label" style="font-size: 12px; color: #666; margin-top: 2px;">
+                                    Duplicates</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1505,6 +1565,11 @@
         let completedFiles = 0;
         const RATE_LIMIT_DELAY = 26000; // 26 seconds to be safe
         let lastAzureCallTime = 0;
+
+        // Live summary tracking variables
+        let sailNumbersFound = 0;
+        let noSailNumbersFound = 0;
+        let duplicatesFound = 0;
 
         // Add these new functions for autocomplete
         let regattaNames = [];
@@ -1732,6 +1797,9 @@
             totalFiles = files.length;
             completedFiles = 0;
 
+            // Reset live summary counters
+            resetLiveSummary();
+
             // Hide results tab on desktop for new batch
             const resultsTab = document.getElementById('resultsTab');
             if (resultsTab && window.innerWidth > 768) {
@@ -1858,6 +1926,19 @@
             progressFill.style.width = `${percentage}%`;
         }
 
+        function updateLiveSummary() {
+            document.getElementById('sailNumbersFound').textContent = sailNumbersFound;
+            document.getElementById('noSailNumbersFound').textContent = noSailNumbersFound;
+            document.getElementById('duplicatesFound').textContent = duplicatesFound;
+        }
+
+        function resetLiveSummary() {
+            sailNumbersFound = 0;
+            noSailNumbersFound = 0;
+            duplicatesFound = 0;
+            updateLiveSummary();
+        }
+
         async function processFile(file) {
             const resultCard = document.getElementById(`result-${file.name.replace(/[^a-zA-Z0-9]/g, '_')}`);
             const statusDiv = resultCard.querySelector('.processing-status');
@@ -1965,6 +2046,10 @@
                         ${generateMetadataSection(data, file)}
                     `;
 
+                    // Update live summary - Sail numbers found
+                    sailNumbersFound++;
+                    updateLiveSummary();
+
                     // Show results tab on desktop when first result is available
                     const resultsTab = document.getElementById('resultsTab');
                     if (resultsTab && window.innerWidth > 768) {
@@ -2005,6 +2090,10 @@
                         ${generateMetadataSection(data, file)}
                     `;
 
+                    // Update live summary - No sail numbers found
+                    noSailNumbersFound++;
+                    updateLiveSummary();
+
                     // Show results tab on desktop when first result is available
                     const resultsTab = document.getElementById('resultsTab');
                     if (resultsTab && window.innerWidth > 768) {
@@ -2035,6 +2124,9 @@
                         if (existingIndex !== -1) {
                             console.log(`Replacing existing file in global array: ${newFile.newFilename}`);
                             window.processedFiles[existingIndex] = newFile;
+                            // Update live summary - Duplicate found
+                            duplicatesFound++;
+                            updateLiveSummary();
                         } else {
                             console.log(`Adding new file to global array: ${newFile.newFilename}`);
                             window.processedFiles.push(newFile);
@@ -2231,7 +2323,7 @@
             return `
                 <div class="result-metadata-section" id="${metadataId}">
                     <div class="result-metadata-header" onclick="toggleResultMetadata('${metadataId}', '${contentId}')">
-                        <h4>📋 View All Captured Metadata</h4>
+                        <h4>📋 Detailed Meta</h4>
                         <span class="result-metadata-toggle" id="toggle-${metadataId}">▼</span>
                     </div>
                     <div class="result-metadata-content" id="${contentId}">

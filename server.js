@@ -637,7 +637,16 @@ async function createPhotoMetadataTable() {
             { name: 'user_agent', type: 'TEXT' },
             { name: 'screen_resolution', type: 'TEXT' },
             { name: 'timezone', type: 'TEXT' },
-            { name: 'upload_timestamp', type: 'TIMESTAMP' }
+            { name: 'upload_timestamp', type: 'TIMESTAMP' },
+            { name: 'original_filename', type: 'TEXT' },
+            { name: 'new_filename', type: 'TEXT' },
+            { name: 'file_size', type: 'BIGINT' },
+            { name: 'file_type', type: 'TEXT' },
+            { name: 'yacht_club', type: 'TEXT' },
+            { name: 's3_url', type: 'TEXT' },
+            { name: 'processing_status', type: 'TEXT DEFAULT \'pending\'' },
+            { name: 'sail_numbers', type: 'JSONB' },
+            { name: 'analysis_timestamp', type: 'TIMESTAMP' }
         ];
 
         for (const column of columnsToAdd) {
@@ -2262,6 +2271,284 @@ app.use('/public/Images', express.static(path.join(__dirname, 'public', 'Images'
 app.use('/public/images', express.static(path.join(__dirname, 'public', 'Images')));
 // Then serve processed images from processed_images directory
 app.use('/processed-images', express.static(PROCESSED_DIR));
+
+// In-memory job storage (in production, use a proper database)
+const analysisJobs = new Map();
+
+// Bulk upload endpoint - stores files without analysis
+app.post('/api/bulk-upload', upload.single('image'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ success: false, error: 'No file uploaded' });
+        }
+
+        const file = req.file;
+        const metadata = req.body;
+
+        // Generate unique filename
+        const timestamp = Date.now();
+        const randomString = Math.random().toString(36).substring(2, 15);
+        const fileExtension = path.extname(file.originalname);
+        const newFilename = `bulk_${timestamp}_${randomString}${fileExtension}`;
+
+        // Upload to S3
+        const s3Key = `bulk-uploads/${newFilename}`;
+        const s3Url = await uploadToS3(file.buffer, s3Key, file.mimetype);
+
+        // Store file info in database (without analysis)
+        const query = `
+            INSERT INTO photo_metadata (
+                original_filename, new_filename, file_size, file_type, 
+                date, regatta_name, yacht_club, photographer_name, 
+                photographer_website, location, additional_tags, 
+                s3_url, upload_timestamp, processing_status
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            RETURNING id
+        `;
+
+        const values = [
+            file.originalname,
+            newFilename,
+            file.size,
+            file.mimetype,
+            metadata.date || null,
+            metadata.regatta_name || null,
+            metadata.yacht_club || null,
+            metadata.photographer_name || null,
+            metadata.photographer_website || null,
+            metadata.location || null,
+            metadata.additional_tags || null,
+            s3Url,
+            new Date().toISOString(),
+            'uploaded' // Status: uploaded, processing, completed, error
+        ];
+
+        const result = await pool.query(query, values);
+
+        res.json({
+            success: true,
+            storedName: newFilename,
+            s3Url: s3Url,
+            id: result.rows[0].id
+        });
+
+    } catch (error) {
+        console.error('Bulk upload error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Create analysis job endpoint
+app.post('/api/create-analysis-job', async (req, res) => {
+    try {
+        const { files, metadata } = req.body;
+
+        if (!files || files.length === 0) {
+            return res.status(400).json({ success: false, error: 'No files provided' });
+        }
+
+        // Generate job ID
+        const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+
+        // Create job object
+        const job = {
+            id: jobId,
+            status: 'pending',
+            totalFiles: files.length,
+            completedFiles: 0,
+            fileStatus: {},
+            metadata: metadata,
+            createdAt: new Date().toISOString(),
+            startedAt: null,
+            completedAt: null,
+            files: files
+        };
+
+        // Initialize file status
+        files.forEach(file => {
+            job.fileStatus[file.originalName] = 'pending';
+        });
+
+        // Store job
+        analysisJobs.set(jobId, job);
+
+        // Start background processing
+        processAnalysisJob(jobId);
+
+        res.json({
+            success: true,
+            jobId: jobId,
+            message: 'Analysis job created and started'
+        });
+
+    } catch (error) {
+        console.error('Error creating analysis job:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Get job status endpoint
+app.get('/api/job-status/:jobId', async (req, res) => {
+    try {
+        const jobId = req.params.jobId;
+        const job = analysisJobs.get(jobId);
+
+        if (!job) {
+            return res.status(404).json({ success: false, error: 'Job not found' });
+        }
+
+        res.json({
+            success: true,
+            job: job
+        });
+
+    } catch (error) {
+        console.error('Error getting job status:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Background job processing function
+async function processAnalysisJob(jobId) {
+    const job = analysisJobs.get(jobId);
+    if (!job) return;
+
+    try {
+        job.status = 'processing';
+        job.startedAt = new Date().toISOString();
+
+        for (let i = 0; i < job.files.length; i++) {
+            const file = job.files[i];
+
+            try {
+                job.fileStatus[file.originalName] = 'processing';
+
+                // Get file from S3
+                const s3Key = `bulk-uploads/${file.storedName}`;
+                const s3Response = await s3Client.send(new GetObjectCommand({
+                    Bucket: BUCKET_NAME,
+                    Key: s3Key
+                }));
+
+                const imageBuffer = await streamToBuffer(s3Response.Body);
+
+                // Process with Azure Computer Vision
+                const sailNumbers = await analyzeImageWithAzure(imageBuffer);
+
+                // Update database with results
+                await updatePhotoMetadataWithResults(file.storedName, sailNumbers);
+
+                job.fileStatus[file.originalName] = 'completed';
+                job.completedFiles++;
+
+            } catch (error) {
+                console.error(`Error processing file ${file.originalName}:`, error);
+                job.fileStatus[file.originalName] = 'error';
+                job.completedFiles++;
+            }
+
+            // Rate limiting - wait 26 seconds between API calls
+            if (i < job.files.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 26000));
+            }
+        }
+
+        job.status = 'completed';
+        job.completedAt = new Date().toISOString();
+
+    } catch (error) {
+        console.error(`Error in job ${jobId}:`, error);
+        job.status = 'error';
+        job.completedAt = new Date().toISOString();
+    }
+}
+
+// Helper function to convert stream to buffer
+function streamToBuffer(stream) {
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        stream.on('data', chunk => chunks.push(chunk));
+        stream.on('end', () => resolve(Buffer.concat(chunks)));
+        stream.on('error', reject);
+    });
+}
+
+// Helper function to update photo metadata with analysis results
+async function updatePhotoMetadataWithResults(filename, sailNumbers) {
+    try {
+        const query = `
+            UPDATE photo_metadata 
+            SET 
+                processing_status = 'completed',
+                sail_numbers = $1,
+                analysis_timestamp = $2
+            WHERE new_filename = $3
+        `;
+
+        const sailNumbersJson = JSON.stringify(sailNumbers);
+        const analysisTimestamp = new Date().toISOString();
+
+        await pool.query(query, [sailNumbersJson, analysisTimestamp, filename]);
+
+    } catch (error) {
+        console.error('Error updating photo metadata with results:', error);
+        throw error;
+    }
+}
+
+// Azure Computer Vision analysis function for bulk upload
+async function analyzeImageWithAzure(imageBuffer) {
+    try {
+        console.log('Starting Azure analysis for bulk upload...');
+
+        // Send to Azure for Text Detection
+        const result = await processWithRetry(
+            () => computerVisionClient.readInStream(imageBuffer, { language: 'en' }),
+            'Azure Vision API call'
+        );
+
+        // Wait for Azure Processing
+        const operationId = result.operationLocation.split('/').pop();
+
+        let operationResult;
+        let attempts = 0;
+        const maxAttempts = 30;
+        const delayMs = 1000;
+
+        do {
+            attempts++;
+            console.log(`Checking Azure results - Attempt ${attempts}...`);
+            operationResult = await processWithRetry(
+                () => computerVisionClient.getReadResult(operationId),
+                'Azure Results Polling'
+            );
+
+            if (operationResult.status === 'running' || operationResult.status === 'notStarted') {
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+        } while ((operationResult.status === 'running' || operationResult.status === 'notStarted') && attempts < maxAttempts);
+
+        if (operationResult.status === 'succeeded') {
+            console.log('Azure processing completed successfully!');
+            const foundNumbers = extractSailNumbers(operationResult.analyzeResult);
+            const sortedNumbers = foundNumbers.sort((a, b) => b.confidence - a.confidence);
+
+            // Filter sail numbers by confidence level (>90%)
+            const highConfidenceNumbers = sortedNumbers.filter(sailData => sailData.confidence > 0.9);
+
+            console.log(`Found ${sortedNumbers.length} sail numbers, ${highConfidenceNumbers.length} with >90% confidence`);
+
+            return highConfidenceNumbers;
+        } else {
+            console.error('Azure processing failed:', operationResult.status);
+            return [];
+        }
+
+    } catch (error) {
+        console.error('Error during Azure analysis:', error);
+        return [];
+    }
+}
 
 // Test route to verify Images directory is accessible
 app.get('/test-images', (req, res) => {
