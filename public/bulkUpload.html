@@ -483,7 +483,8 @@
         <div class="content-wrapper">
             <div class="upload-section">
                 <h2>Bulk Photo Upload</h2>
-                <p>Select multiple photos to upload. Files will be stored first, then analyzed in the background.</p>
+                <p><strong>Stage 1:</strong> Upload files to temporary storage, then <strong>Stage 2:</strong> Analyze
+                    for sail numbers. Only photos with sail numbers will be kept.</p>
                 <input type="file" id="imageInput" accept="image/*" multiple>
             </div>
 
@@ -552,7 +553,7 @@
             </div>
 
             <div id="uploadProgress" class="upload-progress">
-                <h3>Uploading Files...</h3>
+                <h3>Stage 1: Uploading Files...</h3>
                 <div class="progress-bar">
                     <div class="progress-fill" id="uploadProgressFill"></div>
                 </div>
@@ -561,7 +562,7 @@
             </div>
 
             <div id="jobStatus" class="job-status">
-                <h3>Background Analysis Job</h3>
+                <h3>Stage 2: Analysis Job</h3>
                 <div class="job-id-display">
                     Job ID: <span id="jobId">-</span>
                 </div>
@@ -579,11 +580,11 @@
             <div class="action-buttons">
                 <button id="uploadBtn" class="btn btn-primary" onclick="startUpload()">
                     <span class="spinner" id="uploadSpinner" style="display: none;"></span>
-                    Upload Files
+                    Stage 1: Upload Files
                 </button>
                 <button id="createJobBtn" class="btn btn-success" onclick="createAnalysisJob()" style="display: none;">
                     <span class="spinner" id="jobSpinner" style="display: none;"></span>
-                    Start Background Analysis
+                    Stage 2: Start Analysis Job
                 </button>
                 <button id="checkJobBtn" class="btn btn-secondary" onclick="checkJobStatus()" style="display: none;">
                     Check Job Status
@@ -737,7 +738,7 @@
             document.getElementById('uploadSpinner').style.display = 'none';
             document.getElementById('createJobBtn').style.display = 'inline-block';
 
-            showNotification(`Successfully uploaded ${uploadedFiles.length} files`, 'success');
+            showNotification(`Stage 1 Complete: Uploaded ${uploadedFiles.length} files to temporary storage`, 'success');
         }
 
         async function createAnalysisJob() {

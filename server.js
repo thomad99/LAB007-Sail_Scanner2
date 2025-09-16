@@ -11,6 +11,7 @@ const {
     PutObjectCommand,
     GetObjectCommand,
     DeleteObjectCommand,
+    CopyObjectCommand,
     ListObjectsV2Command
 } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
@@ -2275,7 +2276,7 @@ app.use('/processed-images', express.static(PROCESSED_DIR));
 // In-memory job storage (in production, use a proper database)
 const analysisJobs = new Map();
 
-// Bulk upload endpoint - stores files without analysis
+// Bulk upload endpoint - STAGE 1: Upload files to temporary storage
 app.post('/api/bulk-upload', upload.single('image'), async (req, res) => {
     try {
         if (!req.file) {
@@ -2291,11 +2292,23 @@ app.post('/api/bulk-upload', upload.single('image'), async (req, res) => {
         const fileExtension = path.extname(file.originalname);
         const newFilename = `bulk_${timestamp}_${randomString}${fileExtension}`;
 
-        // Upload to S3
+        console.log('=== Stage 1: Bulk Upload ===');
+        console.log('Uploading file:', file.originalname, '→', newFilename);
+
+        // Upload to S3 in bulk-uploads folder (temporary storage)
         const s3Key = `bulk-uploads/${newFilename}`;
         const s3Url = await uploadToS3(file.buffer, s3Key, file.mimetype);
 
-        // Store file info in database (without analysis)
+        // Process additional_tags to handle array format
+        let additionalTagsArray = null;
+        if (metadata.additional_tags && metadata.additional_tags.trim()) {
+            additionalTagsArray = metadata.additional_tags
+                .split(',')
+                .map(tag => tag.trim())
+                .filter(tag => tag.length > 0);
+        }
+
+        // Store file info in database with 'uploaded' status (not analyzed yet)
         const query = `
             INSERT INTO photo_metadata (
                 filename, original_filename, new_filename, file_size, file_type, 
@@ -2305,16 +2318,6 @@ app.post('/api/bulk-upload', upload.single('image'), async (req, res) => {
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             RETURNING id
         `;
-
-        // Process additional_tags to handle array format
-        let additionalTagsArray = null;
-        if (metadata.additional_tags && metadata.additional_tags.trim()) {
-            // Split by comma and clean up each tag
-            additionalTagsArray = metadata.additional_tags
-                .split(',')
-                .map(tag => tag.trim())
-                .filter(tag => tag.length > 0);
-        }
 
         const values = [
             newFilename, // filename (required NOT NULL field)
@@ -2331,16 +2334,19 @@ app.post('/api/bulk-upload', upload.single('image'), async (req, res) => {
             additionalTagsArray, // Now properly formatted as array
             s3Url,
             new Date().toISOString(),
-            'uploaded' // Status: uploaded, processing, completed, error
+            'uploaded' // Status: uploaded (ready for analysis)
         ];
 
         const result = await pool.query(query, values);
+
+        console.log(`Successfully uploaded ${file.originalname} to temporary storage`);
 
         res.json({
             success: true,
             storedName: newFilename,
             s3Url: s3Url,
-            id: result.rows[0].id
+            id: result.rows[0].id,
+            message: 'File uploaded - ready for analysis'
         });
 
     } catch (error) {
@@ -2419,7 +2425,7 @@ app.get('/api/job-status/:jobId', async (req, res) => {
     }
 });
 
-// Background job processing function
+// Background job processing function - STAGE 2: Analyze files and cleanup
 async function processAnalysisJob(jobId) {
     const job = analysisJobs.get(jobId);
     if (!job) return;
@@ -2428,13 +2434,17 @@ async function processAnalysisJob(jobId) {
         job.status = 'processing';
         job.startedAt = new Date().toISOString();
 
+        console.log(`=== Stage 2: Starting Analysis Job ${jobId} ===`);
+        console.log(`Processing ${job.files.length} files for sail number detection`);
+
         for (let i = 0; i < job.files.length; i++) {
             const file = job.files[i];
 
             try {
                 job.fileStatus[file.originalName] = 'processing';
+                console.log(`Analyzing file ${i + 1}/${job.files.length}: ${file.originalName}`);
 
-                // Get file from S3
+                // Get file from S3 temporary storage
                 const s3Key = `bulk-uploads/${file.storedName}`;
                 const s3Response = await s3Client.send(new GetObjectCommand({
                     Bucket: BUCKET_NAME,
@@ -2446,10 +2456,63 @@ async function processAnalysisJob(jobId) {
                 // Process with Azure Computer Vision
                 const sailNumbers = await analyzeImageWithAzure(imageBuffer);
 
-                // Update database with results
-                await updatePhotoMetadataWithResults(file.storedName, sailNumbers);
+                // CRITICAL LOGIC: Handle based on sail number detection
+                if (sailNumbers && sailNumbers.length > 0) {
+                    // SAIL NUMBERS FOUND - Process and move to permanent storage
+                    console.log(`✓ Sail numbers found in ${file.originalName}:`, sailNumbers.map(sn => sn.number));
 
-                job.fileStatus[file.originalName] = 'completed';
+                    for (const sailData of sailNumbers) {
+                        try {
+                            // Look up sailor name in database
+                            const sailorInfo = await lookupSailorInDatabase(sailData.number);
+                            const sailorName = sailorInfo ? sailorInfo.sailorName : 'NONAME';
+
+                            const processedFilename = `${sailData.number}_${sailorName}_${file.originalName}`;
+                            const processedS3Key = `processed/${processedFilename}`;
+
+                            // Copy to permanent processed storage
+                            await s3Client.send(new CopyObjectCommand({
+                                Bucket: BUCKET_NAME,
+                                CopySource: `${BUCKET_NAME}/${s3Key}`,
+                                Key: processedS3Key
+                            }));
+
+                            console.log(`Moved to processed storage: ${processedFilename}`);
+                        } catch (processError) {
+                            console.error(`Error processing sail number ${sailData.number}:`, processError);
+                        }
+                    }
+
+                    // Update database record with sail numbers and change status
+                    await updatePhotoMetadataWithSailNumbers(file.storedName, sailNumbers);
+                    job.fileStatus[file.originalName] = 'processed_with_sail_numbers';
+
+                } else {
+                    // NO SAIL NUMBERS FOUND - Delete from S3 and database
+                    console.log(`✗ No sail numbers found in ${file.originalName} - cleaning up`);
+
+                    // Delete from S3 temporary storage
+                    try {
+                        await s3Client.send(new DeleteObjectCommand({
+                            Bucket: BUCKET_NAME,
+                            Key: s3Key
+                        }));
+                        console.log(`Deleted from S3: ${s3Key}`);
+                    } catch (deleteError) {
+                        console.error(`Error deleting from S3: ${s3Key}`, deleteError);
+                    }
+
+                    // Delete from database
+                    try {
+                        await pool.query('DELETE FROM photo_metadata WHERE new_filename = $1', [file.storedName]);
+                        console.log(`Deleted from database: ${file.storedName}`);
+                    } catch (dbDeleteError) {
+                        console.error(`Error deleting from database: ${file.storedName}`, dbDeleteError);
+                    }
+
+                    job.fileStatus[file.originalName] = 'deleted_no_sail_numbers';
+                }
+
                 job.completedFiles++;
 
             } catch (error) {
@@ -2458,8 +2521,9 @@ async function processAnalysisJob(jobId) {
                 job.completedFiles++;
             }
 
-            // Rate limiting - wait 26 seconds between API calls
+            // Rate limiting - wait 26 seconds between API calls (Azure free tier limit)
             if (i < job.files.length - 1) {
+                console.log('Waiting 26 seconds before next analysis (rate limiting)...');
                 await new Promise(resolve => setTimeout(resolve, 26000));
             }
         }
@@ -2467,8 +2531,18 @@ async function processAnalysisJob(jobId) {
         job.status = 'completed';
         job.completedAt = new Date().toISOString();
 
+        // Log final summary
+        const processedCount = Object.values(job.fileStatus).filter(status => status === 'processed_with_sail_numbers').length;
+        const deletedCount = Object.values(job.fileStatus).filter(status => status === 'deleted_no_sail_numbers').length;
+        const errorCount = Object.values(job.fileStatus).filter(status => status === 'error').length;
+
+        console.log(`=== Analysis Job ${jobId} Complete ===`);
+        console.log(`Files with sail numbers: ${processedCount}`);
+        console.log(`Files without sail numbers (deleted): ${deletedCount}`);
+        console.log(`Errors: ${errorCount}`);
+
     } catch (error) {
-        console.error(`Error in job ${jobId}:`, error);
+        console.error(`Error in analysis job ${jobId}:`, error);
         job.status = 'error';
         job.completedAt = new Date().toISOString();
     }
@@ -2503,6 +2577,56 @@ async function updatePhotoMetadataWithResults(filename, sailNumbers) {
 
     } catch (error) {
         console.error('Error updating photo metadata with results:', error);
+        throw error;
+    }
+}
+
+// Helper function to update photo metadata with sail numbers and proper filename
+async function updatePhotoMetadataWithSailNumbers(tempFilename, sailNumbers) {
+    try {
+        if (sailNumbers && sailNumbers.length > 0) {
+            // Get the highest confidence sail number
+            const primarySailNumber = sailNumbers.sort((a, b) => b.confidence - a.confidence)[0];
+
+            // Look up sailor name
+            const sailorInfo = await lookupSailorInDatabase(primarySailNumber.number);
+            const sailorName = sailorInfo ? sailorInfo.sailorName : 'NONAME';
+
+            // Get original filename from database
+            const originalRecord = await pool.query('SELECT original_filename FROM photo_metadata WHERE new_filename = $1', [tempFilename]);
+            const originalFilename = originalRecord.rows[0]?.original_filename || 'unknown.jpg';
+
+            const processedFilename = `${primarySailNumber.number}_${sailorName}_${originalFilename}`;
+
+            const query = `
+                UPDATE photo_metadata 
+                SET 
+                    filename = $1,
+                    sail_number = $2,
+                    processing_status = 'completed',
+                    sail_numbers = $3,
+                    analysis_timestamp = $4,
+                    s3_url = $5
+                WHERE new_filename = $6
+            `;
+
+            const sailNumbersJson = JSON.stringify(sailNumbers);
+            const analysisTimestamp = new Date().toISOString();
+            const newS3Url = await getS3SignedUrl(`processed/${processedFilename}`);
+
+            await pool.query(query, [
+                processedFilename,
+                primarySailNumber.number,
+                sailNumbersJson,
+                analysisTimestamp,
+                newS3Url,
+                tempFilename
+            ]);
+
+            console.log(`Updated database record: ${tempFilename} → ${processedFilename}`);
+        }
+    } catch (error) {
+        console.error('Error updating photo metadata with sail numbers:', error);
         throw error;
     }
 }
