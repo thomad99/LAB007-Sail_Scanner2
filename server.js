@@ -2306,6 +2306,16 @@ app.post('/api/bulk-upload', upload.single('image'), async (req, res) => {
             RETURNING id
         `;
 
+        // Process additional_tags to handle array format
+        let additionalTagsArray = null;
+        if (metadata.additional_tags && metadata.additional_tags.trim()) {
+            // Split by comma and clean up each tag
+            additionalTagsArray = metadata.additional_tags
+                .split(',')
+                .map(tag => tag.trim())
+                .filter(tag => tag.length > 0);
+        }
+
         const values = [
             file.originalname,
             newFilename,
@@ -2317,7 +2327,7 @@ app.post('/api/bulk-upload', upload.single('image'), async (req, res) => {
             metadata.photographer_name || null,
             metadata.photographer_website || null,
             metadata.location || null,
-            metadata.additional_tags || null,
+            additionalTagsArray, // Now properly formatted as array
             s3Url,
             new Date().toISOString(),
             'uploaded' // Status: uploaded, processing, completed, error
