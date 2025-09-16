@@ -2298,11 +2298,11 @@ app.post('/api/bulk-upload', upload.single('image'), async (req, res) => {
         // Store file info in database (without analysis)
         const query = `
             INSERT INTO photo_metadata (
-                original_filename, new_filename, file_size, file_type, 
+                filename, original_filename, new_filename, file_size, file_type, 
                 date, regatta_name, yacht_club, photographer_name, 
                 photographer_website, location, additional_tags, 
                 s3_url, upload_timestamp, processing_status
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             RETURNING id
         `;
 
@@ -2317,8 +2317,9 @@ app.post('/api/bulk-upload', upload.single('image'), async (req, res) => {
         }
 
         const values = [
-            file.originalname,
-            newFilename,
+            newFilename, // filename (required NOT NULL field)
+            file.originalname, // original_filename
+            newFilename, // new_filename
             file.size,
             file.mimetype,
             metadata.date || null,
