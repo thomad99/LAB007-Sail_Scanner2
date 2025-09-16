@@ -563,14 +563,11 @@
 
             <div id="jobStatus" class="job-status">
                 <h3>Analyzing Files for Sail Numbers...</h3>
-                <div class="job-id-display">
-                    Job ID: <span id="jobId">-</span>
-                </div>
                 <div class="job-progress">
                     <div class="job-progress-bar">
                         <div class="job-progress-fill" id="jobProgressFill"></div>
                     </div>
-                    <div id="jobStatusText">Job created successfully!</div>
+                    <div id="jobStatusText">Analysis started...</div>
                 </div>
                 <div class="file-list" id="jobFileList"></div>
             </div>
@@ -777,7 +774,6 @@
 
                 if (result.success) {
                     currentJobId = result.jobId;
-                    document.getElementById('jobId').textContent = currentJobId;
                     document.getElementById('jobStatus').style.display = 'block';
 
                     showNotification('Analysis started! Processing files for sail numbers...', 'info');
