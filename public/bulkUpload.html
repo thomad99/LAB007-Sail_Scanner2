@@ -482,9 +482,9 @@
     <div class="main-container">
         <div class="content-wrapper">
             <div class="upload-section">
-                <h2>Bulk Photo Upload</h2>
-                <p><strong>Stage 1:</strong> Upload files to temporary storage, then <strong>Stage 2:</strong> Analyze
-                    for sail numbers. Only photos with sail numbers will be kept.</p>
+                <h2>Bulk Photo Upload & Analysis</h2>
+                <p>Upload multiple photos for automatic analysis. Files will be uploaded, analyzed for sail numbers, and
+                    only those with detected sail numbers will be stored.</p>
                 <input type="file" id="imageInput" accept="image/*" multiple>
             </div>
 
@@ -553,7 +553,7 @@
             </div>
 
             <div id="uploadProgress" class="upload-progress">
-                <h3>Stage 1: Uploading Files...</h3>
+                <h3>Uploading Files...</h3>
                 <div class="progress-bar">
                     <div class="progress-fill" id="uploadProgressFill"></div>
                 </div>
@@ -562,7 +562,7 @@
             </div>
 
             <div id="jobStatus" class="job-status">
-                <h3>Stage 2: Analysis Job</h3>
+                <h3>Analyzing Files for Sail Numbers...</h3>
                 <div class="job-id-display">
                     Job ID: <span id="jobId">-</span>
                 </div>
@@ -580,17 +580,12 @@
             <div class="action-buttons">
                 <button id="uploadBtn" class="btn btn-primary" onclick="startUpload()">
                     <span class="spinner" id="uploadSpinner" style="display: none;"></span>
-                    Stage 1: Upload Files
+                    Upload & Process Files
                 </button>
                 <button id="createJobBtn" class="btn btn-success" onclick="createAnalysisJob()" style="display: none;">
                     <span class="spinner" id="jobSpinner" style="display: none;"></span>
-                    Stage 2: Start Analysis Job
+                    Starting Analysis...
                 </button>
-                <button id="checkJobBtn" class="btn btn-secondary" onclick="checkJobStatus()" style="display: none;">
-                    Check Job Status
-                </button>
-                <a href="jobStatus.html" class="btn btn-secondary">Job Status Page</a>
-                <a href="SailScanAdmin.html" class="btn btn-secondary">Back to Admin</a>
             </div>
         </div>
     </div>
@@ -733,12 +728,16 @@
                 document.getElementById('uploadStatus').textContent = `Uploaded ${i + 1} of ${files.length} files`;
             }
 
-            // Upload complete
+            // Upload complete - Auto-start analysis
             document.getElementById('uploadBtn').disabled = false;
             document.getElementById('uploadSpinner').style.display = 'none';
-            document.getElementById('createJobBtn').style.display = 'inline-block';
 
-            showNotification(`Stage 1 Complete: Uploaded ${uploadedFiles.length} files to temporary storage`, 'success');
+            showNotification(`Stage 1 Complete: Uploaded ${uploadedFiles.length} files. Starting analysis...`, 'info');
+
+            // Automatically start Stage 2 analysis
+            setTimeout(() => {
+                createAnalysisJob();
+            }, 1000); // Small delay to show the completion message
         }
 
         async function createAnalysisJob() {
@@ -780,9 +779,8 @@
                     currentJobId = result.jobId;
                     document.getElementById('jobId').textContent = currentJobId;
                     document.getElementById('jobStatus').style.display = 'block';
-                    document.getElementById('checkJobBtn').style.display = 'inline-block';
 
-                    showNotification('Analysis job created successfully! You can leave this page.', 'success');
+                    showNotification('Analysis started! Processing files for sail numbers...', 'info');
 
                     // Start checking job status
                     startJobStatusCheck();
@@ -852,10 +850,10 @@
                 });
             }
 
-            // If job is complete, stop checking
+            // If job is complete, stop checking and show totals
             if (job.status === 'completed') {
                 stopJobStatusCheck();
-                showNotification('Analysis job completed!', 'success');
+                showJobCompletionSummary(job);
             }
         }
 
@@ -869,6 +867,42 @@
                 clearInterval(jobCheckInterval);
                 jobCheckInterval = null;
             }
+        }
+
+        function showJobCompletionSummary(job) {
+            // Calculate totals
+            const totalFiles = job.totalFiles;
+            const withSailNumbers = Object.values(job.fileStatus).filter(status => status === 'processed_with_sail_numbers').length;
+            const dropped = Object.values(job.fileStatus).filter(status => status === 'deleted_no_sail_numbers').length;
+            const errors = Object.values(job.fileStatus).filter(status => status === 'error').length;
+
+            // Create summary display
+            const summaryHtml = `
+                <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px; padding: 20px; margin: 20px 0; color: #155724;">
+                    <h3 style="margin: 0 0 15px 0; color: #155724;">🎉 Analysis Complete!</h3>
+                    <div style="font-size: 1.1em; line-height: 1.6;">
+                        <div><strong>Total Files Processed:</strong> ${totalFiles}</div>
+                        <div><strong>Images with Sail Numbers:</strong> ${withSailNumbers}</div>
+                        <div><strong>Images Dropped:</strong> ${dropped}</div>
+                        ${errors > 0 ? `<div style="color: #721c24;"><strong>Errors:</strong> ${errors}</div>` : ''}
+                    </div>
+                </div>
+            `;
+
+            // Add summary to the job status section
+            const jobStatus = document.getElementById('jobStatus');
+            const existingSummary = jobStatus.querySelector('.completion-summary');
+            if (existingSummary) {
+                existingSummary.remove();
+            }
+
+            const summaryDiv = document.createElement('div');
+            summaryDiv.className = 'completion-summary';
+            summaryDiv.innerHTML = summaryHtml;
+            jobStatus.appendChild(summaryDiv);
+
+            // Show success notification
+            showNotification(`Analysis Complete! ${withSailNumbers} images with sail numbers stored, ${dropped} images dropped.`, 'success');
         }
 
         function showNotification(message, type) {
