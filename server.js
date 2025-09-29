@@ -2157,6 +2157,78 @@ app.delete('/api/delete-photo/:id', async (req, res) => {
     }
 });
 
+// Secure delete by filename with password and validation
+app.post('/api/delete-by-filename', async (req, res) => {
+    try {
+        const { filename, password } = req.body || {};
+
+        // 1) Password check
+        if (password !== '0403') {
+            return res.status(403).json({ success: false, error: 'Invalid password' });
+        }
+
+        // 2) Validate filename strictly: no slashes, limited chars, allowed extensions
+        if (typeof filename !== 'string' || filename.length < 3 || filename.length > 200) {
+            return res.status(400).json({ success: false, error: 'Invalid filename length' });
+        }
+        const safeNamePattern = /^[A-Za-z0-9_.-]+\.(jpg|jpeg|png|gif|webp)$/i;
+        if (!safeNamePattern.test(filename)) {
+            return res.status(400).json({ success: false, error: 'Invalid filename format' });
+        }
+        if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+            return res.status(400).json({ success: false, error: 'Path traversal detected' });
+        }
+
+        const storageDeleted = [];
+
+        // 3) Delete from S3 processed folder
+        try {
+            await deleteFromS3(`processed/${filename}`);
+            storageDeleted.push('s3');
+        } catch (s3Err) {
+            // If it's a not found error, continue; otherwise log
+            console.log('S3 delete error (continuing):', s3Err.message || s3Err);
+        }
+
+        // 4) Delete from local processed folder if exists
+        try {
+            const localPath = path.join(PROCESSED_DIR, filename);
+            if (fs.existsSync(localPath)) {
+                fs.unlinkSync(localPath);
+                storageDeleted.push('local');
+            }
+        } catch (fsErr) {
+            console.log('Local delete error (continuing):', fsErr.message || fsErr);
+        }
+
+        // 5) Remove database references (delete rows where filename matches)
+        let dbDeleted = 0;
+        try {
+            const dbRes = await pool.query('DELETE FROM photo_metadata WHERE filename = $1 RETURNING id', [filename]);
+            dbDeleted = dbRes.rowCount;
+        } catch (dbErr) {
+            console.error('Database delete error:', dbErr);
+        }
+
+        // Also remove any purchased_images that reference this filename
+        try {
+            await pool.query('DELETE FROM purchased_images WHERE image_filename = $1', [filename]);
+        } catch (dbErr2) {
+            console.error('Purchased images cleanup error:', dbErr2);
+        }
+
+        return res.json({
+            success: true,
+            filename,
+            storageDeleted,
+            dbDeleted
+        });
+    } catch (err) {
+        console.error('Error in delete-by-filename:', err);
+        return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
 // Helper function to extract EXIF data from image buffer
 function extractExifData(buffer) {
     try {

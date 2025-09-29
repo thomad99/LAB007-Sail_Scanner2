@@ -351,6 +351,21 @@
                 <button class="action-button" onclick="loadStats()">🔄 Refresh Stats</button>
             </div>
 
+            <!-- Delete by Filename Section -->
+            <div class="admin-section" style="margin-top: 30px;">
+                <h2>🗑️ Delete Photo by Filename</h2>
+                <p>Enter the exact processed filename to delete (e.g., 1234_NONAME_IMG001.jpg)</p>
+                <div style="display: flex; flex-direction: column; gap: 10px; align-items: center;">
+                    <input id="deleteFilename" type="text" placeholder="Filename to delete"
+                        style="width: 100%; max-width: 600px; padding: 10px; border: 1px solid #dee2e6; border-radius: 5px;" />
+                    <input id="deletePassword" type="password" placeholder="Password"
+                        style="width: 100%; max-width: 600px; padding: 10px; border: 1px solid #dee2e6; border-radius: 5px;" />
+                    <button class="action-button danger-button" onclick="deleteByFilename()">🗑️ Delete File</button>
+                </div>
+                <div id="deleteHint" style="margin-top: 10px; color: #666; font-size: 0.9em;">Valid extensions: .jpg,
+                    .jpeg, .png, .gif, .webp</div>
+            </div>
+
             <!-- Share Section -->
             <div class="admin-section" style="margin-top: 30px;">
                 <h2>📤 Share & Export</h2>
@@ -597,6 +612,53 @@
             } catch (err) {
                 console.error('Error exporting images:', err);
                 showStatus('Error exporting images', 'error');
+            }
+        }
+
+        // Delete by filename (with password)
+        async function deleteByFilename() {
+            const filenameInput = document.getElementById('deleteFilename');
+            const passwordInput = document.getElementById('deletePassword');
+            const filename = (filenameInput?.value || '').trim();
+            const password = (passwordInput?.value || '').trim();
+
+            // Quick client-side validation
+            if (!filename) {
+                showStatus('Please enter a filename.', 'error');
+                return;
+            }
+            if (!password) {
+                showStatus('Please enter the password.', 'error');
+                return;
+            }
+
+            // Enforce allowed filename pattern client-side as well
+            const allowedPattern = /^[A-Za-z0-9_.-]{3,200}\.(jpg|jpeg|png|gif|webp)$/i;
+            if (!allowedPattern.test(filename)) {
+                showStatus('Invalid filename. Only letters, numbers, _ . - and valid extensions allowed.', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/delete-by-filename', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ filename, password })
+                });
+
+                const result = await response.json();
+                if (!response.ok || result.success === false) {
+                    throw new Error(result.error || 'Delete failed');
+                }
+
+                showStatus(`Deleted ${result.filename} (${result.storageDeleted.join(', ')})`, 'success');
+                filenameInput.value = '';
+                passwordInput.value = '';
+                loadStats();
+            } catch (err) {
+                showStatus(`Error deleting file: ${err.message}`, 'error');
             }
         }
 

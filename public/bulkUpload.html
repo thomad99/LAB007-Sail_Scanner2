@@ -583,6 +583,10 @@
                     <span class="spinner" id="jobSpinner" style="display: none;"></span>
                     Starting Analysis...
                 </button>
+                <button id="searchBtn" class="btn btn-secondary" onclick="searchUploadedPhotos()"
+                    style="display: none;">
+                    🔍 View Uploaded Photos
+                </button>
             </div>
         </div>
     </div>
@@ -899,6 +903,40 @@
 
             // Show success notification
             showNotification(`Analysis Complete! ${withSailNumbers} images with sail numbers stored, ${dropped} images dropped.`, 'success');
+
+            // Show search button if any images were processed
+            if (withSailNumbers > 0) {
+                showSearchButton();
+            }
+        }
+
+        function showSearchButton() {
+            const searchBtn = document.getElementById('searchBtn');
+            searchBtn.style.display = 'inline-block';
+        }
+
+        function searchUploadedPhotos() {
+            // Get the metadata from the bulk upload session to create search parameters
+            const regattaName = document.getElementById('regattaName').value;
+            const yachtClub = document.getElementById('yachtClub').value;
+            const photographerName = document.getElementById('photographerName').value;
+            const location = document.getElementById('location').value;
+            const date = document.getElementById('date').value;
+
+            // Build search URL with parameters
+            let searchUrl = 'PhotoSearch.html?';
+            const params = [];
+
+            if (regattaName) params.push(`regattaName=${encodeURIComponent(regattaName)}`);
+            if (yachtClub) params.push(`yachtClub=${encodeURIComponent(yachtClub)}`);
+            if (photographerName) params.push(`photographerName=${encodeURIComponent(photographerName)}`);
+            if (location) params.push(`location=${encodeURIComponent(location)}`);
+            if (date) params.push(`date=${encodeURIComponent(date)}`);
+
+            searchUrl += params.join('&');
+
+            // Open search page in new tab
+            window.open(searchUrl, '_blank');
         }
 
         function showNotification(message, type) {
