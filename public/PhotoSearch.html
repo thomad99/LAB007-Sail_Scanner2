@@ -625,6 +625,13 @@
             </div>
             <div class="modal-metadata" id="modalMetadata">
                 <h3>Photo Metadata</h3>
+                <div id="modalActions" style="margin: 0 0 12px 0; display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button id="downloadBtn" class="view-button" style="flex: 0 0 auto; max-width: 220px;"
+                        onclick="downloadCurrentPhoto()">⬇️ Download Photo</button>
+                    <button id="shareBtn" class="view-button"
+                        style="flex: 0 0 auto; max-width: 220px; background: #28a745;" onclick="sharePhotoLink()">🔗
+                        Share Link</button>
+                </div>
                 <div id="metadataContent">
                     <!-- Metadata will be populated here -->
                 </div>
@@ -972,6 +979,116 @@
                 closeModal();
             }
         });
+
+        // Download logic
+        function isLikelyMobile() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        }
+
+        async function downloadCurrentPhoto() {
+            try {
+                if (!currentModalPhoto || !currentModalPhoto.url) {
+                    return;
+                }
+
+                const filename = currentModalPhoto.filename || 'photo.jpg';
+                const response = await fetch(currentModalPhoto.url, { mode: 'cors', credentials: 'omit' });
+                if (!response.ok) throw new Error('Failed to fetch image');
+                const blob = await response.blob();
+                const fileType = blob.type || 'image/jpeg';
+
+                // Prefer Web Share API with files on mobile to reach camera roll via share sheet
+                if (isLikelyMobile() && navigator.share && navigator.canShare) {
+                    const file = new File([blob], filename, { type: fileType });
+                    if (navigator.canShare({ files: [file] })) {
+                        try {
+                            await navigator.share({ files: [file], title: 'Sailing Photo', text: filename });
+                            return;
+                        } catch (e) {
+                            // fall through to download
+                        }
+                    }
+                }
+
+                // Desktop and fallback: use an anchor with download attribute
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                // As a last resort on strict mobile browsers, open in a new tab
+                if (isLikelyMobile()) {
+                    setTimeout(() => {
+                        try { window.open(currentModalPhoto.url, '_blank'); } catch (e) { /* ignore */ }
+                    }, 300);
+                }
+            } catch (err) {
+                console.error('Download error:', err);
+                try { window.open(currentModalPhoto.url, '_blank'); } catch (e) { /* ignore */ }
+            }
+        }
+
+        // Share photo link
+        async function sharePhotoLink() {
+            try {
+                if (!currentModalPhoto || !currentModalPhoto.url) {
+                    return;
+                }
+
+                const photoUrl = currentModalPhoto.url;
+                const filename = currentModalPhoto.filename || 'sailing-photo';
+                const sailNumber = currentModalPhoto.sail_number || 'Unknown';
+
+                // Create share data
+                const shareData = {
+                    title: `Sailing Photo - Sail #${sailNumber}`,
+                    text: `Check out this sailing photo from ${currentModalPhoto.location || 'our regatta'}`,
+                    url: photoUrl
+                };
+
+                // Try Web Share API first (mobile)
+                if (navigator.share && isLikelyMobile()) {
+                    try {
+                        await navigator.share(shareData);
+                        return;
+                    } catch (err) {
+                        if (err.name !== 'AbortError') {
+                            console.log('Web Share API failed, falling back to clipboard');
+                        } else {
+                            return; // User cancelled
+                        }
+                    }
+                }
+
+                // Fallback: copy to clipboard
+                try {
+                    await navigator.clipboard.writeText(photoUrl);
+
+                    // Show success feedback
+                    const shareBtn = document.getElementById('shareBtn');
+                    const originalText = shareBtn.textContent;
+                    shareBtn.textContent = '✓ Copied!';
+                    shareBtn.style.background = '#28a745';
+
+                    setTimeout(() => {
+                        shareBtn.textContent = originalText;
+                        shareBtn.style.background = '#28a745';
+                    }, 2000);
+
+                } catch (clipboardErr) {
+                    // Final fallback: show URL in alert
+                    alert(`Photo URL:\n${photoUrl}\n\nCopy this link to share the photo.`);
+                }
+
+            } catch (err) {
+                console.error('Share error:', err);
+                alert('Unable to share photo link. Please try again.');
+            }
+        }
     </script>
 </body>
 
