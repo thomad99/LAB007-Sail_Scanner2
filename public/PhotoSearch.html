@@ -301,7 +301,7 @@
 
         .modal-image-container {
             position: relative;
-            background: #000;
+            background: white;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -337,23 +337,26 @@
             position: absolute;
             top: 50%;
             transform: translateY(-50%);
-            color: #fff;
+            color: #333;
             font-size: 24px;
             cursor: pointer;
             z-index: 10;
-            background: rgba(0, 0, 0, 0.5);
+            background: rgba(255, 255, 255, 0.9);
             border-radius: 50%;
             width: 50px;
             height: 50px;
             display: flex;
             align-items: center;
             justify-content: center;
-            border: none;
-            transition: background 0.3s ease;
+            border: 2px solid rgba(0, 102, 204, 0.3);
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         }
 
         .nav-button:hover {
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(0, 102, 204, 0.1);
+            border-color: rgba(0, 102, 204, 0.6);
+            transform: translateY(-50%) scale(1.05);
         }
 
         .nav-button.prev {
@@ -367,10 +370,13 @@
         .nav-button:disabled {
             opacity: 0.3;
             cursor: not-allowed;
+            background: rgba(255, 255, 255, 0.5);
         }
 
         .nav-button:disabled:hover {
-            background: rgba(0, 0, 0, 0.5);
+            background: rgba(255, 255, 255, 0.5);
+            transform: translateY(-50%) scale(1);
+            border-color: rgba(0, 102, 204, 0.3);
         }
 
         /* Action button image styling */
@@ -1141,19 +1147,61 @@
 
                 const filename = currentModalPhoto.filename || 'photo.jpg';
 
-                // iOS-specific handling: prefer native share with URL, or open in new tab
+                // iOS-specific handling: try to save directly to Photos app
                 if (isIOS()) {
-                    if (navigator.share) {
-                        try {
-                            await navigator.share({ title: 'Sailing Photo', url: currentModalPhoto.url });
-                            return;
-                        } catch (e) {
-                            // fall through to opening in a new tab
+                    try {
+                        // First, try to fetch the image as a blob
+                        const response = await fetch(currentModalPhoto.url, { mode: 'cors', credentials: 'omit' });
+                        if (!response.ok) throw new Error('Failed to fetch image');
+                        const blob = await response.blob();
+                        const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
+
+                        // Try Web Share API with file for direct save to Photos
+                        if (navigator.share && navigator.canShare) {
+                            try {
+                                await navigator.share({
+                                    files: [file],
+                                    title: `Sail ${currentModalPhoto.sail_number || ''} - Sailing Photo`,
+                                    text: `Sailing photo from ${currentModalPhoto.location || 'regatta'}`
+                                });
+                                return;
+                            } catch (e) {
+                                console.log('Web Share with file failed, trying URL share');
+                            }
                         }
+
+                        // Fallback: try sharing URL with instructions
+                        if (navigator.share) {
+                            try {
+                                await navigator.share({
+                                    title: 'Save Sailing Photo to Camera Roll',
+                                    text: `Tap and hold the image link to save to your camera roll: ${currentModalPhoto.url}`,
+                                    url: currentModalPhoto.url
+                                });
+                                return;
+                            } catch (e) {
+                                console.log('Web Share API failed');
+                            }
+                        }
+
+                        // Final fallback: open in new tab with instructions
+                        const newWindow = window.open(currentModalPhoto.url, '_blank');
+                        if (newWindow) {
+                            // Show a brief instruction
+                            setTimeout(() => {
+                                alert('To save to your camera roll:\n1. Tap and hold the image\n2. Select "Add to Photos" or "Save to Photos"');
+                            }, 500);
+                        }
+                        return;
+                    } catch (err) {
+                        console.error('iOS download error:', err);
+                        // Ultimate fallback
+                        window.open(currentModalPhoto.url, '_blank');
+                        setTimeout(() => {
+                            alert('To save to your camera roll:\n1. Tap and hold the image\n2. Select "Add to Photos"');
+                        }, 500);
+                        return;
                     }
-                    // Opening immediately within the user gesture avoids popup blockers
-                    window.open(currentModalPhoto.url, '_blank');
-                    return;
                 }
 
                 // Non-iOS: try fetching and downloading as file
