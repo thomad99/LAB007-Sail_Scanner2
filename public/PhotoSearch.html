@@ -718,23 +718,23 @@
             <div class="modal-metadata" id="modalMetadata">
                 <div id="modalActions"
                     style="margin: 0 0 12px 0; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
-                    <img id="downloadBtn" src="/Images/Download_button.jpg" alt="Download" class="action-button-image"
+                    <img id="downloadBtn" src="Images/Download_button.jpg" alt="Download" class="action-button-image"
                         onclick="downloadCurrentPhoto()"
                         style="cursor: pointer; flex: 1; min-width: 140px; max-width: 250px; height: auto; object-fit: contain; transition: transform 0.2s ease;">
-                    <img id="shareBtn" src="/Images/share_button.jpg" alt="Share" class="action-button-image"
+                    <img id="shareBtn" src="Images/share_button.jpg" alt="Share" class="action-button-image"
                         onclick="sharePhotoLink()"
                         style="cursor: pointer; flex: 1; min-width: 140px; max-width: 250px; height: auto; object-fit: contain; transition: transform 0.2s ease;">
                 </div>
                 <div id="basicMetadata"
-                    style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #0066cc;">
+                    style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
                     <div id="basicMetadataContent">
                         <!-- Basic metadata will be populated here -->
                     </div>
                 </div>
                 <div id="metadataSection" style="margin-top: 15px;">
                     <button id="metadataToggle"
-                        style="width: 100%; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; color: #0066cc;"
-                        onclick="toggleMetadata()">📋 Show All Metadata</button>
+                        style="width: 100%; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold; color: #0066cc;"
+                        onclick="toggleMetadata()">Show All Metadata</button>
                     <div id="metadataContent" style="display: none; margin-top: 10px;">
                         <!-- Additional metadata will be populated here -->
                     </div>
@@ -1032,7 +1032,7 @@
 
             // Reset metadata toggle state
             metadataContent.style.display = 'none';
-            metadataToggle.textContent = '📋 Show All Metadata';
+            metadataToggle.textContent = 'Show All Metadata';
 
             // Clear previous metadata
             basicMetadataContent.innerHTML = '';
@@ -1274,10 +1274,10 @@
 
             if (metadataContent.style.display === 'none') {
                 metadataContent.style.display = 'block';
-                metadataToggle.textContent = '📋 Hide All Metadata';
+                metadataToggle.textContent = 'Hide All Metadata';
             } else {
                 metadataContent.style.display = 'none';
-                metadataToggle.textContent = '📋 Show All Metadata';
+                metadataToggle.textContent = 'Show All Metadata';
             }
         }
 
