@@ -373,6 +373,28 @@
             background: rgba(0, 0, 0, 0.5);
         }
 
+        /* Button image styling */
+        .button-image {
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+        }
+
+        .image-button {
+            transition: all 0.3s ease;
+        }
+
+        .image-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .image-button:active {
+            transform: translateY(0);
+        }
+
         .modal-metadata {
             padding: 20px;
             background: #f8f9fa;
@@ -543,6 +565,28 @@
                 min-width: unset !important;
                 margin: 0 5px;
             }
+
+            /* Mobile button sizing */
+            .button-image {
+                max-width: 80%;
+                max-height: 80%;
+            }
+        }
+
+        /* Desktop button sizing */
+        @media (min-width: 769px) {
+            .button-image {
+                max-width: 90%;
+                max-height: 90%;
+            }
+        }
+
+        /* Large desktop button sizing */
+        @media (min-width: 1200px) {
+            .button-image {
+                max-width: 95%;
+                max-height: 95%;
+            }
         }
 
         /* Touch-friendly improvements */
@@ -679,20 +723,29 @@
             </div>
             <div class="modal-metadata" id="modalMetadata">
                 <div id="modalActions" style="margin: 0 0 12px 0; display: flex; gap: 10px; flex-wrap: wrap;">
-                    <button id="downloadBtn" class="view-button"
-                        style="flex: 1; min-width: 140px; height: 60px; font-size: 16px;"
-                        onclick="downloadCurrentPhoto()">⬇️ Download Photo</button>
-                    <button id="shareBtn" class="view-button"
-                        style="flex: 1; min-width: 140px; height: 60px; font-size: 16px; background: #28a745;"
-                        onclick="sharePhotoLink()">🔗
-                        Share Link</button>
+                    <button id="downloadBtn" class="view-button image-button"
+                        style="flex: 1; min-width: 140px; height: 60px; background: #0066cc; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;"
+                        onclick="downloadCurrentPhoto()">
+                        <img src="Images/Download_button.jpg" alt="Download" class="button-image">
+                    </button>
+                    <button id="shareBtn" class="view-button image-button"
+                        style="flex: 1; min-width: 140px; height: 60px; background: #28a745; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;"
+                        onclick="sharePhotoLink()">
+                        <img src="Images/share_button.jpg" alt="Share" class="button-image">
+                    </button>
+                </div>
+                <div id="basicMetadata"
+                    style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #0066cc;">
+                    <div id="basicMetadataContent">
+                        <!-- Basic metadata will be populated here -->
+                    </div>
                 </div>
                 <div id="metadataSection" style="margin-top: 15px;">
                     <button id="metadataToggle"
                         style="width: 100%; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; color: #0066cc;"
-                        onclick="toggleMetadata()">📋 Show Metadata</button>
+                        onclick="toggleMetadata()">📋 Show All Metadata</button>
                     <div id="metadataContent" style="display: none; margin-top: 10px;">
-                        <!-- Metadata will be populated here -->
+                        <!-- Additional metadata will be populated here -->
                     </div>
                 </div>
             </div>
@@ -968,6 +1021,7 @@
             const modal = document.getElementById('imageModal');
             const modalImg = document.getElementById('modalImage');
             const modalMetadata = document.getElementById('modalMetadata');
+            const basicMetadataContent = document.getElementById('basicMetadataContent');
             const metadataContent = document.getElementById('metadataContent');
             const metadataToggle = document.getElementById('metadataToggle');
             const prevButton = document.getElementById('prevButton');
@@ -987,21 +1041,39 @@
 
             // Reset metadata toggle state
             metadataContent.style.display = 'none';
-            metadataToggle.textContent = '📋 Show Metadata';
+            metadataToggle.textContent = '📋 Show All Metadata';
 
             // Clear previous metadata
+            basicMetadataContent.innerHTML = '';
             metadataContent.innerHTML = '';
 
-            // Populate metadata
+            // Populate basic metadata (always visible)
+            const basicFields = [
+                { key: 'regatta_name', label: 'Regatta Name' },
+                { key: 'sail_number', label: 'Sail Number' },
+                { key: 'location', label: 'Location' }
+            ];
+
+            basicFields.forEach(field => {
+                const value = photo[field.key];
+                if (value && value !== 'null' && value !== 'undefined' && value !== '') {
+                    const basicItem = document.createElement('div');
+                    basicItem.style.cssText = 'margin-bottom: 8px; font-size: 16px;';
+                    basicItem.innerHTML = `
+                        <strong style="color: #0066cc; font-weight: 600;">${field.label}:</strong>
+                        <span style="color: #333; margin-left: 8px;">${value}</span>
+                    `;
+                    basicMetadataContent.appendChild(basicItem);
+                }
+            });
+
+            // Populate additional metadata (expandable section)
             const metadataFields = [
                 { key: 'filename', label: 'Filename' },
-                { key: 'sail_number', label: 'Sail Number' },
                 { key: 'date', label: 'Date', formatter: (value) => value ? new Date(value).toLocaleDateString() : null },
-                { key: 'regatta_name', label: 'Regatta Name' },
                 { key: 'yacht_club', label: 'Yacht Club' },
                 { key: 'photographer_name', label: 'Photographer' },
                 { key: 'photographer_website', label: 'Photographer Website' },
-                { key: 'location', label: 'Location' },
                 { key: 'additional_tags', label: 'Additional Tags', formatter: (value) => Array.isArray(value) ? value.join(', ') : value },
                 { key: 'photo_timestamp', label: 'Photo Timestamp', formatter: (value) => value ? new Date(value).toLocaleString() : null },
                 { key: 'gps_latitude', label: 'GPS Latitude' },
@@ -1185,13 +1257,21 @@
 
                     // Show success feedback
                     const shareBtn = document.getElementById('shareBtn');
-                    const originalText = shareBtn.textContent;
-                    shareBtn.textContent = '✓ Copied!';
-                    shareBtn.style.background = '#28a745';
+                    const originalImg = shareBtn.querySelector('.button-image');
+                    const originalSrc = originalImg.src;
+
+                    // Create a temporary success indicator
+                    const successDiv = document.createElement('div');
+                    successDiv.style.cssText = 'color: white; font-weight: bold; font-size: 14px;';
+                    successDiv.textContent = '✓ Copied!';
+
+                    // Replace image with success text temporarily
+                    originalImg.style.display = 'none';
+                    shareBtn.appendChild(successDiv);
 
                     setTimeout(() => {
-                        shareBtn.textContent = originalText;
-                        shareBtn.style.background = '#28a745';
+                        originalImg.style.display = 'block';
+                        shareBtn.removeChild(successDiv);
                     }, 2000);
 
                 } catch (clipboardErr) {
@@ -1212,10 +1292,10 @@
 
             if (metadataContent.style.display === 'none') {
                 metadataContent.style.display = 'block';
-                metadataToggle.textContent = '📋 Hide Metadata';
+                metadataToggle.textContent = '📋 Hide All Metadata';
             } else {
                 metadataContent.style.display = 'none';
-                metadataToggle.textContent = '📋 Show Metadata';
+                metadataToggle.textContent = '📋 Show All Metadata';
             }
         }
 
