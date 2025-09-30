@@ -1026,17 +1026,30 @@
             const basicFields = [
                 { key: 'regatta_name', label: 'Regatta Name' },
                 { key: 'sail_number', label: 'Sail Number' },
-                { key: 'location', label: 'Location' }
+                { key: 'location', label: 'Location' },
+                { key: 'photographer_name', label: 'Photographer' },
+                {
+                    key: 'photographer_website', label: 'Photographer Website', formatter: (value) => {
+                        if (value && value !== 'null' && value !== 'undefined' && value !== '') {
+                            // Check if the URL already has http:// or https://
+                            const url = value.startsWith('http://') || value.startsWith('https://') ? value : `https://${value}`;
+                            return `<a href="${url}" target="_blank" style="color: #0066cc; text-decoration: underline;">${value}</a>`;
+                        }
+                        return value;
+                    }
+                }
             ];
 
             basicFields.forEach(field => {
                 const value = photo[field.key];
-                if (value && value !== 'null' && value !== 'undefined' && value !== '') {
+                const formattedValue = field.formatter ? field.formatter(value) : value;
+
+                if (formattedValue && formattedValue !== 'null' && formattedValue !== 'undefined' && formattedValue !== '') {
                     const basicItem = document.createElement('div');
                     basicItem.style.cssText = 'margin-bottom: 8px; font-size: 16px;';
                     basicItem.innerHTML = `
                         <strong style="color: #0066cc; font-weight: 600;">${field.label}:</strong>
-                        <span style="color: #333; margin-left: 8px;">${value}</span>
+                        <span style="color: #333; margin-left: 8px;">${formattedValue}</span>
                     `;
                     basicMetadataContent.appendChild(basicItem);
                 }
