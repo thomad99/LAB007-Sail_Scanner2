@@ -537,7 +537,7 @@
                 max-height: 40vh;
                 overflow-y: auto;
                 -webkit-overflow-scrolling: touch;
-                padding: 15px;
+                padding: 12px;
             }
 
             .metadata-item {
@@ -552,6 +552,32 @@
 
             .metadata-item .value {
                 font-size: 13px;
+            }
+
+            /* Mobile-specific styling for basic metadata */
+            #basicMetadata {
+                padding: 10px !important;
+                margin-top: 10px !important;
+            }
+
+            #basicMetadataContent>div {
+                margin-bottom: 6px !important;
+                font-size: 13px !important;
+                line-height: 1.4;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+            }
+
+            #basicMetadataContent strong {
+                font-size: 12px !important;
+                display: block;
+                margin-bottom: 2px;
+            }
+
+            #basicMetadataContent span {
+                font-size: 13px !important;
+                margin-left: 0 !important;
+                display: block;
             }
 
             /* Ensure buttons are side-by-side on mobile */
@@ -648,19 +674,20 @@
                     <div class="search-form-grid">
                         <div class="search-row">
                             <label for="sailNumber" class="search-label">Sail Number</label>
-                            <input type="text" id="sailNumber" class="search-input">
+                            <input type="text" id="sailNumber" class="search-input" autocomplete="off">
                         </div>
                         <div class="search-row">
                             <label for="date" class="search-label">Date</label>
-                            <input type="date" id="date" class="search-input">
+                            <input type="date" id="date" class="search-input" autocomplete="off">
                         </div>
                         <div class="search-row">
                             <label for="regattaName" class="search-label">Regatta Name</label>
-                            <input type="text" id="regattaName" class="search-input">
+                            <input type="text" id="regattaName" class="search-input" autocomplete="off">
                         </div>
                         <div class="search-row">
                             <label for="yachtClub" class="search-label">Yacht Club</label>
-                            <input type="text" id="yachtClub" class="search-input" list="yachtClubList">
+                            <input type="text" id="yachtClub" class="search-input" list="yachtClubList"
+                                autocomplete="off">
                             <datalist id="yachtClubList">
                                 <option value="Alamitos Bay Yacht Club">
                                 <option value="American Yacht Club">
@@ -688,11 +715,11 @@
                         </div>
                         <div class="search-row">
                             <label for="photographerName" class="search-label">Photographer</label>
-                            <input type="text" id="photographerName" class="search-input">
+                            <input type="text" id="photographerName" class="search-input" autocomplete="off">
                         </div>
                         <div class="search-row">
                             <label for="location" class="search-label">Location</label>
-                            <input type="text" id="location" class="search-input">
+                            <input type="text" id="location" class="search-input" autocomplete="off">
                         </div>
                         <div class="search-buttons">
                             <button class="search-button" id="searchBtn"
@@ -1052,10 +1079,11 @@
 
                 if (formattedValue && formattedValue !== 'null' && formattedValue !== 'undefined' && formattedValue !== '') {
                     const basicItem = document.createElement('div');
-                    basicItem.style.cssText = 'margin-bottom: 8px; font-size: 16px;';
+                    const isMobile = window.innerWidth <= 768;
+                    basicItem.style.cssText = isMobile ? 'margin-bottom: 6px; font-size: 13px; line-height: 1.4;' : 'margin-bottom: 8px; font-size: 16px;';
                     basicItem.innerHTML = `
-                        <strong style="color: #0066cc; font-weight: 600;">${field.label}:</strong>
-                        <span style="color: #333; margin-left: 8px;">${formattedValue}</span>
+                        <strong style="color: #0066cc; font-weight: 600; ${isMobile ? 'display: block; margin-bottom: 2px; font-size: 12px;' : ''}">${field.label}:</strong>
+                        <span style="color: #333; ${isMobile ? 'display: block; margin-left: 0; font-size: 13px;' : 'margin-left: 8px;'}">${formattedValue}</span>
                     `;
                     basicMetadataContent.appendChild(basicItem);
                 }
