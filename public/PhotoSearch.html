@@ -1171,6 +1171,10 @@
         function isLikelyMobile() {
             return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         }
+        function isIOS() {
+            return /iP(hone|od|ad)/i.test(navigator.userAgent) ||
+                (navigator.userAgent.includes('Mac') && 'ontouchend' in document);
+        }
 
         async function downloadCurrentPhoto() {
             try {
@@ -1179,25 +1183,42 @@
                 }
 
                 const filename = currentModalPhoto.filename || 'photo.jpg';
+
+                // iOS-specific handling: prefer native share with URL, or open in new tab
+                if (isIOS()) {
+                    if (navigator.share) {
+                        try {
+                            await navigator.share({ title: 'Sailing Photo', url: currentModalPhoto.url });
+                            return;
+                        } catch (e) {
+                            // fall through to opening in a new tab
+                        }
+                    }
+                    // Opening immediately within the user gesture avoids popup blockers
+                    window.open(currentModalPhoto.url, '_blank');
+                    return;
+                }
+
+                // Non-iOS: try fetching and downloading as file
                 const response = await fetch(currentModalPhoto.url, { mode: 'cors', credentials: 'omit' });
                 if (!response.ok) throw new Error('Failed to fetch image');
                 const blob = await response.blob();
                 const fileType = blob.type || 'image/jpeg';
 
-                // Prefer Web Share API with files on mobile to reach camera roll via share sheet
+                // Prefer Web Share API with files on Android mobile to save to gallery
                 if (isLikelyMobile() && navigator.share && navigator.canShare) {
                     const file = new File([blob], filename, { type: fileType });
                     if (navigator.canShare({ files: [file] })) {
                         try {
-                            await navigator.share({ files: [file], title: 'Sailing Photo', text: filename });
+                            await navigator.share({ files: [file], title: 'Sailing Photo' });
                             return;
                         } catch (e) {
-                            // fall through to download
+                            // fall through to local download
                         }
                     }
                 }
 
-                // Desktop and fallback: use an anchor with download attribute
+                // Desktop and general fallback: trigger a local download
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -1206,13 +1227,6 @@
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-
-                // As a last resort on strict mobile browsers, open in a new tab
-                if (isLikelyMobile()) {
-                    setTimeout(() => {
-                        try { window.open(currentModalPhoto.url, '_blank'); } catch (e) { /* ignore */ }
-                    }, 300);
-                }
             } catch (err) {
                 console.error('Download error:', err);
                 try { window.open(currentModalPhoto.url, '_blank'); } catch (e) { /* ignore */ }
