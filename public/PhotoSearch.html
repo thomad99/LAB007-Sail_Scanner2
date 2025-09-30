@@ -733,8 +733,17 @@
                 </div>
                 <div id="metadataSection" style="margin-top: 15px;">
                     <button id="metadataToggle"
-                        style="width: 100%; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold; color: #0066cc;"
-                        onclick="toggleMetadata()">Show All Metadata</button>
+                        style="width: 100%; padding: 8px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;"
+                        aria-label="Show metadata" onclick="toggleMetadata()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="none" viewBox="0 0 24 24"
+                            stroke="black">
+                            <circle cx="12" cy="12" r="10" stroke="black" stroke-width="2" fill="lightblue" />
+                            <line x1="12" y1="8" x2="12" y2="8" stroke="black" stroke-width="2"
+                                stroke-linecap="round" />
+                            <line x1="12" y1="11" x2="12" y2="16" stroke="black" stroke-width="2"
+                                stroke-linecap="round" />
+                        </svg>
+                    </button>
                     <div id="metadataContent" style="display: none; margin-top: 10px;">
                         <!-- Additional metadata will be populated here -->
                     </div>
@@ -1274,10 +1283,8 @@
 
             if (metadataContent.style.display === 'none') {
                 metadataContent.style.display = 'block';
-                metadataToggle.textContent = 'Hide All Metadata';
             } else {
                 metadataContent.style.display = 'none';
-                metadataToggle.textContent = 'Show All Metadata';
             }
         }
 
