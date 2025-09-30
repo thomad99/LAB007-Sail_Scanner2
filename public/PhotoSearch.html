@@ -731,23 +731,6 @@
                         <!-- Basic metadata will be populated here -->
                     </div>
                 </div>
-                <div id="metadataSection" style="margin-top: 15px;">
-                    <button id="metadataToggle"
-                        style="width: 100%; padding: 8px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;"
-                        aria-label="Show metadata" onclick="toggleMetadata()">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="none" viewBox="0 0 24 24"
-                            stroke="black">
-                            <circle cx="12" cy="12" r="10" stroke="black" stroke-width="2" fill="lightblue" />
-                            <line x1="12" y1="8" x2="12" y2="8" stroke="black" stroke-width="2"
-                                stroke-linecap="round" />
-                            <line x1="12" y1="11" x2="12" y2="16" stroke="black" stroke-width="2"
-                                stroke-linecap="round" />
-                        </svg>
-                    </button>
-                    <div id="metadataContent" style="display: none; margin-top: 10px;">
-                        <!-- Additional metadata will be populated here -->
-                    </div>
-                </div>
             </div>
         </div>
     </div>
@@ -986,9 +969,6 @@
                 info.innerHTML = `
                     <p><strong>Sail:</strong> ${photo.sail_number}</p>
                     <p><strong>Date:</strong> ${new Date(photo.date).toLocaleDateString()}</p>
-                    <p><strong>Location:</strong> ${photo.location || 'Not specified'}</p>
-                    <p><strong>Photographer:</strong> ${photo.photographer_name || 'Not specified'}</p>
-                    <p><strong>Yacht Club:</strong> ${photo.yacht_club || 'Not specified'}</p>
                     <p><strong>Regatta:</strong> ${photo.regatta_name || 'Not specified'}</p>
                 `;
 
@@ -1039,12 +1019,8 @@
                 nextButton.disabled = true;
             }
 
-            // Reset metadata toggle state
-            metadataContent.style.display = 'none';
-
             // Clear previous metadata
             basicMetadataContent.innerHTML = '';
-            metadataContent.innerHTML = '';
 
             // Populate basic metadata (always visible)
             const basicFields = [
@@ -1063,37 +1039,6 @@
                         <span style="color: #333; margin-left: 8px;">${value}</span>
                     `;
                     basicMetadataContent.appendChild(basicItem);
-                }
-            });
-
-            // Populate additional metadata (expandable section)
-            const metadataFields = [
-                { key: 'filename', label: 'Filename' },
-                { key: 'date', label: 'Date', formatter: (value) => value ? new Date(value).toLocaleDateString() : null },
-                { key: 'yacht_club', label: 'Yacht Club' },
-                { key: 'photographer_name', label: 'Photographer' },
-                { key: 'photographer_website', label: 'Photographer Website' },
-                { key: 'additional_tags', label: 'Additional Tags', formatter: (value) => Array.isArray(value) ? value.join(', ') : value },
-                { key: 'photo_timestamp', label: 'Photo Timestamp', formatter: (value) => value ? new Date(value).toLocaleString() : null },
-                { key: 'gps_latitude', label: 'GPS Latitude' },
-                { key: 'gps_longitude', label: 'GPS Longitude' },
-                { key: 'gps_altitude', label: 'GPS Altitude' },
-                { key: 'created_at', label: 'Upload Date', formatter: (value) => value ? new Date(value).toLocaleString() : null }
-            ];
-
-            metadataFields.forEach(field => {
-                const value = photo[field.key];
-                const formattedValue = field.formatter ? field.formatter(value) : value;
-
-                // Only create metadata item if we have actual data
-                if (formattedValue && formattedValue !== 'null' && formattedValue !== 'undefined' && formattedValue !== '') {
-                    const metadataItem = document.createElement('div');
-                    metadataItem.className = 'metadata-item';
-                    metadataItem.innerHTML = `
-                        <strong>${field.label}:</strong>
-                        <span class="value">${formattedValue}</span>
-                    `;
-                    metadataContent.appendChild(metadataItem);
                 }
             });
 
@@ -1289,17 +1234,6 @@
             }
         }
 
-        // Toggle metadata visibility
-        function toggleMetadata() {
-            const metadataContent = document.getElementById('metadataContent');
-            const metadataToggle = document.getElementById('metadataToggle');
-
-            if (metadataContent.style.display === 'none') {
-                metadataContent.style.display = 'block';
-            } else {
-                metadataContent.style.display = 'none';
-            }
-        }
 
         // Navigation functions
         function showPreviousPhoto() {
