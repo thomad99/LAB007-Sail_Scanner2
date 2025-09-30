@@ -333,6 +333,46 @@
             border: none;
         }
 
+        .nav-button {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #fff;
+            font-size: 24px;
+            cursor: pointer;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            transition: background 0.3s ease;
+        }
+
+        .nav-button:hover {
+            background: rgba(0, 0, 0, 0.7);
+        }
+
+        .nav-button.prev {
+            left: 15px;
+        }
+
+        .nav-button.next {
+            right: 15px;
+        }
+
+        .nav-button:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .nav-button:disabled:hover {
+            background: rgba(0, 0, 0, 0.5);
+        }
+
         .modal-metadata {
             padding: 20px;
             background: #f8f9fa;
@@ -491,6 +531,18 @@
             .metadata-item .value {
                 font-size: 13px;
             }
+
+            /* Ensure buttons are side-by-side on mobile */
+            #modalActions {
+                flex-direction: row !important;
+                flex-wrap: nowrap !important;
+            }
+
+            #modalActions button {
+                flex: 1 !important;
+                min-width: unset !important;
+                margin: 0 5px;
+            }
         }
 
         /* Touch-friendly improvements */
@@ -619,21 +671,29 @@
     <!-- Modal -->
     <div id="imageModal" class="modal" tabindex="-1" aria-modal="true" role="dialog">
         <div class="close-button" onclick="closeModal()">&times;</div>
+        <button class="nav-button prev" id="prevButton" onclick="showPreviousPhoto()" disabled>&#8249;</button>
+        <button class="nav-button next" id="nextButton" onclick="showNextPhoto()" disabled>&#8250;</button>
         <div class="modal-content" id="modalContent">
             <div class="modal-image-container" id="modalImageContainer">
                 <img id="modalImage" class="modal-image" src="" alt="Preview">
             </div>
             <div class="modal-metadata" id="modalMetadata">
-                <h3>Photo Metadata</h3>
                 <div id="modalActions" style="margin: 0 0 12px 0; display: flex; gap: 10px; flex-wrap: wrap;">
-                    <button id="downloadBtn" class="view-button" style="flex: 0 0 auto; max-width: 220px;"
+                    <button id="downloadBtn" class="view-button"
+                        style="flex: 1; min-width: 140px; height: 60px; font-size: 16px;"
                         onclick="downloadCurrentPhoto()">⬇️ Download Photo</button>
                     <button id="shareBtn" class="view-button"
-                        style="flex: 0 0 auto; max-width: 220px; background: #28a745;" onclick="sharePhotoLink()">🔗
+                        style="flex: 1; min-width: 140px; height: 60px; font-size: 16px; background: #28a745;"
+                        onclick="sharePhotoLink()">🔗
                         Share Link</button>
                 </div>
-                <div id="metadataContent">
-                    <!-- Metadata will be populated here -->
+                <div id="metadataSection" style="margin-top: 15px;">
+                    <button id="metadataToggle"
+                        style="width: 100%; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; color: #0066cc;"
+                        onclick="toggleMetadata()">📋 Show Metadata</button>
+                    <div id="metadataContent" style="display: none; margin-top: 10px;">
+                        <!-- Metadata will be populated here -->
+                    </div>
                 </div>
             </div>
         </div>
@@ -854,10 +914,10 @@
             const grid = document.createElement('div');
             grid.className = 'photo-grid';
 
-            uniquePhotos.forEach(photo => {
+            uniquePhotos.forEach((photo, index) => {
                 const card = document.createElement('div');
                 card.className = 'photo-card';
-                card.onclick = () => openModal(photo);
+                card.onclick = () => openModal(photo, index, uniquePhotos);
 
                 const img = document.createElement('img');
                 img.src = photo.url;
@@ -884,7 +944,7 @@
                 viewButton.innerHTML = 'View Photo';
                 viewButton.onclick = (e) => {
                     e.stopPropagation();
-                    openModal(photo);
+                    openModal(photo, index, uniquePhotos);
                 };
 
                 card.appendChild(img);
@@ -898,15 +958,36 @@
 
         // Modal logic
         let currentModalPhoto = null;
-        async function openModal(photo) {
+        let currentPhotoIndex = -1;
+        let currentPhotosArray = [];
+        async function openModal(photo, photoIndex = -1, photosArray = []) {
             currentModalPhoto = photo;
+            currentPhotoIndex = photoIndex;
+            currentPhotosArray = photosArray;
+
             const modal = document.getElementById('imageModal');
             const modalImg = document.getElementById('modalImage');
             const modalMetadata = document.getElementById('modalMetadata');
             const metadataContent = document.getElementById('metadataContent');
+            const metadataToggle = document.getElementById('metadataToggle');
+            const prevButton = document.getElementById('prevButton');
+            const nextButton = document.getElementById('nextButton');
 
             modalImg.src = photo.url;
             modalImg.alt = `Sail number ${photo.sail_number}`;
+
+            // Update navigation buttons
+            if (currentPhotosArray.length > 0) {
+                prevButton.disabled = currentPhotoIndex <= 0;
+                nextButton.disabled = currentPhotoIndex >= currentPhotosArray.length - 1;
+            } else {
+                prevButton.disabled = true;
+                nextButton.disabled = true;
+            }
+
+            // Reset metadata toggle state
+            metadataContent.style.display = 'none';
+            metadataToggle.textContent = '📋 Show Metadata';
 
             // Clear previous metadata
             metadataContent.innerHTML = '';
@@ -973,10 +1054,44 @@
             }
         });
 
-        // Close modal with Escape key
+        // Touch navigation for mobile
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        document.getElementById('imageModal').addEventListener('touchstart', function (e) {
+            touchStartX = e.changedTouches[0].screenX;
+        });
+
+        document.getElementById('imageModal').addEventListener('touchend', function (e) {
+            touchEndX = e.changedTouches[0].screenX;
+            handleSwipe();
+        });
+
+        function handleSwipe() {
+            const swipeThreshold = 50;
+            const diff = touchStartX - touchEndX;
+
+            if (Math.abs(diff) > swipeThreshold) {
+                if (diff > 0) {
+                    // Swipe left - show next photo
+                    showNextPhoto();
+                } else {
+                    // Swipe right - show previous photo
+                    showPreviousPhoto();
+                }
+            }
+        }
+
+        // Close modal with Escape key and navigate with arrow keys
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape') {
                 closeModal();
+            } else if (document.getElementById('imageModal').style.display === 'flex') {
+                if (e.key === 'ArrowLeft') {
+                    showPreviousPhoto();
+                } else if (e.key === 'ArrowRight') {
+                    showNextPhoto();
+                }
             }
         });
 
@@ -1087,6 +1202,35 @@
             } catch (err) {
                 console.error('Share error:', err);
                 alert('Unable to share photo link. Please try again.');
+            }
+        }
+
+        // Toggle metadata visibility
+        function toggleMetadata() {
+            const metadataContent = document.getElementById('metadataContent');
+            const metadataToggle = document.getElementById('metadataToggle');
+
+            if (metadataContent.style.display === 'none') {
+                metadataContent.style.display = 'block';
+                metadataToggle.textContent = '📋 Hide Metadata';
+            } else {
+                metadataContent.style.display = 'none';
+                metadataToggle.textContent = '📋 Show Metadata';
+            }
+        }
+
+        // Navigation functions
+        function showPreviousPhoto() {
+            if (currentPhotoIndex > 0 && currentPhotosArray.length > 0) {
+                const prevPhoto = currentPhotosArray[currentPhotoIndex - 1];
+                openModal(prevPhoto, currentPhotoIndex - 1, currentPhotosArray);
+            }
+        }
+
+        function showNextPhoto() {
+            if (currentPhotoIndex < currentPhotosArray.length - 1 && currentPhotosArray.length > 0) {
+                const nextPhoto = currentPhotosArray[currentPhotoIndex + 1];
+                openModal(nextPhoto, currentPhotoIndex + 1, currentPhotosArray);
             }
         }
     </script>
