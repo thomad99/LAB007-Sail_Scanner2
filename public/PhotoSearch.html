@@ -373,26 +373,20 @@
             background: rgba(0, 0, 0, 0.5);
         }
 
-        /* Button image styling */
-        .button-image {
-            max-width: 100%;
-            max-height: 100%;
-            width: auto;
-            height: auto;
-            object-fit: contain;
-        }
-
-        .image-button {
+        /* Action button image styling */
+        .action-button-image {
+            cursor: pointer;
             transition: all 0.3s ease;
+            border-radius: 8px;
         }
 
-        .image-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        .action-button-image:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
 
-        .image-button:active {
-            transform: translateY(0);
+        .action-button-image:active {
+            transform: scale(0.98);
         }
 
         .modal-metadata {
@@ -566,26 +560,26 @@
                 margin: 0 5px;
             }
 
-            /* Mobile button sizing */
-            .button-image {
-                max-width: 80%;
-                max-height: 80%;
+            /* Mobile action button sizing */
+            .action-button-image {
+                max-width: 180px;
+                height: 50px;
             }
         }
 
-        /* Desktop button sizing */
+        /* Desktop action button sizing */
         @media (min-width: 769px) {
-            .button-image {
-                max-width: 90%;
-                max-height: 90%;
+            .action-button-image {
+                max-width: 220px;
+                height: 60px;
             }
         }
 
-        /* Large desktop button sizing */
+        /* Large desktop action button sizing */
         @media (min-width: 1200px) {
-            .button-image {
-                max-width: 95%;
-                max-height: 95%;
+            .action-button-image {
+                max-width: 250px;
+                height: 70px;
             }
         }
 
@@ -722,17 +716,14 @@
                 <img id="modalImage" class="modal-image" src="" alt="Preview">
             </div>
             <div class="modal-metadata" id="modalMetadata">
-                <div id="modalActions" style="margin: 0 0 12px 0; display: flex; gap: 10px; flex-wrap: wrap;">
-                    <button id="downloadBtn" class="view-button image-button"
-                        style="flex: 1; min-width: 140px; height: 60px; background: #0066cc; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;"
-                        onclick="downloadCurrentPhoto()">
-                        <img src="Images/Download_button.jpg" alt="Download" class="button-image">
-                    </button>
-                    <button id="shareBtn" class="view-button image-button"
-                        style="flex: 1; min-width: 140px; height: 60px; background: #28a745; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;"
-                        onclick="sharePhotoLink()">
-                        <img src="Images/share_button.jpg" alt="Share" class="button-image">
-                    </button>
+                <div id="modalActions"
+                    style="margin: 0 0 12px 0; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+                    <img id="downloadBtn" src="Images/Download_button.jpg" alt="Download" class="action-button-image"
+                        onclick="downloadCurrentPhoto()"
+                        style="cursor: pointer; flex: 1; min-width: 140px; max-width: 250px; height: auto; object-fit: contain; transition: transform 0.2s ease;">
+                    <img id="shareBtn" src="Images/share_button.jpg" alt="Share" class="action-button-image"
+                        onclick="sharePhotoLink()"
+                        style="cursor: pointer; flex: 1; min-width: 140px; max-width: 250px; height: auto; object-fit: contain; transition: transform 0.2s ease;">
                 </div>
                 <div id="basicMetadata"
                     style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #0066cc;">
@@ -1255,24 +1246,15 @@
                 try {
                     await navigator.clipboard.writeText(photoUrl);
 
-                    // Show success feedback
+                    // Show success feedback by briefly changing opacity
                     const shareBtn = document.getElementById('shareBtn');
-                    const originalImg = shareBtn.querySelector('.button-image');
-                    const originalSrc = originalImg.src;
+                    const originalOpacity = shareBtn.style.opacity;
 
-                    // Create a temporary success indicator
-                    const successDiv = document.createElement('div');
-                    successDiv.style.cssText = 'color: white; font-weight: bold; font-size: 14px;';
-                    successDiv.textContent = '✓ Copied!';
-
-                    // Replace image with success text temporarily
-                    originalImg.style.display = 'none';
-                    shareBtn.appendChild(successDiv);
+                    shareBtn.style.opacity = '0.5';
 
                     setTimeout(() => {
-                        originalImg.style.display = 'block';
-                        shareBtn.removeChild(successDiv);
-                    }, 2000);
+                        shareBtn.style.opacity = originalOpacity || '1';
+                    }, 300);
 
                 } catch (clipboardErr) {
                     // Final fallback: show URL in alert
