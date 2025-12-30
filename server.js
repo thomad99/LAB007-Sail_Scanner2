@@ -20,6 +20,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const ExifParser = require('exif-parser');
+const nodemailer = require('nodemailer');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -237,6 +238,28 @@ const authenticateApiKey = (req, res, next) => {
     rateLimiter(req, res, next);
 };
 
+// Email service API key authentication middleware
+const authenticateEmailApiKey = (req, res, next) => {
+    const emailApiKey = process.env.EMAIL_SERVICE_API_KEY;
+    
+    // If EMAIL_SERVICE_API_KEY is not set, skip authentication
+    if (!emailApiKey) {
+        return next();
+    }
+    
+    const providedKey = req.headers['x-api-key'];
+    
+    if (!providedKey || providedKey !== emailApiKey) {
+        console.log('Invalid or missing email service API key');
+        return res.status(401).json({
+            error: 'Invalid or missing API key',
+            details: 'X-API-Key header required'
+        });
+    }
+    
+    next();
+};
+
 // Update the search endpoint to use the combined auth and rate limiting
 app.get('/api/search-by-sail/:sailNumber', authenticateApiKey, async (req, res) => {
     console.log('Received request for sail number:', req.params.sailNumber);
@@ -393,7 +416,32 @@ pool.connect()
         process.exit(1);
     });
 
-app.use(express.json());
+// Configure express.json with 50MB limit for email attachments
+app.use(express.json({ limit: '50mb' }));
+
+// SMTP configuration for email forwarding
+const smtpConfig = {
+  host: process.env.SMTP_HOST || 'smtp.ionos.com',
+  port: parseInt(process.env.SMTP_PORT || '587'),
+  secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === '1',
+  auth: {
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || ''
+  },
+  requireTLS: process.env.SMTP_SECURE !== 'true' && process.env.SMTP_SECURE !== '1',
+  connectionTimeout: 30000,
+  greetingTimeout: 30000,
+  socketTimeout: 30000,
+  tls: {
+    rejectUnauthorized: true,
+    minVersion: 'TLSv1.2'
+  }
+};
+
+const emailTransporter = nodemailer.createTransport(smtpConfig);
+
+// Optional: API key for authentication
+const EMAIL_SERVICE_API_KEY = process.env.EMAIL_SERVICE_API_KEY || null;
 
 
 
@@ -2803,6 +2851,66 @@ app.get('/Images/favicon.ico', (req, res) => {
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     res.sendFile(faviconPath);
+});
+
+// Email forwarding endpoint (for free Render service)
+app.post('/api/send-email', (req, res) => {
+  console.log('=== Email Forwarding Request Received ===');
+  
+  // Optional: Check API key if set
+  if (EMAIL_SERVICE_API_KEY && req.headers['x-api-key'] !== EMAIL_SERVICE_API_KEY) {
+    console.error('Invalid API key provided');
+    return res.status(401).json({ error: 'Invalid API key' });
+  }
+
+  const { from, to, subject, text, attachment } = req.body;
+
+  // Validate required fields
+  if (!from || !to || !subject || !text) {
+    console.error('Missing required fields:', { from: !!from, to: !!to, subject: !!subject, text: !!text });
+    return res.status(400).json({ error: 'Missing required fields: from, to, subject, text' });
+  }
+
+  console.log(`Sending email from ${from} to ${to}`);
+  console.log(`Subject: ${subject}`);
+  console.log(`Has attachment: ${!!attachment}`);
+
+  const mailOptions = {
+    from: from,
+    to: to,
+    subject: subject,
+    text: text,
+    attachments: attachment ? [
+      {
+        filename: attachment.filename,
+        content: attachment.content,
+        encoding: attachment.encoding || 'base64'
+      }
+    ] : []
+  };
+
+  emailTransporter.sendMail(mailOptions, (error, info) => {
+    if (error) {
+      console.error('=== Email Send FAILED ===');
+      console.error('Error:', error.message);
+      console.error('Error Code:', error.code);
+      console.error('Full Error:', error);
+      return res.status(500).json({ 
+        error: 'Failed to send email',
+        details: error.message,
+        code: error.code
+      });
+    }
+
+    console.log('=== Email Send SUCCESS ===');
+    console.log('Message ID:', info.messageId);
+    console.log('Response:', info.response);
+    res.json({ 
+      success: true, 
+      messageId: info.messageId,
+      response: info.response 
+    });
+  });
 });
 
 // Start the server (AFTER all routes are defined)
