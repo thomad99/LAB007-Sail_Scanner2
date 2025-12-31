@@ -504,63 +504,72 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', service: 'regatta-scraper' });
 });
 
-// Start server
-app.listen(port, async () => {
+// Start server - make startup non-blocking
+app.listen(port, () => {
     console.log(`Regatta Scraper Service running on port ${port}`);
     console.log('This is a dedicated scraping service to reduce memory usage on main server');
     
-    // Verify Puppeteer is loaded on startup
-    const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
-    
-    if (enablePuppeteer && puppeteer) {
-        console.log('✓ Puppeteer module loaded successfully (ENABLE_PUPPETEER=true)');
-        console.log('  Puppeteer is ready - Chromium will be downloaded on first scrape if needed');
-        // Don't call executablePath() here as it may trigger Chromium download and hang
-        // The browser will be downloaded automatically when first used for scraping
-    } else if (enablePuppeteer && !puppeteer) {
-        console.error('✗ ERROR: ENABLE_PUPPETEER=true but Puppeteer failed to load');
-        console.error('  Service will start but Clubspot scraping will not work');
-        console.error('  To fix: npm install puppeteer');
-    } else {
-        console.log('ℹ Puppeteer disabled (ENABLE_PUPPETEER not set to true)');
-        console.log('  Clubspot scraping will not be available');
-        console.log('  To enable: Set ENABLE_PUPPETEER=true environment variable');
-    }
-    
-    // Test database connection
-    try {
-        await pool.query('SELECT 1');
-        console.log('✓ Database connected');
-    } catch (err) {
-        console.error('✗ Database connection failed:', err.message);
-        console.error('  Error code:', err.code);
-        if (err.code === 'ENOTFOUND') {
-            console.error('  DNS lookup failed - check DATABASE_URL environment variable');
-            console.error('  DATABASE_URL should be in format: postgresql://user:pass@host:port/dbname');
+    // Run async startup tasks without blocking
+    (async () => {
+        try {
+            // Verify Puppeteer is loaded on startup
+            const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
+            
+            if (enablePuppeteer && puppeteer) {
+                console.log('✓ Puppeteer module loaded successfully (ENABLE_PUPPETEER=true)');
+                console.log('  Puppeteer is ready - Chromium will be downloaded on first scrape if needed');
+            } else if (enablePuppeteer && !puppeteer) {
+                console.error('✗ ERROR: ENABLE_PUPPETEER=true but Puppeteer failed to load');
+                console.error('  Service will start but Clubspot scraping will not work');
+                console.error('  To fix: npm install puppeteer');
+            } else {
+                console.log('ℹ Puppeteer disabled (ENABLE_PUPPETEER not set to true)');
+                console.log('  Clubspot scraping will not be available');
+                console.log('  To enable: Set ENABLE_PUPPETEER=true environment variable');
+            }
+            
+            // Test database connection
+            try {
+                await pool.query('SELECT 1');
+                console.log('✓ Database connected');
+            } catch (err) {
+                console.error('✗ Database connection failed:', err.message);
+                console.error('  Error code:', err.code);
+                if (err.code === 'ENOTFOUND') {
+                    console.error('  DNS lookup failed - check DATABASE_URL environment variable');
+                    console.error('  DATABASE_URL should be in format: postgresql://user:pass@host:port/dbname');
+                }
+                if (!process.env.DATABASE_URL) {
+                    console.error('  DATABASE_URL environment variable is not set!');
+                } else {
+                    // Mask password in URL for logging
+                    const maskedUrl = process.env.DATABASE_URL.replace(/:[^:@]+@/, ':****@');
+                    console.error(`  DATABASE_URL: ${maskedUrl}`);
+                }
+                console.error('  Service will continue but database operations will fail');
+                // Don't exit - let service start and show errors on use
+            }
+            
+            // Ensure tables exist (non-blocking)
+            try {
+                await ensureRegattasTable();
+            } catch (tableError) {
+                console.error('⚠ Error ensuring tables exist:', tableError.message);
+            }
+            
+            console.log('✓ Service ready to accept scraping requests');
+            console.log('  - Regatta Network scraping: Available');
+            const enablePuppeteerFinal = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
+            if (enablePuppeteerFinal && puppeteer) {
+                console.log('  - Clubspot scraping: Available');
+            } else if (enablePuppeteerFinal && !puppeteer) {
+                console.log('  - Clubspot scraping: UNAVAILABLE (Puppeteer failed to load)');
+            } else {
+                console.log('  - Clubspot scraping: UNAVAILABLE (ENABLE_PUPPETEER not set to true)');
+            }
+        } catch (startupError) {
+            console.error('Error during startup:', startupError);
         }
-        if (!process.env.DATABASE_URL) {
-            console.error('  DATABASE_URL environment variable is not set!');
-        } else {
-            // Mask password in URL for logging
-            const maskedUrl = process.env.DATABASE_URL.replace(/:[^:@]+@/, ':****@');
-            console.error(`  DATABASE_URL: ${maskedUrl}`);
-        }
-        console.error('  Service cannot start without database connection');
-        process.exit(1);
-    }
-    
-    // Ensure tables exist
-    await ensureRegattasTable();
-    
-    console.log('✓ Service ready to accept scraping requests');
-    console.log('  - Regatta Network scraping: Available');
-    const enablePuppeteerFinal = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
-    if (enablePuppeteerFinal && puppeteer) {
-        console.log('  - Clubspot scraping: Available');
-    } else if (enablePuppeteerFinal && !puppeteer) {
-        console.log('  - Clubspot scraping: UNAVAILABLE (Puppeteer failed to load)');
-    } else {
-        console.log('  - Clubspot scraping: UNAVAILABLE (ENABLE_PUPPETEER not set to true)');
-    }
+    })();
 });
 
