@@ -24,17 +24,23 @@ const nodemailer = require('nodemailer');
 const cheerio = require('cheerio');
 const axios = require('axios');
 
-// Load Puppeteer with error handling - make it optional so server can start without it
+// Load Puppeteer only if ENABLE_PUPPETEER environment variable is set to 'true'
+// Main server should NOT have this set - only the dedicated scraper service should
 let puppeteer = null;
-console.log('Attempting to load Puppeteer (optional - server will work without it)...');
-try {
-  puppeteer = require('puppeteer');
-  console.log('✓ Puppeteer loaded successfully at startup');
-} catch (puppeteerError) {
-  console.warn('⚠ Puppeteer not available (this is OK - Clubspot scraping will be disabled)');
-  console.warn('  Error:', puppeteerError.message);
-  console.warn('  To enable: npm install puppeteer (may take several minutes to download Chromium)');
-  // Don't throw - let server start without Puppeteer
+const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
+
+if (enablePuppeteer) {
+  console.log('ENABLE_PUPPETEER=true detected - loading Puppeteer...');
+  try {
+    puppeteer = require('puppeteer');
+    console.log('✓ Puppeteer loaded successfully');
+  } catch (puppeteerError) {
+    console.warn('⚠ Puppeteer not available:', puppeteerError.message);
+    console.warn('  To enable: npm install puppeteer');
+  }
+} else {
+  console.log('ℹ Puppeteer not loaded (ENABLE_PUPPETEER not set - this is correct for main server)');
+  console.log('  Scraping is handled by dedicated scraper service');
 }
 
 const app = express();
@@ -2915,56 +2921,41 @@ app.get('/Images/favicon.ico', (req, res) => {
     res.sendFile(faviconPath);
 });
 
-// Regatta scraping endpoint
+// Regatta scraping endpoint - forwards to dedicated scraper service
 app.post('/api/scrape-regattas', async (req, res) => {
-  console.log('=== Regatta Scraping Request Received ===');
+  console.log('=== Regatta Scraping Request Received (forwarding to scraper service) ===');
   
   try {
-    const { source } = req.body; // 'regattanetwork', 'clubspot', or 'all'
-    let totalFound = 0;
-    let totalAdded = 0;
-    const results = { regattanetwork: { found: 0, added: 0 }, clubspot: { found: 0, added: 0 } };
-
-    // Scrape Regatta Network
-    if (!source || source === 'all' || source === 'regattanetwork') {
-      console.log('Scraping Regatta Network...');
-      const rnResult = await scrapeRegattaNetwork();
-      results.regattanetwork = rnResult;
-      totalFound += rnResult.found;
-      totalAdded += rnResult.added;
-    }
-
-    // Scrape Clubspot
-    if (!source || source === 'all' || source === 'clubspot') {
-      console.log('Scraping Clubspot...');
-      try {
-        const csResult = await scrapeClubspot();
-        results.clubspot = csResult;
-        totalFound += (csResult.found || 0);
-        totalAdded += (csResult.added || 0);
-      } catch (csError) {
-        console.error('Clubspot scraping error:', csError);
-        results.clubspot = { 
-          found: 0, 
-          added: 0, 
-          error: csError.message || 'Failed to scrape Clubspot' 
-        };
+    const scraperServiceUrl = process.env.SCRAPER_SERVICE_URL || 'http://localhost:3001';
+    console.log(`Forwarding to scraper service: ${scraperServiceUrl}`);
+    
+    const response = await axios.post(`${scraperServiceUrl}/api/scrape-regattas`, req.body, {
+      timeout: 120000, // 2 minutes timeout for scraping
+      headers: {
+        'Content-Type': 'application/json'
       }
-    }
-
-    console.log(`=== Scraping Complete: ${totalFound} found, ${totalAdded} added ===`);
-    res.json({
-      success: true,
-      totalFound,
-      totalAdded,
-      results
     });
+    
+    console.log('Scraper service response:', response.data);
+    res.json(response.data);
   } catch (error) {
-    console.error('=== Scraping Error ===', error);
-    res.status(500).json({
-      error: 'Failed to scrape regattas',
-      details: error.message
-    });
+    console.error('=== Scraper Service Error ===', error);
+    
+    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+      res.status(503).json({
+        error: 'Scraper service unavailable',
+        details: 'The dedicated scraper service is not available. Please ensure it is running.',
+        message: error.message
+      });
+    } else if (error.response) {
+      // Forward the error response from scraper service
+      res.status(error.response.status).json(error.response.data);
+    } else {
+      res.status(500).json({
+        error: 'Failed to connect to scraper service',
+        details: error.message
+      });
+    }
   }
 });
 
@@ -3139,16 +3130,45 @@ async function scrapeClubspot() {
     console.log('Puppeteer version check - attempting to launch browser...');
     
     // Launch headless browser
-    browser = await puppeteer.launch({
+    // Try to use system Chrome/Chromium if available, otherwise use bundled
+    const launchOptions = {
       headless: true,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-accelerated-2d-canvas',
-        '--disable-gpu'
+        '--disable-gpu',
+        '--disable-software-rasterizer',
+        '--disable-extensions'
       ]
-    });
+    };
+    
+    // If Chromium wasn't downloaded, try to use system Chrome
+    try {
+      const executablePath = await puppeteer.executablePath();
+      if (!executablePath || !require('fs').existsSync(executablePath)) {
+        console.log('Bundled Chromium not found, trying system Chrome...');
+        // Try common Chrome locations
+        const possiblePaths = [
+          '/usr/bin/google-chrome',
+          '/usr/bin/chromium',
+          '/usr/bin/chromium-browser',
+          '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+        ];
+        for (const path of possiblePaths) {
+          if (require('fs').existsSync(path)) {
+            launchOptions.executablePath = path;
+            console.log(`Using system Chrome at: ${path}`);
+            break;
+          }
+        }
+      }
+    } catch (pathError) {
+      console.log('Could not determine Chromium path, using default...');
+    }
+    
+    browser = await puppeteer.launch(launchOptions);
     
     const page = await browser.newPage();
     

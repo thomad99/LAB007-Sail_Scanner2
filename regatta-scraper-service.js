@@ -3,15 +3,23 @@ const { Pool } = require('pg');
 const axios = require('axios');
 const cheerio = require('cheerio');
 
-// Load Puppeteer with error handling
+// Load Puppeteer only if ENABLE_PUPPETEER environment variable is set to 'true'
 let puppeteer = null;
-try {
-  puppeteer = require('puppeteer');
-  console.log('✓ Puppeteer loaded successfully');
-} catch (puppeteerError) {
-  console.error('✗ Failed to load Puppeteer:', puppeteerError.message);
-  console.error('Puppeteer may not be installed. Run: npm install puppeteer');
-  process.exit(1); // Exit if Puppeteer is required
+const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
+
+if (enablePuppeteer) {
+  try {
+    puppeteer = require('puppeteer');
+    console.log('✓ Puppeteer loaded successfully (ENABLE_PUPPETEER=true)');
+  } catch (puppeteerError) {
+    console.error('✗ Failed to load Puppeteer:', puppeteerError.message);
+    console.error('Puppeteer may not be installed. Run: npm install puppeteer');
+    console.error('Service will start but Clubspot scraping will not work');
+    // Don't exit - allow service to start for Regatta Network scraping
+  }
+} else {
+  console.warn('⚠ Puppeteer not loaded (ENABLE_PUPPETEER not set to true)');
+  console.warn('  Set ENABLE_PUPPETEER=true environment variable to enable Clubspot scraping');
 }
 
 const app = express();
@@ -202,9 +210,15 @@ async function scrapeRegattaNetwork() {
 
 // Scrape Clubspot using headless browser
 async function scrapeClubspot() {
-    // Verify Puppeteer is available
+    // Verify Puppeteer is enabled and available
+    const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
+    
+    if (!enablePuppeteer) {
+        throw new Error('Puppeteer is disabled. Set ENABLE_PUPPETEER=true to enable Clubspot scraping.');
+    }
+    
     if (!puppeteer) {
-        throw new Error('Puppeteer is not available. Cannot scrape Clubspot.');
+        throw new Error('Puppeteer is not available. Cannot scrape Clubspot. Ensure Puppeteer is installed and ENABLE_PUPPETEER=true is set.');
     }
     
     let browser = null;
