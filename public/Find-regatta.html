@@ -413,13 +413,23 @@
 
                     let html = '';
                     data.regattas.forEach(regatta => {
-                        const dateObj = new Date(regatta.regatta_date);
-                        const formattedDate = dateObj.toLocaleDateString('en-US', { 
-                            weekday: 'long', 
-                            year: 'numeric', 
-                            month: 'long', 
-                            day: 'numeric' 
-                        });
+                        // Parse date string directly to avoid timezone issues
+                        // regatta_date is in format YYYY-MM-DD
+                        let formattedDate = regatta.regatta_date;
+                        if (regatta.regatta_date) {
+                            const dateParts = regatta.regatta_date.split('-');
+                            if (dateParts.length === 3) {
+                                const year = dateParts[0];
+                                const month = parseInt(dateParts[1]);
+                                const day = parseInt(dateParts[2]);
+                                const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                                const weekdayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                                // Create date in local timezone to get weekday
+                                const dateObj = new Date(parseInt(year), month - 1, parseInt(day));
+                                const weekday = weekdayNames[dateObj.getDay()];
+                                formattedDate = `${weekday}, ${monthNames[month - 1]} ${day}, ${year}`;
+                            }
+                        }
 
                         html += `<div class="regatta-item">`;
                         html += `<h3>${regatta.regatta_name}</h3>`;

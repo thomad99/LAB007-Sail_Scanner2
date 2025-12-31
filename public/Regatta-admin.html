@@ -170,6 +170,67 @@
             background-color: #00cc55;
         }
 
+        .action-button.danger {
+            background-color: #cc0000;
+        }
+
+        .action-button.danger:hover:not(:disabled) {
+            background-color: #ff3333;
+        }
+
+        .clear-warning {
+            background-color: rgba(255, 0, 0, 0.2);
+            border: 2px solid #ff6666;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .clear-warning h3 {
+            color: #ff6666;
+            margin-top: 0;
+        }
+
+        .clear-warning p {
+            color: #ffcccc;
+            margin: 10px 0;
+        }
+
+        .confirm-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 15px;
+        }
+
+        .confirm-button {
+            padding: 10px 20px;
+            font-size: 1em;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .confirm-button.yes {
+            background-color: #cc0000;
+            color: white;
+        }
+
+        .confirm-button.yes:hover {
+            background-color: #ff3333;
+        }
+
+        .confirm-button.no {
+            background-color: #666;
+            color: white;
+        }
+
+        .confirm-button.no:hover {
+            background-color: #888;
+        }
+
         .scrape-section {
             background-color: rgba(255, 255, 255, 0.1);
             padding: 25px;
@@ -542,6 +603,17 @@
         <div class="action-buttons">
             <button class="refresh-button" id="refreshButton" onclick="loadAll()">Refresh All</button>
             <a href="Find-regatta.html" class="action-button">Search Regattas</a>
+            <button class="action-button danger" id="clearButton" onclick="showClearConfirmation()">Clear All Regattas</button>
+        </div>
+
+        <div id="clearWarning" class="clear-warning" style="display: none;">
+            <h3>⚠️ Warning: This will delete ALL regattas!</h3>
+            <p>This action cannot be undone. All regatta data will be permanently deleted from the database.</p>
+            <p>Are you absolutely sure you want to proceed?</p>
+            <div class="confirm-buttons">
+                <button class="confirm-button yes" onclick="clearAllRegattas()">Yes, Delete All</button>
+                <button class="confirm-button no" onclick="hideClearConfirmation()">Cancel</button>
+            </div>
         </div>
 
         <div class="scrape-section">
@@ -788,12 +860,19 @@
                     tableBody.innerHTML = '';
                     
                     data.regattas.forEach(regatta => {
-                        const dateObj = new Date(regatta.regatta_date);
-                        const formattedDate = dateObj.toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric'
-                        });
+                        // Parse date string directly to avoid timezone issues
+                        // regatta_date is in format YYYY-MM-DD
+                        let formattedDate = regatta.regatta_date;
+                        if (regatta.regatta_date) {
+                            const dateParts = regatta.regatta_date.split('-');
+                            if (dateParts.length === 3) {
+                                const year = dateParts[0];
+                                const month = parseInt(dateParts[1]);
+                                const day = parseInt(dateParts[2]);
+                                const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                formattedDate = `${monthNames[month - 1]} ${day}, ${year}`;
+                            }
+                        }
 
                         const row = document.createElement('tr');
                         
@@ -923,6 +1002,61 @@
 
             button.disabled = false;
             button.textContent = 'Refresh All';
+        }
+
+        function showClearConfirmation() {
+            document.getElementById('clearWarning').style.display = 'block';
+        }
+
+        function hideClearConfirmation() {
+            document.getElementById('clearWarning').style.display = 'none';
+        }
+
+        async function clearAllRegattas() {
+            const button = document.getElementById('clearButton');
+            const warning = document.getElementById('clearWarning');
+
+            button.disabled = true;
+            button.textContent = 'Clearing...';
+
+            try {
+                const response = await fetch('/api/clear-all-regattas', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    warning.innerHTML = `
+                        <h3 style="color: #00ff88;">✓ Success!</h3>
+                        <p>${data.message}</p>
+                        <p>Refreshing page in 2 seconds...</p>
+                    `;
+                    
+                    // Reload stats and table after clearing
+                    setTimeout(() => {
+                        hideClearConfirmation();
+                        loadAll();
+                    }, 2000);
+                } else {
+                    throw new Error(data.error || 'Failed to clear regattas');
+                }
+            } catch (error) {
+                console.error('Error clearing regattas:', error);
+                warning.innerHTML = `
+                    <h3 style="color: #ff6666;">Error</h3>
+                    <p>Failed to clear regattas: ${error.message}</p>
+                    <div class="confirm-buttons">
+                        <button class="confirm-button no" onclick="hideClearConfirmation()">Close</button>
+                    </div>
+                `;
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Clear All Regattas';
+            }
         }
 
         async function startScraping() {

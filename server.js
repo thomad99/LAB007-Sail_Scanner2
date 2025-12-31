@@ -3378,6 +3378,32 @@ app.get('/api/regatta-stats', async (req, res) => {
   }
 });
 
+// Clear all regattas endpoint
+app.delete('/api/clear-all-regattas', async (req, res) => {
+  try {
+    // Delete all regattas
+    const deleteResult = await pool.query('DELETE FROM regattas');
+    const deletedCount = deleteResult.rowCount;
+    
+    // Also clear scrape log
+    await pool.query('DELETE FROM scrape_log');
+    
+    console.log(`Cleared ${deletedCount} regattas from database`);
+    
+    res.json({
+      success: true,
+      message: `Successfully cleared ${deletedCount} regattas from database`,
+      deletedCount: deletedCount
+    });
+  } catch (error) {
+    console.error('Error clearing regattas:', error);
+    res.status(500).json({ 
+      error: 'Failed to clear regattas', 
+      details: error.message 
+    });
+  }
+});
+
 // Get all regattas for admin page
 app.get('/api/all-regattas', async (req, res) => {
   try {
