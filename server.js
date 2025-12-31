@@ -23,7 +23,19 @@ const ExifParser = require('exif-parser');
 const nodemailer = require('nodemailer');
 const cheerio = require('cheerio');
 const axios = require('axios');
-const puppeteer = require('puppeteer');
+
+// Load Puppeteer with error handling - make it optional so server can start without it
+let puppeteer = null;
+console.log('Attempting to load Puppeteer (optional - server will work without it)...');
+try {
+  puppeteer = require('puppeteer');
+  console.log('✓ Puppeteer loaded successfully at startup');
+} catch (puppeteerError) {
+  console.warn('⚠ Puppeteer not available (this is OK - Clubspot scraping will be disabled)');
+  console.warn('  Error:', puppeteerError.message);
+  console.warn('  To enable: npm install puppeteer (may take several minutes to download Chromium)');
+  // Don't throw - let server start without Puppeteer
+}
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -3106,9 +3118,25 @@ async function scrapeRegattaNetwork() {
 
 // Scrape Clubspot using headless browser
 async function scrapeClubspot() {
+  // Check if Puppeteer is available
+  if (!puppeteer) {
+    console.error('Puppeteer is not available. Cannot scrape Clubspot with headless browser.');
+    await pool.query(`
+      INSERT INTO scrape_log (source, regattas_found, regattas_added)
+      VALUES ('clubspot', 0, 0)
+    `).catch(err => console.error('Error logging failed scrape:', err));
+    
+    return { 
+      found: 0, 
+      added: 0,
+      error: 'Puppeteer is not installed. Please run: npm install puppeteer'
+    };
+  }
+  
   let browser = null;
   try {
     console.log('Launching headless browser for Clubspot...');
+    console.log('Puppeteer version check - attempting to launch browser...');
     
     // Launch headless browser
     browser = await puppeteer.launch({
@@ -3614,6 +3642,17 @@ app.post('/api/send-email', (req, res) => {
 // Start the server (AFTER all routes are defined)
 app.listen(port, async () => {
     console.log(`Server running on port ${port}`);
+    
+    // Check Puppeteer availability on startup (non-blocking - don't test executablePath as it may hang)
+    if (puppeteer) {
+        console.log('✓ Puppeteer module loaded - Clubspot scraping available');
+        console.log('  (Browser will be downloaded on first use if needed)');
+    } else {
+        console.warn('⚠ Puppeteer is NOT loaded - Clubspot scraping will be disabled');
+        console.warn('  Server will continue to work normally for Regatta Network scraping');
+        console.warn('  To enable Clubspot: npm install puppeteer (may take 5-10 minutes)');
+    }
+    
     await ensureDirectories();
     await createPhotoMetadataTable();
     await createUserTables();
