@@ -468,6 +468,24 @@ app.listen(port, async () => {
     console.log(`Regatta Scraper Service running on port ${port}`);
     console.log('This is a dedicated scraping service to reduce memory usage on main server');
     
+    // Verify Puppeteer is loaded on startup
+    if (puppeteer) {
+        console.log('✓ Puppeteer module loaded successfully');
+        try {
+            // Test Puppeteer by checking executable path (this won't download Chromium, just check if module works)
+            const executablePath = await puppeteer.executablePath();
+            console.log(`✓ Puppeteer executable path: ${executablePath}`);
+            console.log('  (Chromium will be downloaded on first use if not already present)');
+        } catch (puppeteerTestError) {
+            console.warn('⚠ Puppeteer loaded but executable path check failed:', puppeteerTestError.message);
+            console.warn('  This may be normal. Browser will be downloaded on first use.');
+        }
+    } else {
+        console.error('✗ CRITICAL: Puppeteer is NOT loaded - Clubspot scraping will fail');
+        console.error('  Service will start but Clubspot scraping will not work');
+        console.error('  To fix: npm install puppeteer');
+    }
+    
     // Test database connection
     try {
         await pool.query('SELECT 1');
@@ -480,6 +498,8 @@ app.listen(port, async () => {
     // Ensure tables exist
     await ensureRegattasTable();
     
-    console.log('Service ready to accept scraping requests');
+    console.log('✓ Service ready to accept scraping requests');
+    console.log('  - Regatta Network scraping: Available');
+    console.log(`  - Clubspot scraping: ${puppeteer ? 'Available' : 'UNAVAILABLE (Puppeteer not loaded)'}`);
 });
 
