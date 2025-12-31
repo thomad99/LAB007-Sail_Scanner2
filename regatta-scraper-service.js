@@ -16,15 +16,30 @@ if (enablePuppeteer) {
     console.error('Puppeteer may not be installed. Run: npm install puppeteer');
     console.error('Checking if Puppeteer is in package.json...');
     try {
-      const pkg = require('./package.json');
-      if (pkg.dependencies && pkg.dependencies.puppeteer) {
-        console.error(`  Puppeteer is in package.json (version: ${pkg.dependencies.puppeteer})`);
-        console.error('  But module is not installed. This may be a build issue.');
+      const fs = require('fs');
+      const path = require('path');
+      const pkgPath = path.join(__dirname, 'package.json');
+      console.error(`  Looking for package.json at: ${pkgPath}`);
+      
+      if (fs.existsSync(pkgPath)) {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+        if (pkg.dependencies && pkg.dependencies.puppeteer) {
+          console.error(`  ✓ Puppeteer IS in package.json (version: ${pkg.dependencies.puppeteer})`);
+          console.error('  ✗ But module is not installed. This is a build/installation issue.');
+          console.error('  Possible causes:');
+          console.error('    - npm install did not complete successfully');
+          console.error('    - Build cache issue - try clearing cache in Render');
+          console.error('    - Puppeteer installation failed silently');
+        } else {
+          console.error('  ✗ Puppeteer is NOT in package.json dependencies');
+          console.error('  Current dependencies:', Object.keys(pkg.dependencies || {}).join(', '));
+        }
       } else {
-        console.error('  Puppeteer is NOT in package.json dependencies');
+        console.error(`  ✗ package.json not found at: ${pkgPath}`);
+        console.error('  Current directory:', __dirname);
       }
     } catch (pkgError) {
-      console.error('  Could not read package.json');
+      console.error('  Could not read package.json:', pkgError.message);
     }
     console.error('Service will start but Clubspot scraping will not work');
     // Don't exit - allow service to start for Regatta Network scraping
