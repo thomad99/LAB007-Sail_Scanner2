@@ -22,7 +22,8 @@
     "jsonwebtoken": "^9.0.0",
     "exif-parser": "^0.1.12",
     "cheerio": "^1.0.0-rc.12",
-    "axios": "^1.6.0"
+    "axios": "^1.6.0",
+    "puppeteer": "^21.6.0"
   },
   "engines": {
     "node": ">=14.0.0"

@@ -23,6 +23,7 @@ const ExifParser = require('exif-parser');
 const nodemailer = require('nodemailer');
 const cheerio = require('cheerio');
 const axios = require('axios');
+const puppeteer = require('puppeteer');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -2924,10 +2925,19 @@ app.post('/api/scrape-regattas', async (req, res) => {
     // Scrape Clubspot
     if (!source || source === 'all' || source === 'clubspot') {
       console.log('Scraping Clubspot...');
-      const csResult = await scrapeClubspot();
-      results.clubspot = csResult;
-      totalFound += csResult.found;
-      totalAdded += csResult.added;
+      try {
+        const csResult = await scrapeClubspot();
+        results.clubspot = csResult;
+        totalFound += (csResult.found || 0);
+        totalAdded += (csResult.added || 0);
+      } catch (csError) {
+        console.error('Clubspot scraping error:', csError);
+        results.clubspot = { 
+          found: 0, 
+          added: 0, 
+          error: csError.message || 'Failed to scrape Clubspot' 
+        };
+      }
     }
 
     console.log(`=== Scraping Complete: ${totalFound} found, ${totalAdded} added ===`);
@@ -3094,122 +3104,172 @@ async function scrapeRegattaNetwork() {
   }
 }
 
-// Scrape Clubspot
+// Scrape Clubspot using headless browser
 async function scrapeClubspot() {
+  let browser = null;
   try {
-    // Clubspot uses Parse Server API - fetch data from API endpoint
-    const apiUrl = 'https://theclubspot.com/parse/classes/regattas';
+    console.log('Launching headless browser for Clubspot...');
     
-    // Get upcoming regattas - try simple query first
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayISO = today.toISOString();
+    // Launch headless browser
+    browser = await puppeteer.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--disable-gpu'
+      ]
+    });
     
-    // Parse Server query format
-    let response;
+    const page = await browser.newPage();
+    
+    // Set viewport and user agent
+    await page.setViewport({ width: 1920, height: 1080 });
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    
+    console.log('Navigating to Clubspot...');
+    await page.goto('https://racing.theclubspot.com/', {
+      waitUntil: 'networkidle2',
+      timeout: 60000
+    });
+    
+    // Wait for regatta cards/list to load
+    console.log('Waiting for regatta data to load...');
     try {
-      // Try with where clause as object
-      response = await axios.post(apiUrl, {
-        where: {
-          startDate: {
-            $gte: {
-              __type: "Date",
-              iso: todayISO
-            }
-          }
-        },
-        order: "startDate",
-        limit: 1000
-      }, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Content-Type': 'application/json',
-          'X-Parse-Application-Id': 'clubspot',
-          'X-Parse-REST-API-Key': 'clubspot'
-        },
+      // Wait for regatta cards or list items to appear
+      await page.waitForSelector('[class*="regatta"], [class*="event"], [class*="card"], .regatta-item, .event-item', {
         timeout: 30000
       });
-    } catch (apiError) {
-      // If that fails, try without authentication or with different format
-      console.log('First API attempt failed, trying alternative format...');
-      try {
-        response = await axios.post(apiUrl, {
-          limit: 1000,
-          order: "startDate"
-        }, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Content-Type': 'application/json'
-          },
-          timeout: 30000
-        });
-      } catch (altError) {
-        throw new Error(`Clubspot API failed: ${apiError.message}`);
-      }
+    } catch (waitError) {
+      console.log('Regatta selector not found, trying alternative selectors...');
+      // Wait a bit more for content to load
+      await page.waitForTimeout(5000);
     }
     
-    const regattas = [];
-    
-    if (response.data && response.data.results && Array.isArray(response.data.results)) {
-      response.data.results.forEach(regatta => {
+    // Extract regatta data from the rendered page
+    console.log('Extracting regatta data...');
+    const regattas = await page.evaluate(() => {
+      const regattas = [];
+      
+      // Try multiple selectors to find regatta elements
+      const selectors = [
+        '[class*="regatta"]',
+        '[class*="event"]',
+        '[class*="card"]',
+        '.regatta-item',
+        '.event-item',
+        'a[href*="/regatta/"]',
+        '[data-regatta]'
+      ];
+      
+      let elements = [];
+      for (const selector of selectors) {
+        const found = document.querySelectorAll(selector);
+        if (found.length > 0) {
+          elements = Array.from(found);
+          break;
+        }
+      }
+      
+      // If no specific regatta elements found, look for any clickable items with regatta links
+      if (elements.length === 0) {
+        elements = Array.from(document.querySelectorAll('a[href*="regatta"], a[href*="event"]'));
+      }
+      
+      elements.forEach((element, index) => {
         try {
-          // Extract regatta data from API response
-          const regattaName = regatta.name || regatta.regattaName || regatta.title || '';
-          const startDate = regatta.startDate;
-          const location = regatta.location || regatta.venue || regatta.city || null;
-          const objectId = regatta.objectId || null;
+          // Get text content
+          const text = element.textContent || element.innerText || '';
+          const href = element.href || element.getAttribute('href') || '';
+          
+          // Try to find date in text or nearby elements
+          let dateText = '';
+          let nameText = '';
+          let locationText = '';
+          
+          // Look for date patterns
+          const dateMatch = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/) || 
+                           text.match(/(\d{4})-(\d{1,2})-(\d{1,2})/) ||
+                           text.match(/([A-Z][a-z]+)\s+(\d{1,2}),\s+(\d{4})/);
+          
+          // Look for name (usually first line or before date)
+          const lines = text.split('\n').map(l => l.trim()).filter(l => l && l.length > 3);
+          nameText = lines[0] || text.substring(0, 100).trim();
+          
+          // Look for location (often after name, contains city/state)
+          if (lines.length > 1) {
+            locationText = lines.slice(1).join(', ').substring(0, 200);
+          }
           
           // Parse date
           let regattaDate = null;
-          if (startDate) {
-            if (startDate.iso) {
-              // Parse Server date format
-              const date = new Date(startDate.iso);
-              regattaDate = date.toISOString().split('T')[0];
-            } else if (typeof startDate === 'string') {
-              const date = new Date(startDate);
-              if (!isNaN(date.getTime())) {
-                regattaDate = date.toISOString().split('T')[0];
+          if (dateMatch) {
+            if (dateMatch[0].includes('-')) {
+              regattaDate = dateMatch[0];
+            } else if (dateMatch[0].includes('/')) {
+              const [, month, day, year] = dateMatch;
+              regattaDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+            } else {
+              const months = { 'January': '01', 'February': '02', 'March': '03', 'April': '04', 
+                             'May': '05', 'June': '06', 'July': '07', 'August': '08', 
+                             'September': '09', 'October': '10', 'November': '11', 'December': '12' };
+              const month = months[dateMatch[1]];
+              if (month) {
+                regattaDate = `${dateMatch[3]}-${month}-${dateMatch[2].padStart(2, '0')}`;
               }
-            } else if (startDate.__type === 'Date' && startDate.iso) {
-              const date = new Date(startDate.iso);
-              regattaDate = date.toISOString().split('T')[0];
             }
           }
           
           // Build event URL
           let eventWebsiteUrl = null;
-          if (objectId) {
-            eventWebsiteUrl = `https://racing.theclubspot.com/regatta/${objectId}`;
-          } else if (regatta.url) {
-            eventWebsiteUrl = regatta.url.startsWith('http') ? regatta.url : `https://racing.theclubspot.com${regatta.url}`;
+          if (href) {
+            eventWebsiteUrl = href.startsWith('http') ? href : `https://racing.theclubspot.com${href}`;
           }
           
-          if (regattaDate && regattaName && regattaName.length > 3) {
-            const sourceId = `${regattaDate}-${regattaName.replace(/\s+/g, '-').toLowerCase().substring(0, 100)}`;
-            
+          // Only add if we have a date and name
+          if (regattaDate && nameText && nameText.length > 3) {
             regattas.push({
               regatta_date: regattaDate,
-              regatta_name: regattaName,
-              location: location || null,
-              event_website_url: eventWebsiteUrl || null,
-              registrants_url: null,
-              source: 'clubspot',
-              source_id: sourceId
+              regatta_name: nameText,
+              location: locationText || null,
+              event_website_url: eventWebsiteUrl || null
             });
           }
         } catch (err) {
-          console.error('Error processing Clubspot regatta:', err);
+          console.error('Error processing element:', err);
         }
       });
-    }
+      
+      // Also try to intercept API calls if possible
+      // Look for any data attributes or script tags with regatta data
+      const scripts = document.querySelectorAll('script');
+      scripts.forEach(script => {
+        const content = script.textContent || script.innerHTML;
+        if (content.includes('regatta') && content.includes('startDate')) {
+          try {
+            // Try to extract JSON data
+            const jsonMatch = content.match(/\{.*"name".*"startDate".*\}/s);
+            if (jsonMatch) {
+              // Additional processing if needed
+            }
+          } catch (e) {
+            // Not JSON, continue
+          }
+        }
+      });
+      
+      return regattas;
+    });
     
-    console.log(`Found ${regattas.length} regattas from Clubspot API`);
+    console.log(`Found ${regattas.length} regattas from Clubspot (headless browser)`);
     
-    // Insert regattas with de-duplication
+    // Process and insert regattas
     let added = 0;
     for (const regatta of regattas) {
       try {
+        const sourceId = `${regatta.regatta_date}-${regatta.regatta_name.replace(/\s+/g, '-').toLowerCase().substring(0, 100)}`;
+        
         await pool.query(`
           INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, source, source_id)
           VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -3225,9 +3285,9 @@ async function scrapeClubspot() {
           regatta.regatta_name,
           regatta.location,
           regatta.event_website_url,
-          regatta.registrants_url,
-          regatta.source,
-          regatta.source_id
+          null, // registrants_url
+          'clubspot',
+          sourceId
         ]);
         added++;
       } catch (err) {
@@ -3244,44 +3304,38 @@ async function scrapeClubspot() {
     `, [regattas.length, added]);
     
     return { found: regattas.length, added };
+    
   } catch (error) {
-    console.error('Error scraping Clubspot:', error);
-    // If API fails, try fallback HTML scraping
-    console.log('Attempting fallback HTML scraping for Clubspot...');
+    console.error('Error scraping Clubspot with headless browser:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack
+    });
+    
+    // Log the failed scrape attempt
     try {
-      const url = 'https://racing.theclubspot.com/';
-      const htmlResponse = await axios.get(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        timeout: 30000
-      });
-      
-      const $ = cheerio.load(htmlResponse.data);
-      const regattas = [];
-      
-      // Look for any data attributes or script tags with regatta data
-      $('script').each((i, el) => {
-        const scriptContent = $(el).html();
-        if (scriptContent && scriptContent.includes('regatta') || scriptContent.includes('startDate')) {
-          try {
-            // Try to extract JSON data from script tags
-            const jsonMatch = scriptContent.match(/\{.*"name".*"startDate".*\}/s);
-            if (jsonMatch) {
-              const data = JSON.parse(jsonMatch[0]);
-              // Process if it looks like regatta data
-            }
-          } catch (e) {
-            // Not JSON, continue
-          }
-        }
-      });
-      
-      console.log(`Fallback HTML scraping found ${regattas.length} regattas`);
-      return { found: regattas.length, added: 0 };
-    } catch (fallbackError) {
-      console.error('Fallback HTML scraping also failed:', fallbackError);
-      throw error; // Throw original API error
+      await pool.query(`
+        INSERT INTO scrape_log (source, regattas_found, regattas_added)
+        VALUES ('clubspot', 0, 0)
+      `);
+    } catch (logError) {
+      console.error('Error logging failed scrape:', logError);
+    }
+    
+    return { 
+      found: 0, 
+      added: 0,
+      error: `Headless browser scraping failed: ${error.message}`
+    };
+  } finally {
+    // Always close the browser
+    if (browser) {
+      try {
+        await browser.close();
+        console.log('Browser closed');
+      } catch (closeError) {
+        console.error('Error closing browser:', closeError);
+      }
     }
   }
 }
