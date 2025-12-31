@@ -2,7 +2,17 @@ const express = require('express');
 const { Pool } = require('pg');
 const axios = require('axios');
 const cheerio = require('cheerio');
-const puppeteer = require('puppeteer');
+
+// Load Puppeteer with error handling
+let puppeteer = null;
+try {
+  puppeteer = require('puppeteer');
+  console.log('✓ Puppeteer loaded successfully');
+} catch (puppeteerError) {
+  console.error('✗ Failed to load Puppeteer:', puppeteerError.message);
+  console.error('Puppeteer may not be installed. Run: npm install puppeteer');
+  process.exit(1); // Exit if Puppeteer is required
+}
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -192,6 +202,11 @@ async function scrapeRegattaNetwork() {
 
 // Scrape Clubspot using headless browser
 async function scrapeClubspot() {
+    // Verify Puppeteer is available
+    if (!puppeteer) {
+        throw new Error('Puppeteer is not available. Cannot scrape Clubspot.');
+    }
+    
     let browser = null;
     try {
         console.log('Launching headless browser for Clubspot...');
@@ -212,9 +227,10 @@ async function scrapeClubspot() {
         };
         
         // Try to use system Chrome if bundled Chromium not available
+        const fs = require('fs');
         try {
             const executablePath = await puppeteer.executablePath();
-            if (!executablePath || !require('fs').existsSync(executablePath)) {
+            if (!executablePath || !fs.existsSync(executablePath)) {
                 console.log('Bundled Chromium not found, trying system Chrome...');
                 const possiblePaths = [
                     '/usr/bin/google-chrome',
@@ -222,15 +238,17 @@ async function scrapeClubspot() {
                     '/usr/bin/chromium-browser'
                 ];
                 for (const path of possiblePaths) {
-                    if (require('fs').existsSync(path)) {
+                    if (fs.existsSync(path)) {
                         launchOptions.executablePath = path;
                         console.log(`Using system Chrome at: ${path}`);
                         break;
                     }
                 }
+            } else {
+                console.log(`Using bundled Chromium at: ${executablePath}`);
             }
         } catch (pathError) {
-            console.log('Using default Chromium path');
+            console.log('Using default Chromium path (will download on first use if needed)');
         }
         
         browser = await puppeteer.launch(launchOptions);
