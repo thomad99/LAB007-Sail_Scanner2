@@ -504,79 +504,58 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', service: 'regatta-scraper' });
 });
 
-// Start server - make startup non-blocking
+// Start server - completely synchronous, no async operations
 app.listen(port, () => {
     console.log(`Regatta Scraper Service running on port ${port}`);
     console.log('This is a dedicated scraping service to reduce memory usage on main server');
     
-    // Run async startup tasks without blocking
-    (async () => {
-        try {
-            // Verify Puppeteer is loaded on startup
-            const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
-            
-            if (enablePuppeteer && puppeteer) {
-                console.log('✓ Puppeteer module loaded successfully (ENABLE_PUPPETEER=true)');
-                console.log('  Puppeteer is ready - Chromium will be downloaded on first scrape if needed');
-            } else if (enablePuppeteer && !puppeteer) {
-                console.error('✗ ERROR: ENABLE_PUPPETEER=true but Puppeteer failed to load');
-                console.error('  Service will start but Clubspot scraping will not work');
-                console.error('  To fix: npm install puppeteer');
-            } else {
-                console.log('ℹ Puppeteer disabled (ENABLE_PUPPETEER not set to true)');
-                console.log('  Clubspot scraping will not be available');
-                console.log('  To enable: Set ENABLE_PUPPETEER=true environment variable');
-            }
-            
-            // Test database connection
-            try {
-                await pool.query('SELECT 1');
-                console.log('✓ Database connected');
-            } catch (err) {
-                console.error('✗ Database connection failed:', err.message);
-                console.error('  Error code:', err.code);
-                if (err.code === 'ENOTFOUND') {
-                    console.error('  DNS lookup failed - check DATABASE_URL environment variable');
-                    console.error('  DATABASE_URL should be in format: postgresql://user:pass@host:port/dbname');
-                }
-                if (!process.env.DATABASE_URL) {
-                    console.error('  DATABASE_URL environment variable is not set!');
-                } else {
-                    // Mask password in URL for logging
-                    const maskedUrl = process.env.DATABASE_URL.replace(/:[^:@]+@/, ':****@');
-                    console.error(`  DATABASE_URL: ${maskedUrl}`);
-                }
-                console.error('  Service will continue but database operations will fail');
-                // Don't exit - let service start and show errors on use
-            }
-            
-            // Ensure tables exist (non-blocking)
-            try {
-                await ensureRegattasTable();
-            } catch (tableError) {
-                console.error('⚠ Error ensuring tables exist:', tableError.message);
-            }
-            
-            console.log('✓ Service ready to accept scraping requests');
-            console.log('  - Regatta Network scraping: Available');
-            const enablePuppeteerFinal = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
-            if (enablePuppeteerFinal && puppeteer) {
-                console.log('  - Clubspot scraping: Available');
-            } else if (enablePuppeteerFinal && !puppeteer) {
-                console.log('  - Clubspot scraping: UNAVAILABLE (Puppeteer failed to load)');
-            } else {
-                console.log('  - Clubspot scraping: UNAVAILABLE (ENABLE_PUPPETEER not set to true)');
-            }
-        } catch (startupError) {
-            console.error('Error during startup:', startupError);
-            console.error('Stack:', startupError.stack);
-            // Don't exit - let service continue running
-        }
-    })().catch(err => {
-        console.error('Unhandled error in startup async function:', err);
-        // Don't exit - let service continue running
+    // Log Puppeteer status (synchronous check only)
+    const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
+    if (enablePuppeteer && puppeteer) {
+        console.log('✓ Puppeteer module loaded (ENABLE_PUPPETEER=true)');
+    } else if (enablePuppeteer && !puppeteer) {
+        console.error('✗ ERROR: ENABLE_PUPPETEER=true but Puppeteer failed to load');
+    } else {
+        console.log('ℹ Puppeteer disabled (ENABLE_PUPPETEER not set)');
+    }
+    
+    console.log('✓ Server started - initializing database in background...');
+    
+    // Initialize database asynchronously in background (don't await)
+    initializeDatabase().catch(err => {
+        console.error('Database initialization error:', err.message);
     });
 });
+
+// Separate function for database initialization
+async function initializeDatabase() {
+    try {
+        // Test database connection
+        await pool.query('SELECT 1');
+        console.log('✓ Database connected');
+        
+        // Ensure tables exist
+        await ensureRegattasTable();
+        
+        console.log('✓ Service ready to accept scraping requests');
+        console.log('  - Regatta Network scraping: Available');
+        const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
+        if (enablePuppeteer && puppeteer) {
+            console.log('  - Clubspot scraping: Available');
+        } else {
+            console.log('  - Clubspot scraping: UNAVAILABLE');
+        }
+    } catch (err) {
+        console.error('✗ Database initialization failed:', err.message);
+        if (err.code === 'ENOTFOUND') {
+            console.error('  DNS lookup failed - check DATABASE_URL');
+        }
+        if (!process.env.DATABASE_URL) {
+            console.error('  DATABASE_URL environment variable is not set!');
+        }
+        console.error('  Service will continue but database operations may fail');
+    }
+}
 
 // Handle unhandled promise rejections to prevent crashes
 process.on('unhandledRejection', (reason, promise) => {

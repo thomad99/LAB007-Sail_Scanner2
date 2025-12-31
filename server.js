@@ -3663,34 +3663,35 @@ app.post('/api/send-email', (req, res) => {
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
     
-    // Run async startup tasks without blocking
-    (async () => {
-        try {
-            // Check Puppeteer availability on startup (non-blocking - don't test executablePath as it may hang)
-            if (puppeteer) {
-                console.log('✓ Puppeteer module loaded - Clubspot scraping available');
-                console.log('  (Browser will be downloaded on first use if needed)');
-            } else {
-                console.warn('⚠ Puppeteer is NOT loaded - Clubspot scraping will be disabled');
-                console.warn('  Server will continue to work normally for Regatta Network scraping');
-                console.warn('  To enable Clubspot: npm install puppeteer (may take 5-10 minutes)');
-            }
-            
-            await ensureDirectories();
-            await createPhotoMetadataTable();
-            await createUserTables();
-            await createRegattasTable();
-            await testS3Connection();
-        } catch (startupError) {
-            console.error('Error during startup:', startupError);
-            console.error('Stack:', startupError.stack);
-            // Don't exit - let server continue running
-        }
-    })().catch(err => {
-        console.error('Unhandled error in startup async function:', err);
-        // Don't exit - let server continue running
+    // Log Puppeteer status (synchronous check only)
+    if (puppeteer) {
+        console.log('✓ Puppeteer module loaded - Clubspot scraping available');
+    } else {
+        console.warn('⚠ Puppeteer is NOT loaded - Clubspot scraping will be disabled');
+    }
+    
+    console.log('✓ Server started - initializing in background...');
+    
+    // Initialize asynchronously in background (don't await)
+    initializeServer().catch(err => {
+        console.error('Server initialization error:', err.message);
     });
 });
+
+// Separate function for server initialization
+async function initializeServer() {
+    try {
+        await ensureDirectories();
+        await createPhotoMetadataTable();
+        await createUserTables();
+        await createRegattasTable();
+        await testS3Connection();
+        console.log('✓ Server initialization complete');
+    } catch (startupError) {
+        console.error('Error during server initialization:', startupError);
+        console.error('Stack:', startupError.stack);
+    }
+}
 
 // Handle unhandled promise rejections to prevent crashes
 process.on('unhandledRejection', (reason, promise) => {
