@@ -514,15 +514,9 @@ app.listen(port, async () => {
     
     if (enablePuppeteer && puppeteer) {
         console.log('✓ Puppeteer module loaded successfully (ENABLE_PUPPETEER=true)');
-        try {
-            // Test Puppeteer by checking executable path (this won't download Chromium, just check if module works)
-            const executablePath = await puppeteer.executablePath();
-            console.log(`✓ Puppeteer executable path: ${executablePath}`);
-            console.log('  (Chromium will be downloaded on first use if not already present)');
-        } catch (puppeteerTestError) {
-            console.warn('⚠ Puppeteer loaded but executable path check failed:', puppeteerTestError.message);
-            console.warn('  This may be normal. Browser will be downloaded on first use.');
-        }
+        console.log('  Puppeteer is ready - Chromium will be downloaded on first scrape if needed');
+        // Don't call executablePath() here as it may trigger Chromium download and hang
+        // The browser will be downloaded automatically when first used for scraping
     } else if (enablePuppeteer && !puppeteer) {
         console.error('✗ ERROR: ENABLE_PUPPETEER=true but Puppeteer failed to load');
         console.error('  Service will start but Clubspot scraping will not work');
