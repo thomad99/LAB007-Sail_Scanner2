@@ -54,12 +54,15 @@ const port = process.env.PORT || 3001;
 
 app.use(express.json());
 
-// Database connection
+// Database connection - lazy initialization (don't connect until needed)
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
         rejectUnauthorized: false
-    }
+    },
+    // Don't connect immediately - wait until first query
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 30000
 });
 
 // Initialize regattas table if needed
