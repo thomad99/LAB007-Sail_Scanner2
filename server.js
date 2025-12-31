@@ -3683,7 +3683,24 @@ app.listen(port, () => {
             await testS3Connection();
         } catch (startupError) {
             console.error('Error during startup:', startupError);
+            console.error('Stack:', startupError.stack);
             // Don't exit - let server continue running
         }
-    })();
+    })().catch(err => {
+        console.error('Unhandled error in startup async function:', err);
+        // Don't exit - let server continue running
+    });
+});
+
+// Handle unhandled promise rejections to prevent crashes
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    // Don't exit - log and continue
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+    console.error('Stack:', error.stack);
+    // Don't exit - log and continue (or exit if critical)
+    // For now, let it continue to see what happens
 });
