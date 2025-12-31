@@ -520,6 +520,13 @@ app.listen(port, async () => {
     
     console.log('✓ Service ready to accept scraping requests');
     console.log('  - Regatta Network scraping: Available');
-    console.log(`  - Clubspot scraping: ${puppeteer ? 'Available' : 'UNAVAILABLE (Puppeteer not loaded)'}`);
+    const enablePuppeteerFinal = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
+    if (enablePuppeteerFinal && puppeteer) {
+        console.log('  - Clubspot scraping: Available');
+    } else if (enablePuppeteerFinal && !puppeteer) {
+        console.log('  - Clubspot scraping: UNAVAILABLE (Puppeteer failed to load)');
+    } else {
+        console.log('  - Clubspot scraping: UNAVAILABLE (ENABLE_PUPPETEER not set to true)');
+    }
 });
 
