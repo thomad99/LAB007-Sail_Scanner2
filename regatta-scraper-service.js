@@ -504,28 +504,28 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', service: 'regatta-scraper' });
 });
 
-// Start server - completely synchronous, no async operations
-app.listen(port, () => {
+// Start server - minimal synchronous startup
+const server = app.listen(port, () => {
     console.log(`Regatta Scraper Service running on port ${port}`);
-    console.log('This is a dedicated scraping service to reduce memory usage on main server');
-    
-    // Log Puppeteer status (synchronous check only)
-    const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
-    if (enablePuppeteer && puppeteer) {
-        console.log('✓ Puppeteer module loaded (ENABLE_PUPPETEER=true)');
-    } else if (enablePuppeteer && !puppeteer) {
-        console.error('✗ ERROR: ENABLE_PUPPETEER=true but Puppeteer failed to load');
-    } else {
-        console.log('ℹ Puppeteer disabled (ENABLE_PUPPETEER not set)');
-    }
-    
-    console.log('✓ Server started - initializing database in background...');
-    
-    // Initialize database asynchronously in background (don't await)
+    console.log('Server is ready to accept requests');
+});
+
+// Log Puppeteer status after server starts
+const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
+if (enablePuppeteer && puppeteer) {
+    console.log('✓ Puppeteer module loaded (ENABLE_PUPPETEER=true)');
+} else if (enablePuppeteer && !puppeteer) {
+    console.error('✗ ERROR: ENABLE_PUPPETEER=true but Puppeteer failed to load');
+} else {
+    console.log('ℹ Puppeteer disabled (ENABLE_PUPPETEER not set)');
+}
+
+// Initialize database asynchronously in background (don't await)
+setTimeout(() => {
     initializeDatabase().catch(err => {
         console.error('Database initialization error:', err.message);
     });
-});
+}, 1000); // Wait 1 second after server starts
 
 // Separate function for database initialization
 async function initializeDatabase() {

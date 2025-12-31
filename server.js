@@ -3660,23 +3660,24 @@ app.post('/api/send-email', (req, res) => {
 });
 
 // Start the server (AFTER all routes are defined)
-app.listen(port, () => {
+const server = app.listen(port, () => {
     console.log(`Server running on port ${port}`);
-    
-    // Log Puppeteer status (synchronous check only)
-    if (puppeteer) {
-        console.log('✓ Puppeteer module loaded - Clubspot scraping available');
-    } else {
-        console.warn('⚠ Puppeteer is NOT loaded - Clubspot scraping will be disabled');
-    }
-    
-    console.log('✓ Server started - initializing in background...');
-    
-    // Initialize asynchronously in background (don't await)
+    console.log('Server is ready to accept requests');
+});
+
+// Log Puppeteer status after server starts
+if (puppeteer) {
+    console.log('✓ Puppeteer module loaded - Clubspot scraping available');
+} else {
+    console.warn('⚠ Puppeteer is NOT loaded - Clubspot scraping will be disabled');
+}
+
+// Initialize asynchronously in background (don't await)
+setTimeout(() => {
     initializeServer().catch(err => {
         console.error('Server initialization error:', err.message);
     });
-});
+}, 1000); // Wait 1 second after server starts
 
 // Separate function for server initialization
 async function initializeServer() {
