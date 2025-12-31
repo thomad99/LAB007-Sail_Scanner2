@@ -14,6 +14,18 @@ if (enablePuppeteer) {
   } catch (puppeteerError) {
     console.error('✗ Failed to load Puppeteer:', puppeteerError.message);
     console.error('Puppeteer may not be installed. Run: npm install puppeteer');
+    console.error('Checking if Puppeteer is in package.json...');
+    try {
+      const pkg = require('./package.json');
+      if (pkg.dependencies && pkg.dependencies.puppeteer) {
+        console.error(`  Puppeteer is in package.json (version: ${pkg.dependencies.puppeteer})`);
+        console.error('  But module is not installed. This may be a build issue.');
+      } else {
+        console.error('  Puppeteer is NOT in package.json dependencies');
+      }
+    } catch (pkgError) {
+      console.error('  Could not read package.json');
+    }
     console.error('Service will start but Clubspot scraping will not work');
     // Don't exit - allow service to start for Regatta Network scraping
   }
@@ -511,7 +523,20 @@ app.listen(port, async () => {
         await pool.query('SELECT 1');
         console.log('✓ Database connected');
     } catch (err) {
-        console.error('✗ Database connection failed:', err);
+        console.error('✗ Database connection failed:', err.message);
+        console.error('  Error code:', err.code);
+        if (err.code === 'ENOTFOUND') {
+            console.error('  DNS lookup failed - check DATABASE_URL environment variable');
+            console.error('  DATABASE_URL should be in format: postgresql://user:pass@host:port/dbname');
+        }
+        if (!process.env.DATABASE_URL) {
+            console.error('  DATABASE_URL environment variable is not set!');
+        } else {
+            // Mask password in URL for logging
+            const maskedUrl = process.env.DATABASE_URL.replace(/:[^:@]+@/, ':****@');
+            console.error(`  DATABASE_URL: ${maskedUrl}`);
+        }
+        console.error('  Service cannot start without database connection');
         process.exit(1);
     }
     
