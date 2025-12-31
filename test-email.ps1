@@ -3,9 +3,9 @@ $baseUrl = "https://lab007-sail-scanner2.onrender.com"  # Change to your Render 
 $endpoint = "$baseUrl/api/send-email"
 
 $body = @{
-    from = "david.thomas@thinworld.net"
+    from = "info@lab007.ai"
     to = "david.thomas@thinworld.net"
-    subject = "Test Email - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+    subject = "Test Email LAB007.AI "
     text = "This is a test email sent at $(Get-Date)."
 } | ConvertTo-Json
 

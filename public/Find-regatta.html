@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Find Regatta - Love Sailing</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #020053;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .logo {
+            margin-top: 20px;
+            max-width: 500px;
+            width: 80%;
+        }
+
+        .content {
+            margin-top: 30px;
+            text-align: center;
+            width: 90%;
+            max-width: 1000px;
+        }
+
+        .search-form {
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 25px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            text-align: left;
+        }
+
+        .form-group label {
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .form-group input,
+        .form-group select {
+            padding: 10px;
+            font-size: 1em;
+            border-radius: 5px;
+            background-color: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .form-group input::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .form-group select option {
+            background-color: #020053;
+            color: white;
+        }
+
+        .search-button {
+            padding: 15px 30px;
+            font-size: 1.2em;
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+
+        .search-button:hover:not(:disabled) {
+            background-color: #0088ff;
+            transform: scale(1.05);
+        }
+
+        .search-button:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .location-status {
+            padding: 10px;
+            background-color: rgba(0, 255, 0, 0.2);
+            border-radius: 5px;
+            margin-bottom: 10px;
+            display: none;
+        }
+
+        .location-status.active {
+            display: block;
+        }
+
+        .results {
+            margin-top: 30px;
+            text-align: left;
+        }
+
+        .results-header {
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px 8px 0 0;
+            font-weight: bold;
+        }
+
+        .regatta-item {
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .regatta-item:hover {
+            background-color: rgba(255, 255, 255, 0.15);
+            transform: translateX(5px);
+        }
+
+        .regatta-item h3 {
+            margin-top: 0;
+            color: #0088ff;
+        }
+
+        .regatta-item .date {
+            font-weight: bold;
+            color: #00ff88;
+            margin-bottom: 10px;
+        }
+
+        .regatta-item .location {
+            color: #cccccc;
+            margin-bottom: 10px;
+        }
+
+        .regatta-item .links {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .regatta-item .links a {
+            padding: 8px 15px;
+            background-color: #0066cc;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+        }
+
+        .regatta-item .links a:hover {
+            background-color: #0088ff;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .back-link {
+            margin-top: 40px;
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+        }
+
+        .back-link:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Mobile menu styling */
+        .hamburger-menu {
+            display: none;
+            cursor: pointer;
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background-color: rgba(2, 0, 83, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .hamburger-menu span {
+            display: block;
+            width: 30px;
+            height: 3px;
+            margin: 6px 0;
+            background-color: white;
+            transition: all 0.3s ease;
+        }
+
+        .mobile-menu {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #020053;
+            z-index: 999;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .mobile-menu a {
+            display: block;
+            padding: 20px;
+            margin: 10px 0;
+            font-size: 1.5em;
+            color: white;
+            text-decoration: none;
+            width: 80%;
+            text-align: center;
+            border-radius: 8px;
+            background-color: rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .mobile-menu a:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .close-menu {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 24px;
+            color: white;
+            cursor: pointer;
+        }
+
+        @media (max-width: 768px) {
+            .hamburger-menu {
+                display: block;
+            }
+
+            .logo {
+                margin-top: 20px;
+                max-width: 80%;
+            }
+
+            .content {
+                margin-top: 20px;
+                width: 95%;
+            }
+
+            .search-form {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <img src="/Images/LOVE SAILING LOGO.JPEG" alt="Love Sailing Logo" class="logo">
+
+    <div class="content">
+        <h1>Find Regatta</h1>
+        <p>Search for upcoming regattas near you</p>
+
+        <div class="location-status" id="locationStatus"></div>
+
+        <form class="search-form" onsubmit="searchRegattas(event)">
+            <div class="form-group">
+                <label for="dateInput">Date:</label>
+                <input type="date" id="dateInput" name="date">
+            </div>
+
+            <div class="form-group">
+                <label for="nameInput">Regatta Name (optional):</label>
+                <input type="text" id="nameInput" name="name" placeholder="Search by name...">
+            </div>
+
+            <div class="form-group">
+                <label for="locationInput">Location (optional):</label>
+                <input type="text" id="locationInput" name="location" placeholder="City, State">
+            </div>
+
+            <button type="submit" class="search-button" id="searchButton">Search Regattas</button>
+        </form>
+
+        <div class="results" id="results" style="display: none;">
+            <div class="results-header" id="resultsHeader"></div>
+            <div id="resultsContent"></div>
+        </div>
+
+        <a href="index.html" class="back-link">← Back to Home</a>
+    </div>
+
+    <!-- Hamburger menu icon -->
+    <div class="hamburger-menu" onclick="toggleMenu()">
+        <span></span>
+        <span></span>
+        <span></span>
+    </div>
+
+    <!-- Mobile menu -->
+    <div class="mobile-menu" id="mobileMenu">
+        <div class="close-menu" onclick="toggleMenu()">✕</div>
+        <a href="index.html">Home</a>
+        <a href="SailScan.html">Photo Database</a>
+        <a href="Regatta-pull.html">Scrape Regattas</a>
+        <a href="https://lovesailing-chatbot.onrender.com/chat">ChatBot</a>
+        <a href="Shop.html">Shop</a>
+    </div>
+
+    <script>
+        let userLatitude = null;
+        let userLongitude = null;
+
+        function toggleMenu() {
+            const mobileMenu = document.getElementById('mobileMenu');
+            if (mobileMenu.style.display === 'flex') {
+                mobileMenu.style.display = 'none';
+            } else {
+                mobileMenu.style.display = 'flex';
+            }
+        }
+
+        // Get user's location on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            // Set today's date as default
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('dateInput').value = today;
+
+            // Try to get user's location
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userLatitude = position.coords.latitude;
+                        userLongitude = position.coords.longitude;
+                        
+                        const locationStatus = document.getElementById('locationStatus');
+                        locationStatus.className = 'location-status active';
+                        locationStatus.textContent = `📍 Location detected! Searching for regattas near you on ${new Date().toLocaleDateString()}.`;
+                        
+                        // Auto-search with location
+                        setTimeout(() => {
+                            searchRegattas(new Event('submit'));
+                        }, 500);
+                    },
+                    (error) => {
+                        console.log('Location access denied or unavailable');
+                        const locationStatus = document.getElementById('locationStatus');
+                        locationStatus.className = 'location-status active';
+                        locationStatus.style.backgroundColor = 'rgba(255, 255, 0, 0.2)';
+                        locationStatus.textContent = '⚠️ Location not available. You can still search by name or location.';
+                    }
+                );
+            }
+        });
+
+        async function searchRegattas(event) {
+            if (event) {
+                event.preventDefault();
+            }
+
+            const button = document.getElementById('searchButton');
+            const results = document.getElementById('results');
+            const resultsContent = document.getElementById('resultsContent');
+            const resultsHeader = document.getElementById('resultsHeader');
+
+            button.disabled = true;
+            button.textContent = 'Searching...';
+
+            try {
+                const date = document.getElementById('dateInput').value;
+                const name = document.getElementById('nameInput').value.trim();
+                const location = document.getElementById('locationInput').value.trim();
+
+                let url = `/api/search-regattas?date=${date}`;
+                if (name) {
+                    url += `&name=${encodeURIComponent(name)}`;
+                }
+                if (location) {
+                    url += `&location=${encodeURIComponent(location)}`;
+                }
+                if (userLatitude && userLongitude) {
+                    url += `&latitude=${userLatitude}&longitude=${userLongitude}`;
+                }
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.success && data.regattas && data.regattas.length > 0) {
+                    resultsHeader.textContent = `Found ${data.count} regatta(s)`;
+                    results.style.display = 'block';
+
+                    let html = '';
+                    data.regattas.forEach(regatta => {
+                        const dateObj = new Date(regatta.regatta_date);
+                        const formattedDate = dateObj.toLocaleDateString('en-US', { 
+                            weekday: 'long', 
+                            year: 'numeric', 
+                            month: 'long', 
+                            day: 'numeric' 
+                        });
+
+                        html += `<div class="regatta-item">`;
+                        html += `<h3>${regatta.regatta_name}</h3>`;
+                        html += `<div class="date">📅 ${formattedDate}</div>`;
+                        if (regatta.location) {
+                            html += `<div class="location">📍 ${regatta.location}</div>`;
+                        }
+                        html += `<div class="links">`;
+                        if (regatta.event_website_url) {
+                            html += `<a href="${regatta.event_website_url}" target="_blank">Event Website</a>`;
+                        }
+                        if (regatta.registrants_url) {
+                            html += `<a href="${regatta.registrants_url}" target="_blank">View Registrants</a>`;
+                        }
+                        html += `</div>`;
+                        html += `</div>`;
+                    });
+
+                    resultsContent.innerHTML = html;
+                } else {
+                    results.style.display = 'block';
+                    resultsHeader.textContent = 'No Results';
+                    resultsContent.innerHTML = `
+                        <div class="no-results">
+                            <p>No regattas found matching your search criteria.</p>
+                            <p>Try adjusting your date or search terms.</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Search error:', error);
+                results.style.display = 'block';
+                resultsHeader.textContent = 'Error';
+                resultsContent.innerHTML = `
+                    <div class="no-results">
+                        <p>An error occurred while searching. Please try again.</p>
+                    </div>
+                `;
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Search Regattas';
+            }
+        }
+    </script>
+</body>
+
+</html>
+
