@@ -3660,22 +3660,30 @@ app.post('/api/send-email', (req, res) => {
 });
 
 // Start the server (AFTER all routes are defined)
-app.listen(port, async () => {
+app.listen(port, () => {
     console.log(`Server running on port ${port}`);
     
-    // Check Puppeteer availability on startup (non-blocking - don't test executablePath as it may hang)
-    if (puppeteer) {
-        console.log('✓ Puppeteer module loaded - Clubspot scraping available');
-        console.log('  (Browser will be downloaded on first use if needed)');
-    } else {
-        console.warn('⚠ Puppeteer is NOT loaded - Clubspot scraping will be disabled');
-        console.warn('  Server will continue to work normally for Regatta Network scraping');
-        console.warn('  To enable Clubspot: npm install puppeteer (may take 5-10 minutes)');
-    }
-    
-    await ensureDirectories();
-    await createPhotoMetadataTable();
-    await createUserTables();
-    await createRegattasTable();
-    await testS3Connection();
+    // Run async startup tasks without blocking
+    (async () => {
+        try {
+            // Check Puppeteer availability on startup (non-blocking - don't test executablePath as it may hang)
+            if (puppeteer) {
+                console.log('✓ Puppeteer module loaded - Clubspot scraping available');
+                console.log('  (Browser will be downloaded on first use if needed)');
+            } else {
+                console.warn('⚠ Puppeteer is NOT loaded - Clubspot scraping will be disabled');
+                console.warn('  Server will continue to work normally for Regatta Network scraping');
+                console.warn('  To enable Clubspot: npm install puppeteer (may take 5-10 minutes)');
+            }
+            
+            await ensureDirectories();
+            await createPhotoMetadataTable();
+            await createUserTables();
+            await createRegattasTable();
+            await testS3Connection();
+        } catch (startupError) {
+            console.error('Error during startup:', startupError);
+            // Don't exit - let server continue running
+        }
+    })();
 });
