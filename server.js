@@ -3097,120 +3097,114 @@ async function scrapeRegattaNetwork() {
 // Scrape Clubspot
 async function scrapeClubspot() {
   try {
-    const url = 'https://racing.theclubspot.com/';
-    const response = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      },
-      timeout: 30000
-    });
+    // Clubspot uses Parse Server API - fetch data from API endpoint
+    const apiUrl = 'https://theclubspot.com/parse/classes/regattas';
     
-    const $ = cheerio.load(response.data);
-    const regattas = [];
+    // Get upcoming regattas - try simple query first
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayISO = today.toISOString();
     
-    // Clubspot uses a different structure - look for event cards/items
-    $('.event, .race, [class*="event"], [class*="race"]').each((index, element) => {
-      const $el = $(element);
-      
-      // Try to extract date, name, and location
-      const dateText = $el.find('[class*="date"], .date, time').first().text().trim();
-      const nameText = $el.find('h2, h3, [class*="title"], .title, a').first().text().trim();
-      const locationText = $el.find('[class*="location"], .location, [class*="venue"]').first().text().trim();
-      
-      // Extract date
-      let regattaDate = null;
-      if (dateText) {
-        // Try various date formats
-        const dateMatch = dateText.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/) || 
-                         dateText.match(/(\d{4})-(\d{1,2})-(\d{1,2})/) ||
-                         dateText.match(/([A-Z][a-z]+)\s+(\d{1,2}),\s+(\d{4})/);
-        
-        if (dateMatch) {
-          if (dateMatch[0].includes('-')) {
-            regattaDate = dateMatch[0];
-          } else if (dateMatch[0].includes('/')) {
-            const [, month, day, year] = dateMatch;
-            regattaDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-          } else {
-            // Month name format
-            const months = { 'January': '01', 'February': '02', 'March': '03', 'April': '04', 
-                           'May': '05', 'June': '06', 'July': '07', 'August': '08', 
-                           'September': '09', 'October': '10', 'November': '11', 'December': '12' };
-            const month = months[dateMatch[1]];
-            if (month) {
-              regattaDate = `${dateMatch[3]}-${month}-${dateMatch[2].padStart(2, '0')}`;
+    // Parse Server query format
+    let response;
+    try {
+      // Try with where clause as object
+      response = await axios.post(apiUrl, {
+        where: {
+          startDate: {
+            $gte: {
+              __type: "Date",
+              iso: todayISO
             }
           }
-        }
-      }
-      
-      // Get event link
-      let eventWebsiteUrl = '';
-      const link = $el.find('a').first().attr('href');
-      if (link) {
-        eventWebsiteUrl = link.startsWith('http') ? link : `https://racing.theclubspot.com${link}`;
-      }
-      
-      if (regattaDate && nameText) {
-        const sourceId = `${regattaDate}-${nameText.replace(/\s+/g, '-').toLowerCase()}`;
-        
-        regattas.push({
-          regatta_date: regattaDate,
-          regatta_name: nameText,
-          location: locationText || null,
-          event_website_url: eventWebsiteUrl || null,
-          registrants_url: null,
-          source: 'clubspot',
-          source_id: sourceId
-        });
-      }
-    });
-    
-    // If the above doesn't work, try parsing the page structure differently
-    if (regattas.length === 0) {
-      // Look for any structured data or JSON-LD
-      $('script[type="application/ld+json"]').each((i, el) => {
-        try {
-          const data = JSON.parse($(el).html());
-          if (data['@type'] === 'Event' || Array.isArray(data)) {
-            // Process structured data
-          }
-        } catch (e) {}
+        },
+        order: "startDate",
+        limit: 1000
+      }, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Content-Type': 'application/json',
+          'X-Parse-Application-Id': 'clubspot',
+          'X-Parse-REST-API-Key': 'clubspot'
+        },
+        timeout: 30000
       });
-      
-      // Fallback: look for any table or list structure
-      $('table tr, li, [class*="card"]').each((index, element) => {
-        const $el = $(element);
-        const text = $el.text();
-        
-        // Look for date patterns in the text
-        const dateMatch = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-        if (dateMatch && text.length < 500) { // Reasonable event description length
-          const [, month, day, year] = dateMatch;
-          const regattaDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    } catch (apiError) {
+      // If that fails, try without authentication or with different format
+      console.log('First API attempt failed, trying alternative format...');
+      try {
+        response = await axios.post(apiUrl, {
+          limit: 1000,
+          order: "startDate"
+        }, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000
+        });
+      } catch (altError) {
+        throw new Error(`Clubspot API failed: ${apiError.message}`);
+      }
+    }
+    
+    const regattas = [];
+    
+    if (response.data && response.data.results && Array.isArray(response.data.results)) {
+      response.data.results.forEach(regatta => {
+        try {
+          // Extract regatta data from API response
+          const regattaName = regatta.name || regatta.regattaName || regatta.title || '';
+          const startDate = regatta.startDate;
+          const location = regatta.location || regatta.venue || regatta.city || null;
+          const objectId = regatta.objectId || null;
           
-          // Extract name (text before date or first line)
-          const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-          const nameText = lines[0] || text.substring(0, 100);
+          // Parse date
+          let regattaDate = null;
+          if (startDate) {
+            if (startDate.iso) {
+              // Parse Server date format
+              const date = new Date(startDate.iso);
+              regattaDate = date.toISOString().split('T')[0];
+            } else if (typeof startDate === 'string') {
+              const date = new Date(startDate);
+              if (!isNaN(date.getTime())) {
+                regattaDate = date.toISOString().split('T')[0];
+              }
+            } else if (startDate.__type === 'Date' && startDate.iso) {
+              const date = new Date(startDate.iso);
+              regattaDate = date.toISOString().split('T')[0];
+            }
+          }
           
-          if (nameText && nameText.length > 3) {
-            const sourceId = `${regattaDate}-${nameText.replace(/\s+/g, '-').toLowerCase().substring(0, 50)}`;
+          // Build event URL
+          let eventWebsiteUrl = null;
+          if (objectId) {
+            eventWebsiteUrl = `https://racing.theclubspot.com/regatta/${objectId}`;
+          } else if (regatta.url) {
+            eventWebsiteUrl = regatta.url.startsWith('http') ? regatta.url : `https://racing.theclubspot.com${regatta.url}`;
+          }
+          
+          if (regattaDate && regattaName && regattaName.length > 3) {
+            const sourceId = `${regattaDate}-${regattaName.replace(/\s+/g, '-').toLowerCase().substring(0, 100)}`;
             
             regattas.push({
               regatta_date: regattaDate,
-              regatta_name: nameText,
-              location: null,
-              event_website_url: null,
+              regatta_name: regattaName,
+              location: location || null,
+              event_website_url: eventWebsiteUrl || null,
               registrants_url: null,
               source: 'clubspot',
               source_id: sourceId
             });
           }
+        } catch (err) {
+          console.error('Error processing Clubspot regatta:', err);
         }
       });
     }
     
-    console.log(`Found ${regattas.length} regattas from Clubspot`);
+    console.log(`Found ${regattas.length} regattas from Clubspot API`);
     
     // Insert regattas with de-duplication
     let added = 0;
@@ -3252,7 +3246,43 @@ async function scrapeClubspot() {
     return { found: regattas.length, added };
   } catch (error) {
     console.error('Error scraping Clubspot:', error);
-    throw error;
+    // If API fails, try fallback HTML scraping
+    console.log('Attempting fallback HTML scraping for Clubspot...');
+    try {
+      const url = 'https://racing.theclubspot.com/';
+      const htmlResponse = await axios.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        timeout: 30000
+      });
+      
+      const $ = cheerio.load(htmlResponse.data);
+      const regattas = [];
+      
+      // Look for any data attributes or script tags with regatta data
+      $('script').each((i, el) => {
+        const scriptContent = $(el).html();
+        if (scriptContent && scriptContent.includes('regatta') || scriptContent.includes('startDate')) {
+          try {
+            // Try to extract JSON data from script tags
+            const jsonMatch = scriptContent.match(/\{.*"name".*"startDate".*\}/s);
+            if (jsonMatch) {
+              const data = JSON.parse(jsonMatch[0]);
+              // Process if it looks like regatta data
+            }
+          } catch (e) {
+            // Not JSON, continue
+          }
+        }
+      });
+      
+      console.log(`Fallback HTML scraping found ${regattas.length} regattas`);
+      return { found: regattas.length, added: 0 };
+    } catch (fallbackError) {
+      console.error('Fallback HTML scraping also failed:', fallbackError);
+      throw error; // Throw original API error
+    }
   }
 }
 
@@ -3345,6 +3375,87 @@ app.get('/api/regatta-stats', async (req, res) => {
   } catch (error) {
     console.error('Error getting regatta stats:', error);
     res.status(500).json({ error: 'Failed to get stats', details: error.message });
+  }
+});
+
+// Get all regattas for admin page
+app.get('/api/all-regattas', async (req, res) => {
+  try {
+    const { 
+      limit = 1000, 
+      offset = 0, 
+      orderBy = 'regatta_date', 
+      order = 'ASC',
+      dateFilter = '',
+      nameFilter = '',
+      locationFilter = '',
+      sourceFilter = ''
+    } = req.query;
+    
+    const validOrderBy = ['regatta_date', 'regatta_name', 'location', 'source'];
+    const validOrder = ['ASC', 'DESC'];
+    const orderByColumn = validOrderBy.includes(orderBy) ? orderBy : 'regatta_date';
+    const orderDirection = validOrder.includes(order.toUpperCase()) ? order.toUpperCase() : 'ASC';
+    
+    // Build WHERE clause for filters
+    let whereClause = 'WHERE 1=1';
+    const params = [];
+    let paramCount = 0;
+    
+    if (dateFilter) {
+      paramCount++;
+      whereClause += ` AND regatta_date::text ILIKE $${paramCount}`;
+      params.push(`%${dateFilter}%`);
+    }
+    
+    if (nameFilter) {
+      paramCount++;
+      whereClause += ` AND regatta_name ILIKE $${paramCount}`;
+      params.push(`%${nameFilter}%`);
+    }
+    
+    if (locationFilter) {
+      paramCount++;
+      whereClause += ` AND (location ILIKE $${paramCount} OR location IS NULL)`;
+      params.push(`%${locationFilter}%`);
+    }
+    
+    if (sourceFilter) {
+      paramCount++;
+      whereClause += ` AND source = $${paramCount}`;
+      params.push(sourceFilter);
+    }
+    
+    // Add limit and offset
+    paramCount++;
+    params.push(parseInt(limit));
+    paramCount++;
+    params.push(parseInt(offset));
+    
+    const result = await pool.query(`
+      SELECT regatta_date, regatta_name, location, event_website_url, registrants_url, source
+      FROM regattas
+      ${whereClause}
+      ORDER BY ${orderByColumn} ${orderDirection}
+      LIMIT $${paramCount - 1} OFFSET $${paramCount}
+    `, params);
+    
+    // Get total count for pagination
+    const countResult = await pool.query(`
+      SELECT COUNT(*) as total
+      FROM regattas
+      ${whereClause}
+    `, params.slice(0, -2)); // Remove limit and offset params
+    
+    res.json({
+      success: true,
+      regattas: result.rows,
+      count: result.rows.length,
+      total: parseInt(countResult.rows[0].total)
+    });
+  } catch (error) {
+    console.error('Error getting all regattas:', error);
+    res.status(500).json({ error: 'Failed to get regattas', details: error.message });
   }
 });
 

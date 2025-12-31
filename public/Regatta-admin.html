@@ -130,10 +130,307 @@
             opacity: 0.6;
         }
 
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+
+        .action-button {
+            padding: 15px 30px;
+            font-size: 1.1em;
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .action-button:hover:not(:disabled) {
+            background-color: #0088ff;
+            transform: scale(1.05);
+        }
+
+        .action-button:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .action-button.scrape {
+            background-color: #00aa44;
+        }
+
+        .action-button.scrape:hover:not(:disabled) {
+            background-color: #00cc55;
+        }
+
+        .scrape-section {
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 25px;
+            border-radius: 8px;
+            margin-top: 30px;
+            text-align: center;
+        }
+
+        .scrape-section h2 {
+            margin-top: 0;
+        }
+
+        .scrape-source-select {
+            margin: 20px 0;
+        }
+
+        .scrape-source-select label {
+            display: block;
+            margin-bottom: 10px;
+            color: #0088ff;
+            font-weight: bold;
+        }
+
+        .scrape-source-select select {
+            padding: 10px;
+            font-size: 1em;
+            border-radius: 5px;
+            background-color: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            width: 100%;
+            max-width: 300px;
+        }
+
+        .scrape-source-select select option {
+            background-color: #020053;
+            color: white;
+        }
+
+        .scrape-status {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            min-height: 50px;
+            display: none;
+        }
+
+        .scrape-status.active {
+            display: block;
+        }
+
+        .scrape-status.success {
+            background-color: rgba(0, 255, 0, 0.2);
+        }
+
+        .scrape-status.error {
+            background-color: rgba(255, 0, 0, 0.2);
+        }
+
         .loading {
             text-align: center;
             padding: 40px;
             color: #cccccc;
+        }
+
+        .regatta-table-container {
+            margin-top: 40px;
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 25px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+
+        .regatta-table-container h2 {
+            margin-top: 0;
+            text-align: center;
+        }
+
+        .regatta-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        .regatta-table thead {
+            background-color: rgba(0, 102, 204, 0.3);
+        }
+
+        .regatta-table th {
+            padding: 15px;
+            text-align: left;
+            color: #0088ff;
+            font-weight: bold;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .regatta-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            color: #cccccc;
+        }
+
+        .regatta-table tbody tr:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .regatta-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .regatta-table .date {
+            color: #00ff88;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .regatta-table .name {
+            color: white;
+            font-weight: 500;
+        }
+
+        .regatta-table .location {
+            color: #cccccc;
+        }
+
+        .regatta-table .link {
+            color: #0088ff;
+        }
+
+        .regatta-table .link a {
+            color: #0088ff;
+            text-decoration: none;
+            padding: 5px 10px;
+            background-color: rgba(0, 136, 255, 0.2);
+            border-radius: 4px;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+
+        .regatta-table .link a:hover {
+            background-color: rgba(0, 136, 255, 0.4);
+            transform: scale(1.05);
+        }
+
+        .regatta-table .link .no-link {
+            color: #666;
+            font-style: italic;
+        }
+
+        .filters-container {
+            background-color: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-group label {
+            margin-bottom: 5px;
+            color: #0088ff;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .filter-group input,
+        .filter-group select {
+            padding: 8px;
+            font-size: 0.9em;
+            border-radius: 5px;
+            background-color: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .filter-group input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .filter-group select option {
+            background-color: #020053;
+            color: white;
+        }
+
+        .filter-actions {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .filter-button {
+            padding: 8px 20px;
+            font-size: 0.9em;
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            height: fit-content;
+        }
+
+        .filter-button:hover {
+            background-color: #0088ff;
+        }
+
+        .filter-button.clear {
+            background-color: #666;
+        }
+
+        .filter-button.clear:hover {
+            background-color: #888;
+        }
+
+        .sort-button {
+            background: none;
+            border: none;
+            color: #0088ff;
+            cursor: pointer;
+            padding: 5px;
+            margin-left: 5px;
+            font-size: 0.8em;
+            transition: all 0.3s ease;
+        }
+
+        .sort-button:hover {
+            color: #00ff88;
+            transform: scale(1.2);
+        }
+
+        .sort-button.active {
+            color: #00ff88;
+            font-weight: bold;
+        }
+
+        .table-header {
+            display: flex;
+            align-items: center;
+        }
+
+        @media (max-width: 768px) {
+            .regatta-table-container {
+                padding: 15px;
+            }
+
+            .regatta-table {
+                font-size: 0.9em;
+            }
+
+            .regatta-table th,
+            .regatta-table td {
+                padding: 8px 10px;
+            }
         }
 
         .back-link {
@@ -242,9 +539,101 @@
         <h1>Regatta Admin Dashboard</h1>
         <p>View regatta database statistics and scraping history</p>
 
-        <button class="refresh-button" id="refreshButton" onclick="loadStats()">Refresh Stats</button>
+        <div class="action-buttons">
+            <button class="refresh-button" id="refreshButton" onclick="loadAll()">Refresh All</button>
+            <a href="Find-regatta.html" class="action-button">Search Regattas</a>
+        </div>
+
+        <div class="scrape-section">
+            <h2>Scrape Regattas</h2>
+            <p>Pull the latest regatta data from Regatta Network and Clubspot</p>
+            
+            <div class="scrape-source-select">
+                <label for="scrapeSourceSelect">Select Source:</label>
+                <select id="scrapeSourceSelect">
+                    <option value="all">All Sources</option>
+                    <option value="regattanetwork">Regatta Network Only</option>
+                    <option value="clubspot">Clubspot Only</option>
+                </select>
+            </div>
+
+            <button class="action-button scrape" id="scrapeButton" onclick="startScraping()">
+                Start Scraping
+            </button>
+
+            <div class="scrape-status" id="scrapeStatus"></div>
+        </div>
 
         <div id="statsContainer" class="loading">Loading statistics...</div>
+
+        <div id="regattaTableContainer" style="display: none;">
+            <div class="regatta-table-container">
+                <h2>All Regattas</h2>
+                
+                <div class="filters-container">
+                    <div class="filter-group">
+                        <label for="dateFilter">Date:</label>
+                        <input type="text" id="dateFilter" placeholder="YYYY-MM-DD or YYYY">
+                    </div>
+                    <div class="filter-group">
+                        <label for="nameFilter">Regatta Name:</label>
+                        <input type="text" id="nameFilter" placeholder="Search by name...">
+                    </div>
+                    <div class="filter-group">
+                        <label for="locationFilter">Location:</label>
+                        <input type="text" id="locationFilter" placeholder="Search by location...">
+                    </div>
+                    <div class="filter-group">
+                        <label for="sourceFilter">Source:</label>
+                        <select id="sourceFilter">
+                            <option value="">All Sources</option>
+                            <option value="regattanetwork">Regatta Network</option>
+                            <option value="clubspot">Clubspot</option>
+                        </select>
+                    </div>
+                    <div class="filter-actions">
+                        <button class="filter-button" onclick="applyFilters()">Apply Filters</button>
+                        <button class="filter-button clear" onclick="clearFilters()">Clear</button>
+                    </div>
+                </div>
+
+                <div id="regattaTableLoading" class="loading">Loading regattas...</div>
+                <div id="regattaCount" style="text-align: center; margin: 10px 0; color: #cccccc; display: none;"></div>
+                <table class="regatta-table" id="regattaTable" style="display: none;">
+                    <thead>
+                        <tr>
+                            <th>
+                                <div class="table-header">
+                                    Date
+                                    <button class="sort-button" onclick="sortTable('regatta_date')" data-column="regatta_date" data-order="ASC">↑↓</button>
+                                </div>
+                            </th>
+                            <th>
+                                <div class="table-header">
+                                    Regatta Name
+                                    <button class="sort-button" onclick="sortTable('regatta_name')" data-column="regatta_name" data-order="ASC">↑↓</button>
+                                </div>
+                            </th>
+                            <th>
+                                <div class="table-header">
+                                    Location
+                                    <button class="sort-button" onclick="sortTable('location')" data-column="location" data-order="ASC">↑↓</button>
+                                </div>
+                            </th>
+                            <th>
+                                <div class="table-header">
+                                    Source
+                                    <button class="sort-button" onclick="sortTable('source')" data-column="source" data-order="ASC">↑↓</button>
+                                </div>
+                            </th>
+                            <th>Link</th>
+                        </tr>
+                    </thead>
+                    <tbody id="regattaTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
         <a href="index.html" class="back-link">← Back to Home</a>
     </div>
@@ -278,11 +667,7 @@
         }
 
         async function loadStats() {
-            const button = document.getElementById('refreshButton');
             const container = document.getElementById('statsContainer');
-
-            button.disabled = true;
-            container.innerHTML = '<div class="loading">Loading statistics...</div>';
 
             try {
                 const response = await fetch('/api/regatta-stats');
@@ -362,13 +747,248 @@
                         Error loading statistics: ${error.message}
                     </div>
                 `;
-            } finally {
-                button.disabled = false;
             }
         }
 
-        // Load stats on page load
-        window.addEventListener('DOMContentLoaded', loadStats);
+        let currentFilters = {
+            dateFilter: '',
+            nameFilter: '',
+            locationFilter: '',
+            sourceFilter: ''
+        };
+        let currentSort = {
+            orderBy: 'regatta_date',
+            order: 'ASC'
+        };
+
+        async function loadRegattas() {
+            const tableContainer = document.getElementById('regattaTableContainer');
+            const tableLoading = document.getElementById('regattaTableLoading');
+            const table = document.getElementById('regattaTable');
+            const tableBody = document.getElementById('regattaTableBody');
+            const regattaCount = document.getElementById('regattaCount');
+
+            tableContainer.style.display = 'block';
+            tableLoading.style.display = 'block';
+            table.style.display = 'none';
+            regattaCount.style.display = 'none';
+
+            try {
+                // Build query string
+                let queryString = `limit=1000&orderBy=${currentSort.orderBy}&order=${currentSort.order}`;
+                if (currentFilters.dateFilter) queryString += `&dateFilter=${encodeURIComponent(currentFilters.dateFilter)}`;
+                if (currentFilters.nameFilter) queryString += `&nameFilter=${encodeURIComponent(currentFilters.nameFilter)}`;
+                if (currentFilters.locationFilter) queryString += `&locationFilter=${encodeURIComponent(currentFilters.locationFilter)}`;
+                if (currentFilters.sourceFilter) queryString += `&sourceFilter=${encodeURIComponent(currentFilters.sourceFilter)}`;
+
+                const response = await fetch(`/api/all-regattas?${queryString}`);
+                const data = await response.json();
+
+                if (data.success && data.regattas && data.regattas.length > 0) {
+                    tableBody.innerHTML = '';
+                    
+                    data.regattas.forEach(regatta => {
+                        const dateObj = new Date(regatta.regatta_date);
+                        const formattedDate = dateObj.toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                        });
+
+                        const row = document.createElement('tr');
+                        
+                        // Date
+                        const dateCell = document.createElement('td');
+                        dateCell.className = 'date';
+                        dateCell.textContent = formattedDate;
+                        row.appendChild(dateCell);
+
+                        // Name
+                        const nameCell = document.createElement('td');
+                        nameCell.className = 'name';
+                        nameCell.textContent = regatta.regatta_name;
+                        row.appendChild(nameCell);
+
+                        // Location
+                        const locationCell = document.createElement('td');
+                        locationCell.className = 'location';
+                        locationCell.textContent = regatta.location || 'N/A';
+                        row.appendChild(locationCell);
+
+                        // Source
+                        const sourceCell = document.createElement('td');
+                        sourceCell.className = 'location';
+                        sourceCell.textContent = regatta.source.charAt(0).toUpperCase() + regatta.source.slice(1);
+                        row.appendChild(sourceCell);
+
+                        // Link
+                        const linkCell = document.createElement('td');
+                        linkCell.className = 'link';
+                        if (regatta.event_website_url) {
+                            const link = document.createElement('a');
+                            link.href = regatta.event_website_url;
+                            link.target = '_blank';
+                            link.textContent = 'View Event';
+                            linkCell.appendChild(link);
+                        } else if (regatta.registrants_url) {
+                            const link = document.createElement('a');
+                            link.href = regatta.registrants_url;
+                            link.target = '_blank';
+                            link.textContent = 'View Registrants';
+                            linkCell.appendChild(link);
+                        } else {
+                            const noLink = document.createElement('span');
+                            noLink.className = 'no-link';
+                            noLink.textContent = 'No link';
+                            linkCell.appendChild(noLink);
+                        }
+                        row.appendChild(linkCell);
+
+                        tableBody.appendChild(row);
+                    });
+
+                    // Update count display
+                    regattaCount.textContent = `Showing ${data.count} of ${data.total} regattas`;
+                    regattaCount.style.display = 'block';
+
+                    tableLoading.style.display = 'none';
+                    table.style.display = 'table';
+                } else {
+                    tableLoading.innerHTML = '<p style="text-align: center; color: #cccccc;">No regattas found matching your filters.</p>';
+                    regattaCount.textContent = '0 regattas found';
+                    regattaCount.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error loading regattas:', error);
+                tableLoading.innerHTML = `
+                    <div style="color: #ff6666; text-align: center;">
+                        Error loading regattas: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        function applyFilters() {
+            currentFilters.dateFilter = document.getElementById('dateFilter').value.trim();
+            currentFilters.nameFilter = document.getElementById('nameFilter').value.trim();
+            currentFilters.locationFilter = document.getElementById('locationFilter').value.trim();
+            currentFilters.sourceFilter = document.getElementById('sourceFilter').value;
+            loadRegattas();
+        }
+
+        function clearFilters() {
+            document.getElementById('dateFilter').value = '';
+            document.getElementById('nameFilter').value = '';
+            document.getElementById('locationFilter').value = '';
+            document.getElementById('sourceFilter').value = '';
+            currentFilters = {
+                dateFilter: '',
+                nameFilter: '',
+                locationFilter: '',
+                sourceFilter: ''
+            };
+            loadRegattas();
+        }
+
+        function sortTable(column) {
+            // Toggle sort order if clicking the same column
+            if (currentSort.orderBy === column) {
+                currentSort.order = currentSort.order === 'ASC' ? 'DESC' : 'ASC';
+            } else {
+                currentSort.orderBy = column;
+                currentSort.order = 'ASC';
+            }
+
+            // Update sort button states
+            document.querySelectorAll('.sort-button').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.getAttribute('data-column') === column) {
+                    btn.classList.add('active');
+                    btn.textContent = currentSort.order === 'ASC' ? '↑' : '↓';
+                } else {
+                    btn.textContent = '↑↓';
+                }
+            });
+
+            loadRegattas();
+        }
+
+
+        async function loadAll() {
+            const button = document.getElementById('refreshButton');
+            button.disabled = true;
+            button.textContent = 'Loading...';
+
+            await Promise.all([loadStats(), loadRegattas()]);
+
+            button.disabled = false;
+            button.textContent = 'Refresh All';
+        }
+
+        async function startScraping() {
+            const button = document.getElementById('scrapeButton');
+            const status = document.getElementById('scrapeStatus');
+            const sourceSelect = document.getElementById('scrapeSourceSelect');
+
+            button.disabled = true;
+            button.textContent = 'Scraping...';
+            status.className = 'scrape-status active';
+            status.textContent = 'Scraping in progress... Please wait.';
+
+            try {
+                const source = sourceSelect.value;
+                const response = await fetch('/api/scrape-regattas', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ source })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    status.className = 'scrape-status active success';
+                    status.innerHTML = `
+                        <strong>Scraping Complete!</strong><br>
+                        Found ${data.totalFound} regattas, added ${data.totalAdded} new ones.<br>
+                        ${data.results.regattanetwork ? `Regatta Network: Found ${data.results.regattanetwork.found}, Added ${data.results.regattanetwork.added}<br>` : ''}
+                        ${data.results.clubspot ? `Clubspot: Found ${data.results.clubspot.found}, Added ${data.results.clubspot.added}` : ''}
+                    `;
+                    
+                    // Reload stats and table after scraping
+                    setTimeout(() => {
+                        loadAll();
+                    }, 1000);
+                } else {
+                    throw new Error(data.error || 'Scraping failed');
+                }
+            } catch (error) {
+                status.className = 'scrape-status active error';
+                status.textContent = `Error: ${error.message}`;
+                console.error('Scraping error:', error);
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Start Scraping';
+            }
+        }
+
+        // Load stats and regattas on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadAll();
+            
+            // Allow Enter key to apply filters
+            ['dateFilter', 'nameFilter', 'locationFilter'].forEach(id => {
+                const input = document.getElementById(id);
+                if (input) {
+                    input.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') {
+                            applyFilters();
+                        }
+                    });
+                }
+            });
+        });
     </script>
 </body>
 
