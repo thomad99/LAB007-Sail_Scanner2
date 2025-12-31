@@ -483,8 +483,10 @@ app.listen(port, async () => {
     console.log('This is a dedicated scraping service to reduce memory usage on main server');
     
     // Verify Puppeteer is loaded on startup
-    if (puppeteer) {
-        console.log('✓ Puppeteer module loaded successfully');
+    const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
+    
+    if (enablePuppeteer && puppeteer) {
+        console.log('✓ Puppeteer module loaded successfully (ENABLE_PUPPETEER=true)');
         try {
             // Test Puppeteer by checking executable path (this won't download Chromium, just check if module works)
             const executablePath = await puppeteer.executablePath();
@@ -494,10 +496,14 @@ app.listen(port, async () => {
             console.warn('⚠ Puppeteer loaded but executable path check failed:', puppeteerTestError.message);
             console.warn('  This may be normal. Browser will be downloaded on first use.');
         }
-    } else {
-        console.error('✗ CRITICAL: Puppeteer is NOT loaded - Clubspot scraping will fail');
+    } else if (enablePuppeteer && !puppeteer) {
+        console.error('✗ ERROR: ENABLE_PUPPETEER=true but Puppeteer failed to load');
         console.error('  Service will start but Clubspot scraping will not work');
         console.error('  To fix: npm install puppeteer');
+    } else {
+        console.log('ℹ Puppeteer disabled (ENABLE_PUPPETEER not set to true)');
+        console.log('  Clubspot scraping will not be available');
+        console.log('  To enable: Set ENABLE_PUPPETEER=true environment variable');
     }
     
     // Test database connection
