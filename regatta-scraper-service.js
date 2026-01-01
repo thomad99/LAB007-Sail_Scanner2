@@ -226,6 +226,9 @@ async function scrapeRegattaNetwork() {
 
 // Scrape Clubspot using headless browser
 async function scrapeClubspot() {
+    // Load Puppeteer if not already loaded
+    const puppeteerInstance = loadPuppeteer();
+    
     // Verify Puppeteer is enabled and available
     const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
     
@@ -233,7 +236,7 @@ async function scrapeClubspot() {
         throw new Error('Puppeteer is disabled. Set ENABLE_PUPPETEER=true to enable Clubspot scraping.');
     }
     
-    if (!puppeteer) {
+    if (!puppeteerInstance) {
         throw new Error('Puppeteer is not available. Cannot scrape Clubspot. Ensure Puppeteer is installed and ENABLE_PUPPETEER=true is set.');
     }
     
