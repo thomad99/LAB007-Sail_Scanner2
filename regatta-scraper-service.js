@@ -258,8 +258,12 @@ async function scrapeClubspot() {
         
         // Try to use system Chrome if bundled Chromium not available
         const fs = require('fs');
+        const puppeteerInstance = loadPuppeteer();
+        if (!puppeteerInstance) {
+            throw new Error('Puppeteer is not available');
+        }
         try {
-            const executablePath = await puppeteer.executablePath();
+            const executablePath = await puppeteerInstance.executablePath();
             if (!executablePath || !fs.existsSync(executablePath)) {
                 console.log('Bundled Chromium not found, trying system Chrome...');
                 const possiblePaths = [
