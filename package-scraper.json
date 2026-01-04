@@ -4,8 +4,7 @@
   "description": "Dedicated regatta scraping service",
   "main": "regatta-scraper-service.js",
   "scripts": {
-    "start": "node regatta-scraper-service.js",
-    "postinstall": "echo 'Skipping Chromium download per .npmrc'"
+    "start": "node regatta-scraper-service.js"
   },
   "dependencies": {
     "express": "^4.17.1",
