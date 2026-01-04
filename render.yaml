@@ -14,7 +14,7 @@ services:
   - type: web
     name: regatta-scraper
     env: node
-    buildCommand: chmod +x build-scraper.sh && ./build-scraper.sh
+    buildCommand: cp package-scraper.json package.json && npm install && npx playwright install chromium --with-deps
     startCommand: node regatta-scraper-service.js
     envVars:
       - key: NODE_ENV

@@ -18,8 +18,8 @@ echo "Installing dependencies..."
 npm install
 
 # Install Playwright browsers (Chromium only - lighter and faster)
-echo "Installing Playwright Chromium browser..."
-npx playwright install chromium
+echo "Installing Playwright Chromium browser with dependencies..."
+npx playwright install chromium --with-deps
 
 echo "✓ Build complete!"
 

@@ -244,6 +244,7 @@ async function scrapeClubspot() {
     try {
         console.log('Launching headless browser for Clubspot...');
         
+        const fs = require('fs');
         const launchOptions = {
             headless: true,
             args: [
@@ -259,7 +260,30 @@ async function scrapeClubspot() {
             ]
         };
         
-        browser = await playwrightInstance.chromium.launch(launchOptions);
+        // Try to launch browser - if it fails due to missing browsers, install them
+        try {
+            browser = await playwrightInstance.chromium.launch(launchOptions);
+        } catch (launchError) {
+            // If browsers aren't installed, try to install them
+            if (launchError.message && launchError.message.includes('Executable doesn\'t exist')) {
+                console.log('Playwright browsers not found, attempting to install...');
+                try {
+                    const { execSync } = require('child_process');
+                    execSync('npx playwright install chromium', { 
+                        stdio: 'inherit',
+                        timeout: 300000 // 5 minutes timeout
+                    });
+                    console.log('✓ Playwright browsers installed successfully');
+                    // Try launching again
+                    browser = await playwrightInstance.chromium.launch(launchOptions);
+                } catch (installError) {
+                    console.error('✗ Failed to install Playwright browsers:', installError.message);
+                    throw new Error('Playwright browsers are not installed and installation failed. Please install browsers during build: npx playwright install chromium');
+                }
+            } else {
+                throw launchError;
+            }
+        }
         const context = await browser.newContext({
             viewport: { width: 1920, height: 1080 },
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
