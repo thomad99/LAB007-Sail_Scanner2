@@ -3,36 +3,36 @@ const { Pool } = require('pg');
 const axios = require('axios');
 const cheerio = require('cheerio');
 
-// Load Puppeteer only if ENABLE_PUPPETEER environment variable is set to 'true'
+// Load Playwright only if ENABLE_PUPPETEER environment variable is set to 'true'
 // Load it lazily to avoid blocking startup
-let puppeteer = null;
-let puppeteerLoadAttempted = false;
+let playwright = null;
+let playwrightLoadAttempted = false;
 
-function loadPuppeteer() {
-  if (puppeteerLoadAttempted) {
-    return puppeteer;
+function loadPlaywright() {
+  if (playwrightLoadAttempted) {
+    return playwright;
   }
-  puppeteerLoadAttempted = true;
+  playwrightLoadAttempted = true;
   
   const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
   if (enablePuppeteer) {
     try {
-      puppeteer = require('puppeteer');
-      console.log('✓ Puppeteer loaded successfully (ENABLE_PUPPETEER=true)');
-    } catch (puppeteerError) {
-      console.error('✗ Failed to load Puppeteer:', puppeteerError.message);
-      console.error('Puppeteer may not be installed. Run: npm install puppeteer');
+      playwright = require('playwright');
+      console.log('✓ Playwright loaded successfully (ENABLE_PUPPETEER=true)');
+    } catch (playwrightError) {
+      console.error('✗ Failed to load Playwright:', playwrightError.message);
+      console.error('Playwright may not be installed. Run: npm install playwright');
       console.error('Service will start but Clubspot scraping will not work');
     }
   } else {
-    console.log('ℹ Puppeteer not loaded (ENABLE_PUPPETEER not set to true)');
+    console.log('ℹ Playwright not loaded (ENABLE_PUPPETEER not set to true)');
   }
-  return puppeteer;
+  return playwright;
 }
 
-// Load Puppeteer after server starts (non-blocking)
+// Load Playwright after server starts (non-blocking)
 setTimeout(() => {
-  loadPuppeteer();
+  loadPlaywright();
 }, 2000);
 
 const app = express();
@@ -226,18 +226,18 @@ async function scrapeRegattaNetwork() {
 
 // Scrape Clubspot using headless browser
 async function scrapeClubspot() {
-    // Load Puppeteer if not already loaded
-    const puppeteerInstance = loadPuppeteer();
+    // Load Playwright if not already loaded
+    const playwrightInstance = loadPlaywright();
     
-    // Verify Puppeteer is enabled and available
+    // Verify Playwright is enabled and available
     const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
     
     if (!enablePuppeteer) {
-        throw new Error('Puppeteer is disabled. Set ENABLE_PUPPETEER=true to enable Clubspot scraping.');
+        throw new Error('Playwright is disabled. Set ENABLE_PUPPETEER=true to enable Clubspot scraping.');
     }
     
-    if (!puppeteerInstance) {
-        throw new Error('Puppeteer is not available. Cannot scrape Clubspot. Ensure Puppeteer is installed and ENABLE_PUPPETEER=true is set.');
+    if (!playwrightInstance) {
+        throw new Error('Playwright is not available. Cannot scrape Clubspot. Ensure Playwright is installed and ENABLE_PUPPETEER=true is set.');
     }
     
     let browser = null;
@@ -259,44 +259,16 @@ async function scrapeClubspot() {
             ]
         };
         
-        // Try to use system Chrome if bundled Chromium not available
-        const fs = require('fs');
-        const puppeteerInstance = loadPuppeteer();
-        if (!puppeteerInstance) {
-            throw new Error('Puppeteer is not available');
-        }
-        try {
-            const executablePath = await puppeteerInstance.executablePath();
-            if (!executablePath || !fs.existsSync(executablePath)) {
-                console.log('Bundled Chromium not found, trying system Chrome...');
-                const possiblePaths = [
-                    '/usr/bin/google-chrome',
-                    '/usr/bin/chromium',
-                    '/usr/bin/chromium-browser'
-                ];
-                for (const path of possiblePaths) {
-                    if (fs.existsSync(path)) {
-                        launchOptions.executablePath = path;
-                        console.log(`Using system Chrome at: ${path}`);
-                        break;
-                    }
-                }
-            } else {
-                console.log(`Using bundled Chromium at: ${executablePath}`);
-            }
-        } catch (pathError) {
-            console.log('Using default Chromium path (will download on first use if needed)');
-        }
-        
-        browser = await puppeteer.launch(launchOptions);
-        const page = await browser.newPage();
-        
-        await page.setViewport({ width: 1920, height: 1080 });
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        browser = await playwrightInstance.chromium.launch(launchOptions);
+        const context = await browser.newContext({
+            viewport: { width: 1920, height: 1080 },
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        });
+        const page = await context.newPage();
         
         console.log('Navigating to Clubspot...');
         await page.goto('https://racing.theclubspot.com/', {
-            waitUntil: 'networkidle2',
+            waitUntil: 'networkidle',
             timeout: 60000
         });
         
@@ -506,14 +478,14 @@ const server = app.listen(port, () => {
     console.log('Server is ready to accept requests');
 });
 
-// Log Puppeteer status after server starts
+// Log Playwright status after server starts
 const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
-if (enablePuppeteer && puppeteer) {
-    console.log('✓ Puppeteer module loaded (ENABLE_PUPPETEER=true)');
-} else if (enablePuppeteer && !puppeteer) {
-    console.error('✗ ERROR: ENABLE_PUPPETEER=true but Puppeteer failed to load');
+if (enablePuppeteer && playwright) {
+    console.log('✓ Playwright module loaded (ENABLE_PUPPETEER=true)');
+} else if (enablePuppeteer && !playwright) {
+    console.error('✗ ERROR: ENABLE_PUPPETEER=true but Playwright failed to load');
 } else {
-    console.log('ℹ Puppeteer disabled (ENABLE_PUPPETEER not set)');
+    console.log('ℹ Playwright disabled (ENABLE_PUPPETEER not set)');
 }
 
 // Initialize database asynchronously in background (don't await)
@@ -536,7 +508,7 @@ async function initializeDatabase() {
         console.log('✓ Service ready to accept scraping requests');
         console.log('  - Regatta Network scraping: Available');
         const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
-        if (enablePuppeteer && puppeteer) {
+        if (enablePuppeteer && playwright) {
             console.log('  - Clubspot scraping: Available');
         } else {
             console.log('  - Clubspot scraping: UNAVAILABLE');

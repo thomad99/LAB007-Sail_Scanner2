@@ -4,14 +4,15 @@
   "description": "Dedicated regatta scraping service",
   "main": "regatta-scraper-service.js",
   "scripts": {
-    "start": "node regatta-scraper-service.js"
+    "start": "node regatta-scraper-service.js",
+    "postinstall": "echo 'Skipping Chromium download per .npmrc'"
   },
   "dependencies": {
     "express": "^4.17.1",
     "pg": "^8.5.1",
     "axios": "^1.6.0",
     "cheerio": "^1.0.0-rc.12",
-    "puppeteer": "^21.6.0"
+    "playwright": "^1.40.0"
   },
   "engines": {
     "node": ">=14.0.0"

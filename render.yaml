@@ -7,4 +7,18 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Add this after creating the scraper service:
+      # - key: SCRAPER_SERVICE_URL
+      #   value: https://regatta-scraper.onrender.com
+
+  - type: web
+    name: regatta-scraper
+    env: node
+    buildCommand: chmod +x build-scraper.sh && ./build-scraper.sh
+    startCommand: node regatta-scraper-service.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ENABLE_PUPPETEER
+        value: "true"
 
