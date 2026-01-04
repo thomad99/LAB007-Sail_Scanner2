@@ -269,9 +269,12 @@ async function scrapeClubspot() {
                 console.log('Playwright browsers not found, attempting to install...');
                 try {
                     const { execSync } = require('child_process');
+                    // Skip system dependencies as they're not needed on Render
+                    process.env.PLAYWRIGHT_SKIP_DEPENDENCY_DOWNLOAD = '1';
                     execSync('npx playwright install chromium', { 
                         stdio: 'inherit',
-                        timeout: 300000 // 5 minutes timeout
+                        timeout: 300000, // 5 minutes timeout
+                        env: { ...process.env, PLAYWRIGHT_SKIP_DEPENDENCY_DOWNLOAD: '1' }
                     });
                     console.log('✓ Playwright browsers installed successfully');
                     // Try launching again

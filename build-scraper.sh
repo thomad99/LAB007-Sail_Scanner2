@@ -18,8 +18,9 @@ echo "Installing dependencies..."
 npm install
 
 # Install Playwright browsers (Chromium only - lighter and faster)
+# Skip system dependencies as they're not needed on Render
 echo "Installing Playwright Chromium browser..."
-npx playwright install chromium
+PLAYWRIGHT_SKIP_DEPENDENCY_DOWNLOAD=1 npx playwright install chromium
 
 echo "✓ Build complete!"
 
