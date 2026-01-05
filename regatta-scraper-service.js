@@ -404,10 +404,14 @@ async function scrapeClubspot() {
         
         const regattas = await page.evaluate(() => {
             const regattas = [];
+            const debugInfo = { foundElements: [], processedElements: [] };
+            
+            // Try to find regatta cards/items - Clubspot uses a specific structure
             const selectors = [
                 '[class*="regatta"]',
                 '[class*="event"]',
                 '[class*="card"]',
+                '[class*="Card"]',
                 '.regatta-item',
                 '.event-item',
                 'a[href*="/regatta/"]',
@@ -417,25 +421,41 @@ async function scrapeClubspot() {
             let elements = [];
             let usedSelector = null;
             
-            // Try each selector and log results
+            // Try each selector
             for (const selector of selectors) {
                 const found = document.querySelectorAll(selector);
-                console.log(`Selector "${selector}" found ${found.length} elements`);
-                if (found.length > 0) {
+                if (found.length > 0 && elements.length === 0) {
                     elements = Array.from(found);
                     usedSelector = selector;
-                    console.log(`✅ Using selector: "${selector}" with ${elements.length} elements`);
                     break;
                 }
             }
             
+            // If no elements found, try to find parent containers that might hold regatta info
             if (elements.length === 0) {
-                console.log('⚠️ No elements found with standard selectors, trying fallback...');
-                elements = Array.from(document.querySelectorAll('a[href*="regatta"], a[href*="event"]'));
-                console.log(`Fallback found ${elements.length} elements`);
+                // Look for containers that have regatta-like text
+                const allDivs = Array.from(document.querySelectorAll('div'));
+                elements = allDivs.filter(div => {
+                    const text = div.textContent || '';
+                    const hasDate = /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}/i.test(text);
+                    const hasRegatta = /regatta|series|championship|cup|race/i.test(text);
+                    return hasDate && hasRegatta && text.length > 20 && text.length < 500;
+                });
+                usedSelector = 'div-with-regatta-text';
             }
             
-            console.log(`Total elements to process: ${elements.length}`);
+            debugInfo.totalElements = elements.length;
+            debugInfo.usedSelector = usedSelector;
+            
+            // Month abbreviations for Clubspot format
+            const monthAbbrev = {
+                'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
+                'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
+                'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+            };
+            
+            // Pattern for Clubspot date format: "Sat, Jan 10 - Sun, Jan 11" or "Sat, Jan 10"
+            const clubspotDatePattern = /(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s+([A-Z][a-z]{2})\s+(\d{1,2})(?:\s*-\s*(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s+[A-Z][a-z]{2}\s+\d{1,2})?/i;
             
             elements.forEach((element, index) => {
                 try {
@@ -448,64 +468,91 @@ async function scrapeClubspot() {
                     console.log(`Href: ${href}`);
                     console.log(`HTML: ${elementHtml}...`);
                     
-                    // Multiple date pattern attempts
-                    const datePatterns = [
-                        /(\d{1,2})\/(\d{1,2})\/(\d{4})/,  // MM/DD/YYYY
-                        /(\d{4})-(\d{1,2})-(\d{1,2})/,   // YYYY-MM-DD
-                        /([A-Z][a-z]+)\s+(\d{1,2}),\s+(\d{4})/,  // Month DD, YYYY
-                        /(\d{1,2})\s+([A-Z][a-z]+)\s+(\d{4})/,   // DD Month YYYY
-                        /([A-Z][a-z]+)\s+(\d{1,2})-\d{1,2},\s+(\d{4})/,  // Month DD-DD, YYYY (range)
-                    ];
-                    
+                    // Try Clubspot format first: "Sat, Jan 10 - Sun, Jan 11" or "Sat, Jan 10"
                     let dateMatch = null;
-                    let matchedPattern = null;
-                    for (const pattern of datePatterns) {
-                        const match = text.match(pattern);
-                        if (match) {
-                            dateMatch = match;
-                            matchedPattern = pattern.toString();
-                            console.log(`✅ Date pattern matched: ${matchedPattern}`);
-                            console.log(`Date match: ${match[0]}`);
-                            break;
-                        }
-                    }
-                    
-                    if (!dateMatch) {
-                        console.log('⚠️ No date pattern matched');
-                    }
-                    
-                    const lines = text.split('\n').map(l => l.trim()).filter(l => l && l.length > 3);
-                    const nameText = lines[0] || text.substring(0, 100).trim();
-                    const locationText = lines.length > 1 ? lines.slice(1).join(', ').substring(0, 200) : '';
-                    
-                    console.log(`Name text: "${nameText}"`);
-                    console.log(`Location text: "${locationText}"`);
-                    
                     let regattaDate = null;
-                    if (dateMatch) {
-                        try {
-                            if (dateMatch[0].includes('-') && dateMatch[0].match(/^\d{4}-\d{2}-\d{2}/)) {
-                                regattaDate = dateMatch[0].substring(0, 10);
-                            } else if (dateMatch[0].includes('/')) {
-                                const [, month, day, year] = dateMatch;
-                                regattaDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-                            } else {
-                                const months = { 'January': '01', 'February': '02', 'March': '03', 'April': '04',
-                                               'May': '05', 'June': '06', 'July': '07', 'August': '08', 
-                                               'September': '09', 'October': '10', 'November': '11', 'December': '12' };
-                                if (dateMatch.length >= 4) {
-                                    const month = months[dateMatch[1]] || months[dateMatch[2]];
-                                    const day = dateMatch[2] || dateMatch[1];
-                                    const year = dateMatch[3];
-                                    if (month && day && year) {
-                                        regattaDate = `${year}-${month}-${day.padStart(2, '0')}`;
-                                    }
-                                }
-                            }
-                            console.log(`Parsed date: ${regattaDate}`);
-                        } catch (dateErr) {
-                            console.log(`❌ Date parsing error: ${dateErr.message}`);
+                    
+                    const clubspotMatch = text.match(clubspotDatePattern);
+                    
+                    if (clubspotMatch) {
+                        const monthAbbr = clubspotMatch[1];
+                        const day = clubspotMatch[2];
+                        const month = monthAbbrev[monthAbbr];
+                        
+                        // Try to find year in the text or use current/next year
+                        const yearMatch = text.match(/(\d{4})/);
+                        let year = yearMatch ? yearMatch[1] : new Date().getFullYear().toString();
+                        
+                        // If we're in December and see Jan dates, it's probably next year
+                        const currentMonth = new Date().getMonth() + 1;
+                        if (month === '01' && currentMonth === 12) {
+                            year = (parseInt(year) + 1).toString();
                         }
+                        
+                        if (month && day) {
+                            regattaDate = `${year}-${month}-${day.padStart(2, '0')}`;
+                            dateMatch = clubspotMatch;
+                        }
+                    }
+                    
+                    // Fallback to other date patterns if Clubspot format not found
+                    if (!dateMatch) {
+                        const datePatterns = [
+                            /(\d{1,2})\/(\d{1,2})\/(\d{4})/,  // MM/DD/YYYY
+                            /(\d{4})-(\d{1,2})-(\d{1,2})/,   // YYYY-MM-DD
+                            /([A-Z][a-z]+)\s+(\d{1,2}),\s+(\d{4})/,  // Month DD, YYYY
+                            /(\d{1,2})\s+([A-Z][a-z]+)\s+(\d{4})/,   // DD Month YYYY
+                        ];
+                        
+                        for (const pattern of datePatterns) {
+                            const match = text.match(pattern);
+                            if (match) {
+                                dateMatch = match;
+                                try {
+                                    if (match[0].includes('-') && match[0].match(/^\d{4}-\d{2}-\d{2}/)) {
+                                        regattaDate = match[0].substring(0, 10);
+                                    } else if (match[0].includes('/')) {
+                                        const [, month, day, year] = match;
+                                        regattaDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                                    } else {
+                                        const months = { 'January': '01', 'February': '02', 'March': '03', 'April': '04',
+                                                       'May': '05', 'June': '06', 'July': '07', 'August': '08', 
+                                                       'September': '09', 'October': '10', 'November': '11', 'December': '12' };
+                                        if (match.length >= 4) {
+                                            const month = months[match[1]] || months[match[2]];
+                                            const day = match[2] || match[1];
+                                            const year = match[3];
+                                            if (month && day && year) {
+                                                regattaDate = `${year}-${month}-${day.padStart(2, '0')}`;
+                                            }
+                                        }
+                                    }
+                                } catch (dateErr) {
+                                    // Skip
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Extract regatta name and location
+                    const lines = text.split('\n').map(l => l.trim()).filter(l => l && l.length > 3);
+                    // First non-empty line is usually the regatta name
+                    let nameText = lines.find(line => line.length > 5 && !line.match(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),/i)) || lines[0] || text.substring(0, 100).trim();
+                    // Remove common prefixes
+                    nameText = nameText.replace(/^(SCYYRA|2026|2025|2024|2023|2022|2021|2020)\s+/i, '').trim();
+                    
+                    // Location is usually after the date line
+                    let locationText = '';
+                    const dateLineIndex = lines.findIndex(line => clubspotDatePattern.test(line));
+                    if (dateLineIndex >= 0 && lines[dateLineIndex + 1]) {
+                        locationText = lines[dateLineIndex + 1];
+                    } else if (lines.length > 1) {
+                        locationText = lines.slice(1).find(line => 
+                            line.length > 3 && 
+                            !line.match(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),/i) &&
+                            !line.match(/^\d{4}$/) // Not just a year
+                        ) || lines[1] || '';
                     }
                     
                     let eventWebsiteUrl = null;
@@ -530,8 +577,15 @@ async function scrapeClubspot() {
                 }
             });
             
-            return regattas;
+            return { regattas, debugInfo };
         });
+        
+        // Log debug info
+        console.log(`\n=== Extraction Debug Info ===`);
+        console.log(`Total elements found: ${extractionResult.debugInfo.totalElements}`);
+        console.log(`Selector used: "${extractionResult.debugInfo.usedSelector}"`);
+        
+        const regattas = extractionResult.regattas;
         
         // Take final screenshot (non-blocking)
         const screenshot3Path = path.join(debugDir, `clubspot-final-${timestamp}.png`);
