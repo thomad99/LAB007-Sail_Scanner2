@@ -323,10 +323,18 @@ async function scrapeClubspot() {
         console.log(`📄 Page Title: "${pageTitle}"`);
         console.log(`📍 Current URL: ${currentUrl}`);
         
-        // Take screenshot after initial load
+        // Take screenshot after initial load (non-blocking)
         const screenshot1Path = path.join(debugDir, `clubspot-initial-${timestamp}.png`);
-        await page.screenshot({ path: screenshot1Path, fullPage: true });
-        console.log(`📸 Screenshot saved: ${screenshot1Path}`);
+        try {
+            await page.screenshot({ 
+                path: screenshot1Path, 
+                fullPage: false, // Use viewport instead of fullPage to avoid timeout
+                timeout: 10000 // 10 second timeout
+            });
+            console.log(`📸 Screenshot saved: ${screenshot1Path}`);
+        } catch (screenshotError) {
+            console.log(`⚠️ Screenshot failed (non-critical): ${screenshotError.message}`);
+        }
         
         // Get page HTML content for debugging
         const pageContent = await page.content();
@@ -350,12 +358,50 @@ async function scrapeClubspot() {
             await page.waitForTimeout(5000);
         }
         
-        // Take screenshot after waiting
+        // Take screenshot after waiting (non-blocking)
         const screenshot2Path = path.join(debugDir, `clubspot-after-wait-${timestamp}.png`);
-        await page.screenshot({ path: screenshot2Path, fullPage: true });
-        console.log(`📸 Screenshot saved: ${screenshot2Path}`);
+        try {
+            await page.screenshot({ 
+                path: screenshot2Path, 
+                fullPage: false, // Use viewport instead of fullPage to avoid timeout
+                timeout: 10000 // 10 second timeout
+            });
+            console.log(`📸 Screenshot saved: ${screenshot2Path}`);
+        } catch (screenshotError) {
+            console.log(`⚠️ Screenshot failed (non-critical): ${screenshotError.message}`);
+        }
         
         console.log('🔍 Extracting regatta data...');
+        
+        // First, let's see what's actually on the page
+        const pageInfo = await page.evaluate(() => {
+            return {
+                bodyText: document.body.innerText.substring(0, 2000),
+                allLinks: Array.from(document.querySelectorAll('a')).map(a => ({
+                    text: a.textContent.trim().substring(0, 100),
+                    href: a.href
+                })).filter(a => a.text.length > 3).slice(0, 20),
+                allDivs: Array.from(document.querySelectorAll('div')).length,
+                allCards: Array.from(document.querySelectorAll('[class*="card"], [class*="Card"]')).length,
+                allRegattas: Array.from(document.querySelectorAll('[class*="regatta"], [class*="Regatta"]')).length,
+                allEvents: Array.from(document.querySelectorAll('[class*="event"], [class*="Event"]')).length
+            };
+        });
+        
+        console.log(`\n📊 Page Analysis:`);
+        console.log(`  - Total divs: ${pageInfo.allDivs}`);
+        console.log(`  - Elements with "card" in class: ${pageInfo.allCards}`);
+        console.log(`  - Elements with "regatta" in class: ${pageInfo.allRegattas}`);
+        console.log(`  - Elements with "event" in class: ${pageInfo.allEvents}`);
+        console.log(`  - Links found: ${pageInfo.allLinks.length}`);
+        if (pageInfo.allLinks.length > 0) {
+            console.log(`  - Sample links:`);
+            pageInfo.allLinks.slice(0, 5).forEach((link, i) => {
+                console.log(`    ${i + 1}. "${link.text}" → ${link.href}`);
+            });
+        }
+        console.log(`\n📝 Page text sample:\n${pageInfo.bodyText.substring(0, 500)}...\n`);
+        
         const regattas = await page.evaluate(() => {
             const regattas = [];
             const selectors = [
@@ -487,7 +533,33 @@ async function scrapeClubspot() {
             return regattas;
         });
         
-        console.log(`Found ${regattas.length} regattas from Clubspot`);
+        // Take final screenshot (non-blocking)
+        const screenshot3Path = path.join(debugDir, `clubspot-final-${timestamp}.png`);
+        try {
+            await page.screenshot({ 
+                path: screenshot3Path, 
+                fullPage: false, // Use viewport instead of fullPage to avoid timeout
+                timeout: 10000 // 10 second timeout
+            });
+            console.log(`📸 Final screenshot saved: ${screenshot3Path}`);
+        } catch (screenshotError) {
+            console.log(`⚠️ Final screenshot failed (non-critical): ${screenshotError.message}`);
+        }
+        
+        console.log(`\n✅ Found ${regattas.length} regattas from Clubspot`);
+        if (regattas.length === 0) {
+            console.log('⚠️ WARNING: No regattas found!');
+            console.log(`📁 Debug screenshots saved in: ${debugDir}`);
+            console.log(`📄 Check logs above for page content and selector results`);
+        } else {
+            console.log('📋 Regattas found:');
+            regattas.forEach((regatta, index) => {
+                console.log(`  ${index + 1}. ${regatta.regatta_name} - ${regatta.regatta_date} - ${regatta.location || 'No location'}`);
+                if (regatta.event_website_url) {
+                    console.log(`     URL: ${regatta.event_website_url}`);
+                }
+            });
+        }
         
         let added = 0;
         for (const regatta of regattas) {
