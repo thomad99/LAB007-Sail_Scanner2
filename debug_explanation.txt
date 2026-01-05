@@ -1,0 +1,19 @@
+The debugging features have been added to the scrapeClubspot function:
+
+1. ✅ Screenshots saved to debug_screenshots/ directory:
+   - Initial page load
+   - After waiting for content
+   - Final state after extraction
+
+2. ✅ URL tracking:
+   - Logs every navigation event
+   - Shows current URL and page title
+
+3. ✅ Enhanced logging:
+   - Page HTML length
+   - Visible text sample
+   - Selector matching results
+   - Element processing details
+
+NOTE: Console.log statements inside page.evaluate() won't show in server logs because they run in the browser context. The debug info is returned from evaluate() and logged outside instead.
+

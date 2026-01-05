@@ -2,6 +2,8 @@ const express = require('express');
 const { Pool } = require('pg');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const fs = require('fs');
+const path = require('path');
 
 // Load Playwright only if ENABLE_PUPPETEER environment variable is set to 'true'
 // Load it lazily to avoid blocking startup
@@ -293,23 +295,67 @@ async function scrapeClubspot() {
         });
         const page = await context.newPage();
         
-        console.log('Navigating to Clubspot...');
-        await page.goto('https://racing.theclubspot.com/', {
+        // Set up debug directory for screenshots
+        const debugDir = path.join(process.cwd(), 'debug_screenshots');
+        if (!fs.existsSync(debugDir)) {
+            fs.mkdirSync(debugDir, { recursive: true });
+        }
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+        
+        // Track navigation
+        page.on('framenavigated', frame => {
+            if (frame === page.mainFrame()) {
+                console.log(`🔗 Navigated to URL: ${frame.url()}`);
+            }
+        });
+        
+        const targetUrl = 'https://racing.theclubspot.com/';
+        console.log(`🌐 Navigating to Clubspot: ${targetUrl}`);
+        
+        await page.goto(targetUrl, {
             waitUntil: 'networkidle',
             timeout: 60000
         });
         
-        console.log('Waiting for regatta data to load...');
+        // Log page info
+        const pageTitle = await page.title();
+        const currentUrl = page.url();
+        console.log(`📄 Page Title: "${pageTitle}"`);
+        console.log(`📍 Current URL: ${currentUrl}`);
+        
+        // Take screenshot after initial load
+        const screenshot1Path = path.join(debugDir, `clubspot-initial-${timestamp}.png`);
+        await page.screenshot({ path: screenshot1Path, fullPage: true });
+        console.log(`📸 Screenshot saved: ${screenshot1Path}`);
+        
+        // Get page HTML content for debugging
+        const pageContent = await page.content();
+        const contentLength = pageContent.length;
+        console.log(`📊 Page HTML length: ${contentLength} characters`);
+        
+        // Log visible text sample
+        const visibleText = await page.evaluate(() => {
+            return document.body.innerText.substring(0, 1000);
+        });
+        console.log(`📝 Visible text sample (first 1000 chars):\n${visibleText}\n`);
+        
+        console.log('⏳ Waiting for regatta data to load...');
         try {
             await page.waitForSelector('[class*="regatta"], [class*="event"], [class*="card"], .regatta-item, .event-item', {
                 timeout: 30000
             });
+            console.log('✅ Regatta selector found');
         } catch (waitError) {
-            console.log('Regatta selector not found, waiting additional time...');
+            console.log('⚠️ Regatta selector not found, waiting additional time...');
             await page.waitForTimeout(5000);
         }
         
-        console.log('Extracting regatta data...');
+        // Take screenshot after waiting
+        const screenshot2Path = path.join(debugDir, `clubspot-after-wait-${timestamp}.png`);
+        await page.screenshot({ path: screenshot2Path, fullPage: true });
+        console.log(`📸 Screenshot saved: ${screenshot2Path}`);
+        
+        console.log('🔍 Extracting regatta data...');
         const regattas = await page.evaluate(() => {
             const regattas = [];
             const selectors = [
@@ -323,64 +369,118 @@ async function scrapeClubspot() {
             ];
             
             let elements = [];
+            let usedSelector = null;
+            
+            // Try each selector and log results
             for (const selector of selectors) {
                 const found = document.querySelectorAll(selector);
+                console.log(`Selector "${selector}" found ${found.length} elements`);
                 if (found.length > 0) {
                     elements = Array.from(found);
+                    usedSelector = selector;
+                    console.log(`✅ Using selector: "${selector}" with ${elements.length} elements`);
                     break;
                 }
             }
             
             if (elements.length === 0) {
+                console.log('⚠️ No elements found with standard selectors, trying fallback...');
                 elements = Array.from(document.querySelectorAll('a[href*="regatta"], a[href*="event"]'));
+                console.log(`Fallback found ${elements.length} elements`);
             }
             
-            elements.forEach((element) => {
+            console.log(`Total elements to process: ${elements.length}`);
+            
+            elements.forEach((element, index) => {
                 try {
                     const text = element.textContent || element.innerText || '';
                     const href = element.href || element.getAttribute('href') || '';
+                    const elementHtml = element.outerHTML.substring(0, 200);
                     
-                    const dateMatch = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/) || 
-                                     text.match(/(\d{4})-(\d{1,2})-(\d{1,2})/) ||
-                                     text.match(/([A-Z][a-z]+)\s+(\d{1,2}),\s+(\d{4})/);
+                    console.log(`\n--- Element ${index + 1} ---`);
+                    console.log(`Text: "${text.substring(0, 200)}"`);
+                    console.log(`Href: ${href}`);
+                    console.log(`HTML: ${elementHtml}...`);
+                    
+                    // Multiple date pattern attempts
+                    const datePatterns = [
+                        /(\d{1,2})\/(\d{1,2})\/(\d{4})/,  // MM/DD/YYYY
+                        /(\d{4})-(\d{1,2})-(\d{1,2})/,   // YYYY-MM-DD
+                        /([A-Z][a-z]+)\s+(\d{1,2}),\s+(\d{4})/,  // Month DD, YYYY
+                        /(\d{1,2})\s+([A-Z][a-z]+)\s+(\d{4})/,   // DD Month YYYY
+                        /([A-Z][a-z]+)\s+(\d{1,2})-\d{1,2},\s+(\d{4})/,  // Month DD-DD, YYYY (range)
+                    ];
+                    
+                    let dateMatch = null;
+                    let matchedPattern = null;
+                    for (const pattern of datePatterns) {
+                        const match = text.match(pattern);
+                        if (match) {
+                            dateMatch = match;
+                            matchedPattern = pattern.toString();
+                            console.log(`✅ Date pattern matched: ${matchedPattern}`);
+                            console.log(`Date match: ${match[0]}`);
+                            break;
+                        }
+                    }
+                    
+                    if (!dateMatch) {
+                        console.log('⚠️ No date pattern matched');
+                    }
                     
                     const lines = text.split('\n').map(l => l.trim()).filter(l => l && l.length > 3);
                     const nameText = lines[0] || text.substring(0, 100).trim();
                     const locationText = lines.length > 1 ? lines.slice(1).join(', ').substring(0, 200) : '';
                     
+                    console.log(`Name text: "${nameText}"`);
+                    console.log(`Location text: "${locationText}"`);
+                    
                     let regattaDate = null;
                     if (dateMatch) {
-                        if (dateMatch[0].includes('-')) {
-                            regattaDate = dateMatch[0];
-                        } else if (dateMatch[0].includes('/')) {
-                            const [, month, day, year] = dateMatch;
-                            regattaDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-                        } else {
-                            const months = { 'January': '01', 'February': '02', 'March': '03', 'April': '04',
-                                           'May': '05', 'June': '06', 'July': '07', 'August': '08', 
-                                           'September': '09', 'October': '10', 'November': '11', 'December': '12' };
-                            const month = months[dateMatch[1]];
-                            if (month) {
-                                regattaDate = `${dateMatch[3]}-${month}-${dateMatch[2].padStart(2, '0')}`;
+                        try {
+                            if (dateMatch[0].includes('-') && dateMatch[0].match(/^\d{4}-\d{2}-\d{2}/)) {
+                                regattaDate = dateMatch[0].substring(0, 10);
+                            } else if (dateMatch[0].includes('/')) {
+                                const [, month, day, year] = dateMatch;
+                                regattaDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                            } else {
+                                const months = { 'January': '01', 'February': '02', 'March': '03', 'April': '04',
+                                               'May': '05', 'June': '06', 'July': '07', 'August': '08', 
+                                               'September': '09', 'October': '10', 'November': '11', 'December': '12' };
+                                if (dateMatch.length >= 4) {
+                                    const month = months[dateMatch[1]] || months[dateMatch[2]];
+                                    const day = dateMatch[2] || dateMatch[1];
+                                    const year = dateMatch[3];
+                                    if (month && day && year) {
+                                        regattaDate = `${year}-${month}-${day.padStart(2, '0')}`;
+                                    }
+                                }
                             }
+                            console.log(`Parsed date: ${regattaDate}`);
+                        } catch (dateErr) {
+                            console.log(`❌ Date parsing error: ${dateErr.message}`);
                         }
                     }
                     
                     let eventWebsiteUrl = null;
                     if (href) {
                         eventWebsiteUrl = href.startsWith('http') ? href : `https://racing.theclubspot.com${href}`;
+                        console.log(`Event URL: ${eventWebsiteUrl}`);
                     }
                     
                     if (regattaDate && nameText && nameText.length > 3) {
+                        console.log(`✅ Valid regatta found!`);
                         regattas.push({
                             regatta_date: regattaDate,
                             regatta_name: nameText,
                             location: locationText || null,
                             event_website_url: eventWebsiteUrl || null
                         });
+                    } else {
+                        console.log(`❌ Skipping - missing date: ${!regattaDate}, name too short: ${!nameText || nameText.length <= 3}`);
                     }
                 } catch (err) {
-                    // Skip errors
+                    console.log(`❌ Error processing element ${index + 1}: ${err.message}`);
                 }
             });
             
