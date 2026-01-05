@@ -32,10 +32,8 @@ function loadPlaywright() {
   return playwright;
 }
 
-// Load Playwright after server starts (non-blocking)
-setTimeout(() => {
-  loadPlaywright();
-}, 2000);
+// Load Playwright immediately (synchronously) so it's ready when service starts
+loadPlaywright();
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -228,19 +226,30 @@ async function scrapeRegattaNetwork() {
 
 // Scrape Clubspot using headless browser
 async function scrapeClubspot() {
-    // Load Playwright if not already loaded
-    const playwrightInstance = loadPlaywright();
-    
-    // Verify Playwright is enabled and available
+    // Verify Playwright is enabled
     const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
     
     if (!enablePuppeteer) {
         throw new Error('Playwright is disabled. Set ENABLE_PUPPETEER=true to enable Clubspot scraping.');
     }
     
+    // Wait for Playwright to be loaded (with timeout)
+    let playwrightInstance = loadPlaywright();
+    let attempts = 0;
+    const maxAttempts = 10;
+    
+    while (!playwrightInstance && attempts < maxAttempts) {
+        console.log(`⏳ Waiting for Playwright to load... (attempt ${attempts + 1}/${maxAttempts})`);
+        await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms
+        playwrightInstance = loadPlaywright();
+        attempts++;
+    }
+    
     if (!playwrightInstance) {
         throw new Error('Playwright is not available. Cannot scrape Clubspot. Ensure Playwright is installed and ENABLE_PUPPETEER=true is set.');
     }
+    
+    console.log('✓ Playwright is ready, starting scrape...');
     
     let browser = null;
     try {
@@ -431,17 +440,32 @@ async function scrapeClubspot() {
                 }
             }
             
-            // If no elements found, try to find parent containers that might hold regatta info
-            if (elements.length === 0) {
-                // Look for containers that have regatta-like text
+            // If elements found but they might be too granular, try to find parent containers
+            // Look for divs that contain both a date pattern and regatta-like text
+            // This helps find the actual regatta card containers
+            if (elements.length === 0 || elements.length > 100) {
                 const allDivs = Array.from(document.querySelectorAll('div'));
+                const clubspotDatePattern = /(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s+[A-Z][a-z]{2}\s+\d{1,2}/i;
+                
                 elements = allDivs.filter(div => {
                     const text = div.textContent || '';
-                    const hasDate = /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}/i.test(text);
-                    const hasRegatta = /regatta|series|championship|cup|race/i.test(text);
-                    return hasDate && hasRegatta && text.length > 20 && text.length < 500;
+                    const hasDate = clubspotDatePattern.test(text);
+                    const hasName = /[A-Z][a-z]+.*(?:Series|Regatta|Championship|Cup|Race|Invitational)/i.test(text);
+                    const hasLocation = /[A-Z][a-z]+,\s+[A-Z]{2}/.test(text); // City, State format
+                    const textLength = text.trim().length;
+                    
+                    // Should have date, name-like text, and reasonable length
+                    return hasDate && (hasName || textLength > 30) && textLength > 20 && textLength < 1000;
                 });
-                usedSelector = 'div-with-regatta-text';
+                
+                // Remove nested duplicates - keep only top-level containers
+                elements = elements.filter((el, idx) => {
+                    return !elements.some((otherEl, otherIdx) => 
+                        otherIdx !== idx && otherEl.contains(el)
+                    );
+                });
+                
+                usedSelector = 'div-with-regatta-content';
             }
             
             debugInfo.totalElements = elements.length;
@@ -535,24 +559,49 @@ async function scrapeClubspot() {
                         }
                     }
                     
-                    // Extract regatta name and location
-                    const lines = text.split('\n').map(l => l.trim()).filter(l => l && l.length > 3);
-                    // First non-empty line is usually the regatta name
-                    let nameText = lines.find(line => line.length > 5 && !line.match(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),/i)) || lines[0] || text.substring(0, 100).trim();
-                    // Remove common prefixes
-                    nameText = nameText.replace(/^(SCYYRA|2026|2025|2024|2023|2022|2021|2020)\s+/i, '').trim();
+                    // Extract regatta name and location from text
+                    const lines = text.split('\n').map(l => l.trim()).filter(l => l && l.length > 2);
                     
-                    // Location is usually after the date line
+                    // Find regatta name - usually the first substantial line that's not a date
+                    let nameText = '';
+                    for (const line of lines) {
+                        if (line.length > 5 && 
+                            !clubspotDatePattern.test(line) && 
+                            !line.match(/^[A-Z][a-z]+,\s+[A-Z]{2}$/) && // Not location
+                            !line.match(/^[A-Z][a-z]+\s+Yacht Club$/) && // Not just club name
+                            !line.match(/^\d{4}$/)) { // Not just year
+                            nameText = line.replace(/^(SCYYRA|2026|2025|2024|2023|2022|2021|2020)\s+/i, '').trim();
+                            if (nameText.length > 3) break;
+                        }
+                    }
+                    
+                    // If no name found, try first line
+                    if (!nameText || nameText.length < 3) {
+                        nameText = lines.find(l => l.length > 3 && !clubspotDatePattern.test(l)) || lines[0] || text.substring(0, 100).trim();
+                        nameText = nameText.replace(/^(SCYYRA|2026|2025|2024|2023|2022|2021|2020)\s+/i, '').trim();
+                    }
+                    
+                    // Find location - usually after date, format like "City, State"
                     let locationText = '';
                     const dateLineIndex = lines.findIndex(line => clubspotDatePattern.test(line));
-                    if (dateLineIndex >= 0 && lines[dateLineIndex + 1]) {
-                        locationText = lines[dateLineIndex + 1];
-                    } else if (lines.length > 1) {
-                        locationText = lines.slice(1).find(line => 
-                            line.length > 3 && 
-                            !line.match(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),/i) &&
-                            !line.match(/^\d{4}$/) // Not just a year
-                        ) || lines[1] || '';
+                    if (dateLineIndex >= 0) {
+                        // Look for location after date
+                        for (let i = dateLineIndex + 1; i < lines.length && i < dateLineIndex + 3; i++) {
+                            const line = lines[i];
+                            if (line.match(/^[A-Z][a-z]+(?:,\s+[A-Z]{2})?$/) || // City, State or City
+                                line.match(/^[A-Z][a-z]+\s+Yacht Club$/)) { // Club name
+                                locationText = line;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Fallback: find any location-like text
+                    if (!locationText) {
+                        locationText = lines.find(line => 
+                            line.match(/^[A-Z][a-z]+,\s+[A-Z]{2}$/) || // City, State
+                            line.match(/^[A-Z][a-z]+\s+Yacht Club$/) // Club name
+                        ) || '';
                     }
                     
                     let eventWebsiteUrl = null;
