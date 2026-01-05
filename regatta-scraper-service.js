@@ -411,7 +411,7 @@ async function scrapeClubspot() {
         }
         console.log(`\n📝 Page text sample:\n${pageInfo.bodyText.substring(0, 500)}...\n`);
         
-        const regattas = await page.evaluate(() => {
+        const extractionResult = await page.evaluate(() => {
             const regattas = [];
             const debugInfo = { foundElements: [], processedElements: [] };
             
@@ -634,7 +634,8 @@ async function scrapeClubspot() {
         console.log(`Total elements found: ${extractionResult.debugInfo.totalElements}`);
         console.log(`Selector used: "${extractionResult.debugInfo.usedSelector}"`);
         
-        const regattas = extractionResult.regattas;
+        // Extract regattas from result
+        const extractedRegattas = extractionResult.regattas;
         
         // Take final screenshot (non-blocking)
         const screenshot3Path = path.join(debugDir, `clubspot-final-${timestamp}.png`);
@@ -649,14 +650,14 @@ async function scrapeClubspot() {
             console.log(`⚠️ Final screenshot failed (non-critical): ${screenshotError.message}`);
         }
         
-        console.log(`\n✅ Found ${regattas.length} regattas from Clubspot`);
-        if (regattas.length === 0) {
+        console.log(`\n✅ Found ${extractedRegattas.length} regattas from Clubspot`);
+        if (extractedRegattas.length === 0) {
             console.log('⚠️ WARNING: No regattas found!');
             console.log(`📁 Debug screenshots saved in: ${debugDir}`);
             console.log(`📄 Check logs above for page content and selector results`);
         } else {
             console.log('📋 Regattas found:');
-            regattas.forEach((regatta, index) => {
+            extractedRegattas.forEach((regatta, index) => {
                 console.log(`  ${index + 1}. ${regatta.regatta_name} - ${regatta.regatta_date} - ${regatta.location || 'No location'}`);
                 if (regatta.event_website_url) {
                     console.log(`     URL: ${regatta.event_website_url}`);
@@ -665,7 +666,7 @@ async function scrapeClubspot() {
         }
         
         let added = 0;
-        for (const regatta of regattas) {
+        for (const regatta of extractedRegattas) {
             try {
                 const sourceId = `${regatta.regatta_date}-${regatta.regatta_name.replace(/\s+/g, '-').toLowerCase().substring(0, 100)}`;
                 
@@ -699,9 +700,9 @@ async function scrapeClubspot() {
         await pool.query(`
             INSERT INTO scrape_log (source, regattas_found, regattas_added)
             VALUES ('clubspot', $1, $2)
-        `, [regattas.length, added]);
+        `, [extractedRegattas.length, added]);
         
-        return { found: regattas.length, added };
+        return { found: extractedRegattas.length, added };
         
     } catch (error) {
         console.error('Error scraping Clubspot:', error);
