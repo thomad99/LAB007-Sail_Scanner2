@@ -3497,6 +3497,15 @@ app.get('/api/location-suggestions', async (req, res) => {
       WHERE location IS NOT NULL 
       AND location != ''
       AND location ILIKE $1
+      -- Filter out regatta names that might be in location field
+      -- Locations typically contain commas (City, State) or are short city names
+      AND (
+        location LIKE '%,%' 
+        OR location ~ '^[A-Z][a-z]+(, [A-Z]{2})?$'
+        OR LENGTH(location) < 50
+      )
+      -- Exclude common regatta name patterns
+      AND location !~* '(regatta|series|championship|cup|race|invitational|event|tournament)'
       ORDER BY location
       LIMIT 10
     `, [`%${query}%`]);
