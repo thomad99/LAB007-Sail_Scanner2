@@ -3457,6 +3457,58 @@ app.get('/api/search-regattas', async (req, res) => {
   }
 });
 
+// Autocomplete suggestions for regatta names
+app.get('/api/regatta-name-suggestions', async (req, res) => {
+  try {
+    const { query } = req.query;
+    
+    if (!query || query.length < 2) {
+      return res.json({ success: true, suggestions: [] });
+    }
+    
+    const result = await pool.query(`
+      SELECT DISTINCT regatta_name
+      FROM regattas
+      WHERE regatta_name ILIKE $1
+      ORDER BY regatta_name
+      LIMIT 10
+    `, [`%${query}%`]);
+    
+    const suggestions = result.rows.map(row => row.regatta_name);
+    res.json({ success: true, suggestions });
+  } catch (error) {
+    console.error('Error fetching regatta name suggestions:', error);
+    res.status(500).json({ error: 'Failed to fetch suggestions', details: error.message });
+  }
+});
+
+// Autocomplete suggestions for locations
+app.get('/api/location-suggestions', async (req, res) => {
+  try {
+    const { query } = req.query;
+    
+    if (!query || query.length < 2) {
+      return res.json({ success: true, suggestions: [] });
+    }
+    
+    const result = await pool.query(`
+      SELECT DISTINCT location
+      FROM regattas
+      WHERE location IS NOT NULL 
+      AND location != ''
+      AND location ILIKE $1
+      ORDER BY location
+      LIMIT 10
+    `, [`%${query}%`]);
+    
+    const suggestions = result.rows.map(row => row.location);
+    res.json({ success: true, suggestions });
+  } catch (error) {
+    console.error('Error fetching location suggestions:', error);
+    res.status(500).json({ error: 'Failed to fetch suggestions', details: error.message });
+  }
+});
+
 // Admin stats endpoint
 app.get('/api/regatta-stats', async (req, res) => {
   try {

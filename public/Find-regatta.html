@@ -61,6 +61,49 @@
             background-color: rgba(255, 255, 255, 0.1);
             color: white;
             border: 1px solid rgba(255, 255, 255, 0.3);
+            max-width: 400px;
+        }
+
+        .autocomplete-wrapper {
+            position: relative;
+            max-width: 400px;
+        }
+
+        .autocomplete-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background-color: rgba(2, 0, 83, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+            margin-top: 2px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .autocomplete-dropdown.active {
+            display: block;
+        }
+
+        .autocomplete-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            color: white;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            transition: background-color 0.2s ease;
+        }
+
+        .autocomplete-item:hover,
+        .autocomplete-item.selected {
+            background-color: rgba(0, 136, 255, 0.3);
+        }
+
+        .autocomplete-item:last-child {
+            border-bottom: none;
         }
 
         .form-group input::placeholder {
@@ -96,15 +139,23 @@
         }
 
         .location-status {
-            padding: 10px;
+            padding: 20px;
             background-color: rgba(0, 255, 0, 0.2);
             border-radius: 5px;
             margin-bottom: 10px;
             display: none;
+            font-size: 1.1em;
+            line-height: 1.6;
         }
 
         .location-status.active {
             display: block;
+        }
+
+        .location-status .pin-icon {
+            font-size: 1.8em;
+            vertical-align: middle;
+            margin-right: 8px;
         }
 
         .results {
@@ -281,7 +332,6 @@
 
     <div class="content">
         <h1>Find Regatta</h1>
-        <p>Search for upcoming regattas near you</p>
 
         <div class="location-status" id="locationStatus"></div>
 
@@ -292,13 +342,19 @@
             </div>
 
             <div class="form-group">
-                <label for="locationInput">Location (optional):</label>
-                <input type="text" id="locationInput" name="location" placeholder="City, State">
+                <label for="locationInput">Location:</label>
+                <div class="autocomplete-wrapper">
+                    <input type="text" id="locationInput" name="location" placeholder="City, State" maxlength="40" autocomplete="off">
+                    <div class="autocomplete-dropdown" id="locationAutocomplete"></div>
+                </div>
             </div>
 
             <div class="form-group">
-                <label for="nameInput">Regatta Name (optional):</label>
-                <input type="text" id="nameInput" name="name" placeholder="Search by name...">
+                <label for="nameInput">Regatta Name:</label>
+                <div class="autocomplete-wrapper">
+                    <input type="text" id="nameInput" name="name" placeholder="Search by name..." maxlength="40" autocomplete="off">
+                    <div class="autocomplete-dropdown" id="nameAutocomplete"></div>
+                </div>
             </div>
 
             <button type="submit" class="search-button" id="searchButton">Search Regattas</button>
@@ -365,11 +421,119 @@
             }
         }
 
+        // Autocomplete functionality
+        let autocompleteTimeout = null;
+        let selectedIndex = -1;
+
+        async function fetchSuggestions(query, type) {
+            if (!query || query.length < 2) {
+                return [];
+            }
+
+            try {
+                const endpoint = type === 'location' 
+                    ? '/api/location-suggestions' 
+                    : '/api/regatta-name-suggestions';
+                const response = await fetch(`${endpoint}?query=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                return data.success ? data.suggestions : [];
+            } catch (error) {
+                console.error('Error fetching suggestions:', error);
+                return [];
+            }
+        }
+
+        function showAutocomplete(input, dropdown, suggestions) {
+            dropdown.innerHTML = '';
+            selectedIndex = -1;
+
+            if (suggestions.length === 0) {
+                dropdown.classList.remove('active');
+                return;
+            }
+
+            suggestions.forEach((suggestion, index) => {
+                const item = document.createElement('div');
+                item.className = 'autocomplete-item';
+                item.textContent = suggestion;
+                item.addEventListener('click', () => {
+                    input.value = suggestion;
+                    dropdown.classList.remove('active');
+                });
+                dropdown.appendChild(item);
+            });
+
+            dropdown.classList.add('active');
+        }
+
+        function setupAutocomplete(inputId, dropdownId, type) {
+            const input = document.getElementById(inputId);
+            const dropdown = document.getElementById(dropdownId);
+
+            input.addEventListener('input', async (e) => {
+                const query = e.target.value.trim();
+                
+                clearTimeout(autocompleteTimeout);
+                
+                if (query.length < 2) {
+                    dropdown.classList.remove('active');
+                    return;
+                }
+
+                autocompleteTimeout = setTimeout(async () => {
+                    const suggestions = await fetchSuggestions(query, type);
+                    showAutocomplete(input, dropdown, suggestions);
+                }, 300);
+            });
+
+            input.addEventListener('keydown', (e) => {
+                const items = dropdown.querySelectorAll('.autocomplete-item');
+                
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+                    items.forEach((item, idx) => {
+                        item.classList.toggle('selected', idx === selectedIndex);
+                    });
+                    if (items[selectedIndex]) {
+                        items[selectedIndex].scrollIntoView({ block: 'nearest' });
+                    }
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    selectedIndex = Math.max(selectedIndex - 1, -1);
+                    items.forEach((item, idx) => {
+                        item.classList.toggle('selected', idx === selectedIndex);
+                    });
+                    if (items[selectedIndex]) {
+                        items[selectedIndex].scrollIntoView({ block: 'nearest' });
+                    }
+                } else if (e.key === 'Enter' && selectedIndex >= 0 && items[selectedIndex]) {
+                    e.preventDefault();
+                    input.value = items[selectedIndex].textContent;
+                    dropdown.classList.remove('active');
+                } else if (e.key === 'Escape') {
+                    dropdown.classList.remove('active');
+                    selectedIndex = -1;
+                }
+            });
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+                    dropdown.classList.remove('active');
+                }
+            });
+        }
+
         // Get user's location on page load
         window.addEventListener('DOMContentLoaded', async () => {
             // Set today's date as default
             const today = new Date().toISOString().split('T')[0];
             document.getElementById('dateInput').value = today;
+
+            // Setup autocomplete for location and name inputs
+            setupAutocomplete('locationInput', 'locationAutocomplete', 'location');
+            setupAutocomplete('nameInput', 'nameAutocomplete', 'name');
 
             // Try to get user's location
             if (navigator.geolocation) {
@@ -384,9 +548,9 @@
                         // Get location name from coordinates
                         detectedLocationName = await getLocationName(userLatitude, userLongitude);
                         if (detectedLocationName) {
-                            locationStatus.textContent = `📍 Location detected as ${detectedLocationName}`;
+                            locationStatus.innerHTML = `<span class="pin-icon">📍</span> Location detected as ${detectedLocationName}`;
                         } else {
-                            locationStatus.textContent = `📍 Location detected`;
+                            locationStatus.innerHTML = `<span class="pin-icon">📍</span> Location detected`;
                         }
                         
                         // Auto-search with location and next 3 days date range
@@ -505,8 +669,7 @@
                     resultsHeader.textContent = 'No Results';
                     resultsContent.innerHTML = `
                         <div class="no-results">
-                            <p>No regattas found matching your search criteria.</p>
-                            <p>Try adjusting your date or search terms.</p>
+                            <p>Nothing found</p>
                         </div>
                     `;
                 }
