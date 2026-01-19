@@ -292,13 +292,13 @@
             </div>
 
             <div class="form-group">
-                <label for="nameInput">Regatta Name (optional):</label>
-                <input type="text" id="nameInput" name="name" placeholder="Search by name...">
+                <label for="locationInput">Location (optional):</label>
+                <input type="text" id="locationInput" name="location" placeholder="City, State">
             </div>
 
             <div class="form-group">
-                <label for="locationInput">Location (optional):</label>
-                <input type="text" id="locationInput" name="location" placeholder="City, State">
+                <label for="nameInput">Regatta Name (optional):</label>
+                <input type="text" id="nameInput" name="name" placeholder="Search by name...">
             </div>
 
             <button type="submit" class="search-button" id="searchButton">Search Regattas</button>
@@ -332,6 +332,7 @@
     <script>
         let userLatitude = null;
         let userLongitude = null;
+        let detectedLocationName = null;
 
         function toggleMenu() {
             const mobileMenu = document.getElementById('mobileMenu');
@@ -342,8 +343,30 @@
             }
         }
 
+        // Function to get location name from coordinates using reverse geocoding
+        async function getLocationName(lat, lng) {
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10`);
+                const data = await response.json();
+
+                if (data.display_name) {
+                    // Extract city and state/country from the full address
+                    const parts = data.display_name.split(', ');
+                    if (parts.length >= 3) {
+                        // Return city and state/country
+                        return `${parts[0]}, ${parts[parts.length - 2]}`;
+                    }
+                    return data.display_name;
+                }
+                return null;
+            } catch (error) {
+                console.log('Error getting location name:', error);
+                return null;
+            }
+        }
+
         // Get user's location on page load
-        window.addEventListener('DOMContentLoaded', () => {
+        window.addEventListener('DOMContentLoaded', async () => {
             // Set today's date as default
             const today = new Date().toISOString().split('T')[0];
             document.getElementById('dateInput').value = today;
@@ -351,17 +374,24 @@
             // Try to get user's location
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
-                    (position) => {
+                    async (position) => {
                         userLatitude = position.coords.latitude;
                         userLongitude = position.coords.longitude;
                         
                         const locationStatus = document.getElementById('locationStatus');
                         locationStatus.className = 'location-status active';
-                        locationStatus.textContent = `📍 Location detected! Searching for regattas near you on ${new Date().toLocaleDateString()}.`;
                         
-                        // Auto-search with location
+                        // Get location name from coordinates
+                        detectedLocationName = await getLocationName(userLatitude, userLongitude);
+                        if (detectedLocationName) {
+                            locationStatus.textContent = `📍 Location detected as ${detectedLocationName}`;
+                        } else {
+                            locationStatus.textContent = `📍 Location detected`;
+                        }
+                        
+                        // Auto-search with location and next 3 days date range
                         setTimeout(() => {
-                            searchRegattas(new Event('submit'));
+                            searchRegattas(new Event('submit'), true); // true = auto-search with location
                         }, 500);
                     },
                     (error) => {
@@ -375,7 +405,7 @@
             }
         });
 
-        async function searchRegattas(event) {
+        async function searchRegattas(event, isAutoSearch = false) {
             if (event) {
                 event.preventDefault();
             }
@@ -393,13 +423,34 @@
                 const name = document.getElementById('nameInput').value.trim();
                 const location = document.getElementById('locationInput').value.trim();
 
-                let url = `/api/search-regattas?date=${date}`;
+                let url = '/api/search-regattas?';
+                
+                // If auto-searching with location, use date range (today to 3 days from now)
+                if (isAutoSearch && userLatitude && userLongitude) {
+                    const today = new Date();
+                    const threeDaysLater = new Date(today);
+                    threeDaysLater.setDate(today.getDate() + 3);
+                    
+                    const startDate = today.toISOString().split('T')[0];
+                    const endDate = threeDaysLater.toISOString().split('T')[0];
+                    
+                    url += `startDate=${startDate}&endDate=${endDate}`;
+                } else if (date) {
+                    url += `date=${date}`;
+                }
+                
                 if (name) {
                     url += `&name=${encodeURIComponent(name)}`;
                 }
                 if (location) {
                     url += `&location=${encodeURIComponent(location)}`;
                 }
+                
+                // If we have detected location name from reverse geocoding, use it for better matching
+                if (detectedLocationName && (isAutoSearch || !location)) {
+                    url += `&locationName=${encodeURIComponent(detectedLocationName)}`;
+                }
+                
                 if (userLatitude && userLongitude) {
                     url += `&latitude=${userLatitude}&longitude=${userLongitude}`;
                 }

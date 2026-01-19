@@ -832,6 +832,9 @@
             orderBy: 'regatta_date',
             order: 'ASC'
         };
+        
+        // Note: Date filtering (showing only future dates) is done client-side
+        // to ensure we always show regattas starting from today, regardless of server sorting
 
         async function loadRegattas() {
             const tableContainer = document.getElementById('regattaTableContainer');
@@ -857,9 +860,27 @@
                 const data = await response.json();
 
                 if (data.success && data.regattas && data.regattas.length > 0) {
+                    // Get today's date (YYYY-MM-DD format, timezone-independent)
+                    const today = new Date();
+                    const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+                    
+                    // Filter out past dates and sort by date ascending (starting from today)
+                    const futureRegattas = data.regattas
+                        .filter(regatta => {
+                            if (!regatta.regatta_date) return false;
+                            // Compare date strings directly (YYYY-MM-DD format)
+                            return regatta.regatta_date >= todayStr;
+                        })
+                        .sort((a, b) => {
+                            // Sort by date ascending (earliest first)
+                            if (!a.regatta_date) return 1;
+                            if (!b.regatta_date) return -1;
+                            return a.regatta_date.localeCompare(b.regatta_date);
+                        });
+                    
                     tableBody.innerHTML = '';
                     
-                    data.regattas.forEach(regatta => {
+                    futureRegattas.forEach(regatta => {
                         // Parse date string directly to avoid timezone issues
                         // regatta_date is in format YYYY-MM-DD
                         let formattedDate = regatta.regatta_date;
@@ -927,11 +948,21 @@
                     });
 
                     // Update count display
-                    regattaCount.textContent = `Showing ${data.count} of ${data.total} regattas`;
+                    const totalFuture = futureRegattas.length;
+                    const totalPast = data.regattas.length - totalFuture;
+                    regattaCount.textContent = `Showing ${totalFuture} upcoming regattas (${totalPast} past regattas hidden)`;
                     regattaCount.style.display = 'block';
 
                     tableLoading.style.display = 'none';
                     table.style.display = 'table';
+                    
+                    // If no future regattas after filtering, show message
+                    if (futureRegattas.length === 0) {
+                        tableLoading.innerHTML = '<p style="text-align: center; color: #cccccc;">No upcoming regattas found. All regattas are in the past.</p>';
+                        table.style.display = 'none';
+                        regattaCount.textContent = '0 upcoming regattas';
+                        regattaCount.style.display = 'block';
+                    }
                 } else {
                     tableLoading.innerHTML = '<p style="text-align: center; color: #cccccc;">No regattas found matching your filters.</p>';
                     regattaCount.textContent = '0 regattas found';

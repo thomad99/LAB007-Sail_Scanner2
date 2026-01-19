@@ -3391,13 +3391,21 @@ async function scrapeClubspot() {
 // Search regattas endpoint
 app.get('/api/search-regattas', async (req, res) => {
   try {
-    const { date, location, name, latitude, longitude, radius } = req.query;
+    const { date, startDate, endDate, location, name, latitude, longitude, radius, locationName } = req.query;
     
     let query = 'SELECT * FROM regattas WHERE 1=1';
     const params = [];
     let paramCount = 0;
     
-    if (date) {
+    // Support date range (startDate and endDate) or single date
+    if (startDate && endDate) {
+      paramCount++;
+      query += ` AND regatta_date >= $${paramCount}`;
+      params.push(startDate);
+      paramCount++;
+      query += ` AND regatta_date <= $${paramCount}`;
+      params.push(endDate);
+    } else if (date) {
       paramCount++;
       query += ` AND regatta_date = $${paramCount}`;
       params.push(date);
@@ -3415,7 +3423,20 @@ app.get('/api/search-regattas', async (req, res) => {
       params.push(`%${name}%`);
     }
     
-    if (location) {
+    // If locationName is provided (from reverse geocoding), try to match against regatta locations
+    // This helps find regattas near the user's detected location
+    if (locationName) {
+      // Extract city name from locationName (format: "City, State")
+      const cityName = locationName.split(',')[0].trim();
+      paramCount++;
+      const cityParam = paramCount;
+      paramCount++;
+      const fullLocationParam = paramCount;
+      // Match if location contains the city name or the full location name
+      query += ` AND (location ILIKE $${cityParam} OR location ILIKE $${fullLocationParam})`;
+      params.push(`%${cityName}%`);
+      params.push(`%${locationName}%`);
+    } else if (location) {
       paramCount++;
       query += ` AND location ILIKE $${paramCount}`;
       params.push(`%${location}%`);
