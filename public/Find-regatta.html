@@ -54,6 +54,16 @@
             font-weight: bold;
         }
 
+        .any-date-toggle {
+            margin-top: 8px;
+            font-size: 0.9em;
+            color: #cccccc;
+        }
+
+        .any-date-toggle input[type="checkbox"] {
+            margin-right: 5px;
+        }
+
         .form-group input,
         .form-group select {
             padding: 10px;
@@ -342,6 +352,12 @@
             <div class="form-group">
                 <label for="dateInput">Date:</label>
                 <input type="date" id="dateInput" name="date">
+                <div class="any-date-toggle">
+                    <label>
+                        <input type="checkbox" id="anyDateCheckbox">
+                        Any date
+                    </label>
+                </div>
             </div>
 
             <div class="form-group">
@@ -532,11 +548,34 @@
         window.addEventListener('DOMContentLoaded', async () => {
             // Set today's date as default
             const today = new Date().toISOString().split('T')[0];
-            document.getElementById('dateInput').value = today;
+            const dateInput = document.getElementById('dateInput');
+            const anyDateCheckbox = document.getElementById('anyDateCheckbox');
+
+            if (dateInput) {
+                dateInput.value = today;
+            }
 
             // Setup autocomplete for location and name inputs
             setupAutocomplete('locationInput', 'locationAutocomplete', 'location');
             setupAutocomplete('nameInput', 'nameAutocomplete', 'name');
+
+            // Setup Any date toggle
+            if (anyDateCheckbox && dateInput) {
+                anyDateCheckbox.addEventListener('change', (e) => {
+                    const checked = e.target.checked;
+                    if (checked) {
+                        // Disable and clear date when Any date is selected
+                        dateInput.disabled = true;
+                        dateInput.value = '';
+                    } else {
+                        // Re-enable date and default to today if empty
+                        dateInput.disabled = false;
+                        if (!dateInput.value) {
+                            dateInput.value = today;
+                        }
+                    }
+                });
+            }
 
             // Try to get user's location
             if (navigator.geolocation) {
@@ -587,6 +626,8 @@
 
             try {
                 const date = document.getElementById('dateInput').value;
+                const anyDateCheckbox = document.getElementById('anyDateCheckbox');
+                const anyDate = anyDateCheckbox && anyDateCheckbox.checked;
                 const name = document.getElementById('nameInput').value.trim();
                 const location = document.getElementById('locationInput').value.trim();
 
@@ -602,7 +643,8 @@
                     const endDate = threeDaysLater.toISOString().split('T')[0];
                     
                     url += `startDate=${startDate}&endDate=${endDate}`;
-                } else if (date) {
+                } else if (!anyDate && date) {
+                    // Only apply specific date filter when Any date is not selected
                     url += `date=${date}`;
                 }
                 
