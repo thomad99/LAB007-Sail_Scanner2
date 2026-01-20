@@ -62,6 +62,7 @@ async function ensureRegattasTable() {
                 location TEXT,
                 event_website_url TEXT,
                 registrants_url TEXT,
+                registrant_count INTEGER,
                 source TEXT NOT NULL,
                 source_id TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -73,6 +74,7 @@ async function ensureRegattasTable() {
         await pool.query(`CREATE INDEX IF NOT EXISTS idx_regattas_date ON regattas(regatta_date);`);
         await pool.query(`CREATE INDEX IF NOT EXISTS idx_regattas_name ON regattas(regatta_name);`);
         await pool.query(`CREATE INDEX IF NOT EXISTS idx_regattas_location ON regattas(location);`);
+        await pool.query(`ALTER TABLE regattas ADD COLUMN IF NOT EXISTS registrant_count INTEGER;`);
         
         await pool.query(`
             CREATE TABLE IF NOT EXISTS scrape_log (
@@ -185,14 +187,62 @@ async function scrapeRegattaNetwork() {
         let added = 0;
         for (const regatta of regattas) {
             try {
+                // Try to compute registrant count for Regatta Network events when we have a registrants URL
+                let registrantCount = null;
+                if (regatta.source === 'regattanetwork' && (regatta.registrants_url || regatta.event_website_url)) {
+                    try {
+                        // Prefer explicit registrants_url, otherwise construct from event_website_url
+                        let registrantsUrl = regatta.registrants_url;
+                        if (!registrantsUrl && regatta.event_website_url && regatta.event_website_url.includes('regattanetwork.com/event')) {
+                            const baseUrl = regatta.event_website_url.split('#')[0];
+                            registrantsUrl = `${baseUrl}#_registration+current`;
+                            regatta.registrants_url = registrantsUrl;
+                        }
+                        
+                        if (registrantsUrl) {
+                            const registrantsResponse = await axios.get(registrantsUrl, {
+                                headers: {
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                                },
+                                timeout: 20000
+                            });
+                            const $r = cheerio.load(registrantsResponse.data);
+                            
+                            // Heuristic: count data rows in tables on the page (excluding header rows)
+                            let count = 0;
+                            $r('table').each((i, table) => {
+                                const $table = $r(table);
+                                const headerRows = $table.find('thead tr').length;
+                                const bodyRows = $table.find('tbody tr').length;
+                                if (bodyRows > 0) {
+                                    count = Math.max(count, bodyRows);
+                                } else {
+                                    // Fallback: count all tr that have data cells
+                                    const dataRows = $table.find('tr').filter((idx, row) => {
+                                        return $r(row).find('td').length > 1;
+                                    }).length;
+                                    count = Math.max(count, dataRows);
+                                }
+                            });
+                            
+                            if (count > 0) {
+                                registrantCount = count;
+                            }
+                        }
+                    } catch (registrantError) {
+                        console.error('Error fetching registrant count:', registrantError.message);
+                    }
+                }
+                
                 await pool.query(`
-                    INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, source, source_id)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                     ON CONFLICT (regatta_name, regatta_date, source) 
                     DO UPDATE SET 
                         location = EXCLUDED.location,
                         event_website_url = EXCLUDED.event_website_url,
                         registrants_url = EXCLUDED.registrants_url,
+                        registrant_count = COALESCE(EXCLUDED.registrant_count, regattas.registrant_count),
                         source_id = EXCLUDED.source_id,
                         last_updated = CURRENT_TIMESTAMP
                 `, [
@@ -201,6 +251,7 @@ async function scrapeRegattaNetwork() {
                     regatta.location,
                     regatta.event_website_url,
                     regatta.registrants_url,
+                    registrantCount,
                     regatta.source,
                     regatta.source_id
                 ]);
@@ -671,13 +722,14 @@ async function scrapeClubspot() {
                 const sourceId = `${regatta.regatta_date}-${regatta.regatta_name.replace(/\s+/g, '-').toLowerCase().substring(0, 100)}`;
                 
                 await pool.query(`
-                    INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, source, source_id)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                     ON CONFLICT (regatta_name, regatta_date, source) 
                     DO UPDATE SET 
                         location = EXCLUDED.location,
                         event_website_url = EXCLUDED.event_website_url,
                         registrants_url = EXCLUDED.registrants_url,
+                        registrant_count = COALESCE(EXCLUDED.registrant_count, regattas.registrant_count),
                         source_id = EXCLUDED.source_id,
                         last_updated = CURRENT_TIMESTAMP
                 `, [
@@ -685,6 +737,7 @@ async function scrapeClubspot() {
                     regatta.regatta_name,
                     regatta.location,
                     regatta.event_website_url,
+                    null,
                     null,
                     'clubspot',
                     sourceId

@@ -1984,6 +1984,7 @@ async function createRegattasTable() {
                 location TEXT,
                 event_website_url TEXT,
                 registrants_url TEXT,
+                registrant_count INTEGER,
                 source TEXT NOT NULL,
                 source_id TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -2002,17 +2003,7 @@ async function createRegattasTable() {
         await pool.query(`
             CREATE INDEX IF NOT EXISTS idx_regattas_location ON regattas(location);
         `);
-        
-        // Create scrape_log table to track scraping history
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS scrape_log (
-                id SERIAL PRIMARY KEY,
-                source TEXT NOT NULL,
-                regattas_found INTEGER DEFAULT 0,
-                regattas_added INTEGER DEFAULT 0,
-                scrape_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
+        await pool.query(`ALTER TABLE regattas ADD COLUMN IF NOT EXISTS registrant_count INTEGER;`);
         
         console.log('Regattas table created or verified');
     } catch (err) {
@@ -3067,13 +3058,14 @@ async function scrapeRegattaNetwork() {
     for (const regatta of regattas) {
       try {
         await pool.query(`
-          INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, source, source_id)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           ON CONFLICT (regatta_name, regatta_date, source) 
           DO UPDATE SET 
             location = EXCLUDED.location,
             event_website_url = EXCLUDED.event_website_url,
             registrants_url = EXCLUDED.registrants_url,
+            registrant_count = COALESCE(EXCLUDED.registrant_count, regattas.registrant_count),
             source_id = EXCLUDED.source_id,
             last_updated = CURRENT_TIMESTAMP
         `, [
@@ -3082,6 +3074,7 @@ async function scrapeRegattaNetwork() {
           regatta.location,
           regatta.event_website_url,
           regatta.registrants_url,
+          null,
           regatta.source,
           regatta.source_id
         ]);
@@ -3319,13 +3312,14 @@ async function scrapeClubspot() {
         const sourceId = `${regatta.regatta_date}-${regatta.regatta_name.replace(/\s+/g, '-').toLowerCase().substring(0, 100)}`;
         
         await pool.query(`
-          INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, source, source_id)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           ON CONFLICT (regatta_name, regatta_date, source) 
           DO UPDATE SET 
             location = EXCLUDED.location,
             event_website_url = EXCLUDED.event_website_url,
             registrants_url = EXCLUDED.registrants_url,
+            registrant_count = COALESCE(EXCLUDED.registrant_count, regattas.registrant_count),
             source_id = EXCLUDED.source_id,
             last_updated = CURRENT_TIMESTAMP
         `, [
@@ -3334,6 +3328,7 @@ async function scrapeClubspot() {
           regatta.location,
           regatta.event_website_url,
           null, // registrants_url
+          null, // registrant_count
           'clubspot',
           sourceId
         ]);
@@ -3409,12 +3404,6 @@ app.get('/api/search-regattas', async (req, res) => {
       paramCount++;
       query += ` AND regatta_date = $${paramCount}`;
       params.push(date);
-    } else {
-      // Default to today if no date specified
-      const today = new Date().toISOString().split('T')[0];
-      paramCount++;
-      query += ` AND regatta_date >= $${paramCount}`;
-      params.push(today);
     }
     
     if (name) {
@@ -3643,7 +3632,7 @@ app.get('/api/all-regattas', async (req, res) => {
     params.push(parseInt(offset));
     
     const result = await pool.query(`
-      SELECT regatta_date, regatta_name, location, event_website_url, registrants_url, source
+      SELECT regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source
       FROM regattas
       ${whereClause}
       ORDER BY ${orderByColumn} ${orderDirection}

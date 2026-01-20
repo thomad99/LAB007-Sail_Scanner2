@@ -21,8 +21,8 @@
 
         .logo {
             margin-top: 20px;
-            max-width: 500px;
-            width: 80%;
+            max-width: 250px;
+            width: 40%;
         }
 
         .content {
@@ -152,23 +152,17 @@
         }
 
         .location-status {
-            padding: 20px;
-            background-color: rgba(0, 255, 0, 0.2);
+            padding: 10px;
+            background-color: rgba(0, 255, 0, 0.15);
             border-radius: 5px;
             margin-bottom: 10px;
             display: none;
-            font-size: 1.1em;
-            line-height: 1.6;
+            font-size: 0.9em;
+            line-height: 1.4;
         }
 
         .location-status.active {
             display: block;
-        }
-
-        .location-status .pin-icon {
-            font-size: 1.8em;
-            vertical-align: middle;
-            margin-right: 8px;
         }
 
         .results {
@@ -325,7 +319,7 @@
 
             .logo {
                 margin-top: 20px;
-                max-width: 80%;
+                max-width: 40%;
             }
 
             .content {
@@ -590,9 +584,9 @@
                         // Get location name from coordinates
                         detectedLocationName = await getLocationName(userLatitude, userLongitude);
                         if (detectedLocationName) {
-                            locationStatus.innerHTML = `<span class="pin-icon">📍</span> Location detected as ${detectedLocationName}`;
+                            locationStatus.textContent = `Location detected as ${detectedLocationName}`;
                         } else {
-                            locationStatus.innerHTML = `<span class="pin-icon">📍</span> Location detected`;
+                            locationStatus.textContent = 'Location detected';
                         }
                         
                         // Auto-search with location and next 3 days date range
@@ -697,12 +691,18 @@
                         if (regatta.location) {
                             html += `<div class="location">📍 ${regatta.location}</div>`;
                         }
+                        if (typeof regatta.registrant_count === 'number') {
+                            html += `<div class="location">👥 Entrants: ${regatta.registrant_count}</div>`;
+                        }
                         html += `<div class="links">`;
                         if (regatta.event_website_url) {
                             html += `<a href="${regatta.event_website_url}" target="_blank">Event Website</a>`;
                         }
                         if (regatta.registrants_url) {
-                            html += `<a href="${regatta.registrants_url}" target="_blank">View Registrants</a>`;
+                            const registrantLabel = typeof regatta.registrant_count === 'number'
+                                ? `View Registrants (${regatta.registrant_count})`
+                                : 'View Registrants';
+                            html += `<a href="${regatta.registrants_url}" target="_blank">${registrantLabel}</a>`;
                         }
                         html += `</div>`;
                         html += `</div>`;

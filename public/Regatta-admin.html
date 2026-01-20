@@ -698,7 +698,8 @@
                                     <button class="sort-button" onclick="sortTable('source')" data-column="source" data-order="ASC">↑↓</button>
                                 </div>
                             </th>
-                            <th>Link</th>
+                            <th>Entrants</th>
+                            <th>Links</th>
                         </tr>
                     </thead>
                     <tbody id="regattaTableBody">
@@ -918,28 +919,43 @@
                         // Source
                         const sourceCell = document.createElement('td');
                         sourceCell.className = 'location';
-                        sourceCell.textContent = regatta.source.charAt(0).toUpperCase() + regatta.source.slice(1);
+                        sourceCell.textContent = regatta.source ? (regatta.source.charAt(0).toUpperCase() + regatta.source.slice(1)) : 'N/A';
                         row.appendChild(sourceCell);
 
-                        // Link
+                        // Entrants
+                        const entrantsCell = document.createElement('td');
+                        entrantsCell.className = 'entrants';
+                        if (typeof regatta.registrant_count === 'number') {
+                            entrantsCell.textContent = regatta.registrant_count;
+                        } else {
+                            entrantsCell.textContent = '—';
+                        }
+                        row.appendChild(entrantsCell);
+
+                        // Links
                         const linkCell = document.createElement('td');
                         linkCell.className = 'link';
                         if (regatta.event_website_url) {
-                            const link = document.createElement('a');
-                            link.href = regatta.event_website_url;
-                            link.target = '_blank';
-                            link.textContent = 'View Event';
-                            linkCell.appendChild(link);
-                        } else if (regatta.registrants_url) {
-                            const link = document.createElement('a');
-                            link.href = regatta.registrants_url;
-                            link.target = '_blank';
-                            link.textContent = 'View Registrants';
-                            linkCell.appendChild(link);
-                        } else {
+                            const eventLink = document.createElement('a');
+                            eventLink.href = regatta.event_website_url;
+                            eventLink.target = '_blank';
+                            eventLink.textContent = 'Event';
+                            eventLink.style.marginRight = '6px';
+                            linkCell.appendChild(eventLink);
+                        }
+                        if (regatta.registrants_url) {
+                            const registrantsLink = document.createElement('a');
+                            registrantsLink.href = regatta.registrants_url;
+                            registrantsLink.target = '_blank';
+                            registrantsLink.textContent = regatta.registrant_count != null 
+                                ? `Registrants (${regatta.registrant_count})` 
+                                : 'Registrants';
+                            linkCell.appendChild(registrantsLink);
+                        }
+                        if (!regatta.event_website_url && !regatta.registrants_url) {
                             const noLink = document.createElement('span');
                             noLink.className = 'no-link';
-                            noLink.textContent = 'No link';
+                            noLink.textContent = 'No links';
                             linkCell.appendChild(noLink);
                         }
                         row.appendChild(linkCell);
