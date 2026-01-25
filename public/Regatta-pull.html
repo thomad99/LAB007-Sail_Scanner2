@@ -238,7 +238,7 @@
 
     <div class="content">
         <h1>Regatta Scraper</h1>
-        <p>Scrape regatta data from Regatta Network and Clubspot</p>
+        <p>Scrape regatta data from Regatta Network, Clubspot, and High School Sailing</p>
 
         <div class="source-select">
             <label for="sourceSelect">Select Source:</label>
@@ -246,6 +246,7 @@
                 <option value="all">All Sources</option>
                 <option value="regattanetwork">Regatta Network Only</option>
                 <option value="clubspot">Clubspot Only</option>
+                <option value="hssailing">High School Sailing Only</option>
             </select>
         </div>
 
@@ -334,6 +335,12 @@
                     if (data.results.clubspot) {
                         html += `<div class="results-item">`;
                         html += `<strong>Clubspot:</strong> Found ${data.results.clubspot.found}, Added ${data.results.clubspot.added}`;
+                        html += `</div>`;
+                    }
+
+                    if (data.results.hssailing) {
+                        html += `<div class="results-item">`;
+                        html += `<strong>High School Sailing:</strong> Found ${data.results.hssailing.found}, Added ${data.results.hssailing.added}`;
                         html += `</div>`;
                     }
 

@@ -618,7 +618,7 @@
 
         <div class="scrape-section">
             <h2>Scrape Regattas</h2>
-            <p>Pull the latest regatta data from Regatta Network and Clubspot</p>
+            <p>Pull the latest regatta data from Regatta Network, Clubspot, and High School Sailing</p>
             
             <div class="scrape-source-select">
                 <label for="scrapeSourceSelect">Select Source:</label>
@@ -626,6 +626,7 @@
                     <option value="all">All Sources</option>
                     <option value="regattanetwork">Regatta Network Only</option>
                     <option value="clubspot">Clubspot Only</option>
+                    <option value="hssailing">High School Sailing Only</option>
                 </select>
             </div>
 
@@ -661,6 +662,7 @@
                             <option value="">All Sources</option>
                             <option value="regattanetwork">Regatta Network</option>
                             <option value="clubspot">Clubspot</option>
+                            <option value="hssailing">High School Sailing</option>
                         </select>
                     </div>
                     <div class="filter-actions">
@@ -1134,7 +1136,8 @@
                         <strong>Scraping Complete!</strong><br>
                         Found ${data.totalFound} regattas, added ${data.totalAdded} new ones.<br>
                         ${data.results.regattanetwork ? `Regatta Network: Found ${data.results.regattanetwork.found}, Added ${data.results.regattanetwork.added}<br>` : ''}
-                        ${data.results.clubspot ? `Clubspot: Found ${data.results.clubspot.found}, Added ${data.results.clubspot.added}` : ''}
+                            ${data.results.clubspot ? `Clubspot: Found ${data.results.clubspot.found}, Added ${data.results.clubspot.added}<br>` : ''}
+                            ${data.results.hssailing ? `High School Sailing: Found ${data.results.hssailing.found}, Added ${data.results.hssailing.added}` : ''}
                     `;
                     
                     // Reload stats and table after scraping

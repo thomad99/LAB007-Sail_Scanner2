@@ -92,6 +92,117 @@ async function ensureRegattasTable() {
     }
 }
 
+function normalizeText(text) {
+    return text ? text.replace(/\s+/g, ' ').trim() : '';
+}
+
+function parseHSSailingDate(dateText, fallbackYear, fallbackMonth) {
+    const months = {
+        jan: '01', feb: '02', mar: '03', apr: '04',
+        may: '05', jun: '06', jul: '07', aug: '08',
+        sep: '09', sept: '09', oct: '10', nov: '11', dec: '12'
+    };
+
+    const normalized = normalizeText(dateText);
+    if (!normalized) return null;
+
+    // e.g. "Jan 3-4", "Sep 6-25 Sat-Sat"
+    const monthDayMatch = normalized.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+(\d{1,2})/i);
+    if (monthDayMatch) {
+        const month = months[monthDayMatch[1].toLowerCase().slice(0, 4)];
+        const day = monthDayMatch[2].padStart(2, '0');
+        const year = fallbackYear || new Date().getFullYear();
+        if (month && day && year) {
+            return `${year}-${month}-${day}`;
+        }
+    }
+
+    // If month name missing, try using month from the current header row
+    if (fallbackMonth) {
+        const dayOnlyMatch = normalized.match(/(\d{1,2})/);
+        const month = months[fallbackMonth.toLowerCase().slice(0, 4)];
+        if (dayOnlyMatch && month) {
+            const day = dayOnlyMatch[1].padStart(2, '0');
+            const year = fallbackYear || new Date().getFullYear();
+            return `${year}-${month}-${day}`;
+        }
+    }
+
+    // Numeric formats like YYYY-MM-DD or MM/DD/YYYY
+    const isoMatch = normalized.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (isoMatch) {
+        return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
+    }
+
+    const slashMatch = normalized.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (slashMatch) {
+        return `${slashMatch[3]}-${slashMatch[1].padStart(2, '0')}-${slashMatch[2].padStart(2, '0')}`;
+    }
+
+    return null;
+}
+
+function parseHighSchoolSailingPage(html, defaultYear) {
+    const $ = cheerio.load(html);
+    const regattas = [];
+    let currentYear = defaultYear || new Date().getFullYear();
+    let currentMonthName = null;
+
+    $('table tr').each((index, row) => {
+        const cells = $(row).find('td, th');
+        if (cells.length === 0) return;
+
+        const headerText = normalizeText(cells.eq(0).text());
+
+        // Month/year header rows (e.g., "January 2026")
+        const monthHeaderMatch = headerText.match(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})/i);
+        if (monthHeaderMatch) {
+            currentMonthName = monthHeaderMatch[1];
+            currentYear = parseInt(monthHeaderMatch[2], 10) || currentYear;
+            return;
+        }
+
+        // Skip column header rows
+        if (headerText.toLowerCase().startsWith('date')) {
+            return;
+        }
+
+        // Expect at least Date + Event + Host + Venue columns
+        if (cells.length < 4) return;
+
+        const dateText = normalizeText(cells.eq(0).text());
+        const eventCell = cells.eq(1);
+        const regattaName = normalizeText(eventCell.text());
+        const venueText = normalizeText(cells.eq(3).text());
+        const hostText = normalizeText(cells.eq(2).text());
+
+        const regattaDate = parseHSSailingDate(dateText, currentYear, currentMonthName);
+        if (!regattaDate || !regattaName || regattaName.length < 3) {
+            return;
+        }
+
+        let eventWebsiteUrl = null;
+        const linkHref = eventCell.find('a').first().attr('href');
+        if (linkHref) {
+            eventWebsiteUrl = linkHref.startsWith('http') ? linkHref : `https://hssailing.org${linkHref}`;
+        }
+
+        // Prefer venue as location, fall back to host if venue is missing
+        const location = venueText || hostText || null;
+        const sourceIdBase = eventWebsiteUrl || regattaName;
+
+        regattas.push({
+            regatta_date: regattaDate,
+            regatta_name: regattaName,
+            location,
+            event_website_url: eventWebsiteUrl,
+            source_id: `${regattaDate}-${sourceIdBase.replace(/\s+/g, '-').toLowerCase().substring(0, 120)}`
+        });
+    });
+
+    return regattas;
+}
+
 // Scrape Regatta Network
 async function scrapeRegattaNetwork() {
     try {
@@ -772,15 +883,113 @@ async function scrapeClubspot() {
     }
 }
 
+async function scrapeHighSchoolSailing() {
+    try {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const seasons = [
+            { start: currentYear - 1, end: currentYear },
+            { start: currentYear - 2, end: currentYear - 1 }
+        ];
+
+        const targetUrls = [];
+        seasons.forEach(season => {
+            targetUrls.push({
+                url: `https://hssailing.org/schedule-results/current/${season.start}/${season.end}`,
+                season
+            });
+            targetUrls.push({
+                url: `https://hssailing.org/schedule-results/${season.start}/${season.end}`,
+                season
+            });
+        });
+
+        const regattas = [];
+        const seen = new Set();
+
+        for (const { url, season } of targetUrls) {
+            try {
+                console.log(`Fetching High School Sailing schedule: ${url}`);
+                const response = await axios.get(url, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    },
+                    timeout: 45000
+                });
+
+                const pageRegattas = parseHighSchoolSailingPage(response.data, season.end);
+                pageRegattas.forEach(regatta => {
+                    const key = `${regatta.regatta_date}-${regatta.regatta_name}`.toLowerCase();
+                    if (!seen.has(key)) {
+                        seen.add(key);
+                        regattas.push(regatta);
+                    }
+                });
+            } catch (err) {
+                console.error(`High School Sailing fetch failed for ${url}:`, err.message);
+            }
+        }
+
+        console.log(`Found ${regattas.length} regattas from High School Sailing`);
+
+        let added = 0;
+        for (const regatta of regattas) {
+            try {
+                const sourceId = regatta.source_id || `${regatta.regatta_date}-${regatta.regatta_name.replace(/\s+/g, '-').toLowerCase().substring(0, 120)}`;
+                await pool.query(`
+                    INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    ON CONFLICT (regatta_name, regatta_date, source) 
+                    DO UPDATE SET 
+                        location = EXCLUDED.location,
+                        event_website_url = EXCLUDED.event_website_url,
+                        registrants_url = EXCLUDED.registrants_url,
+                        registrant_count = COALESCE(EXCLUDED.registrant_count, regattas.registrant_count),
+                        source_id = EXCLUDED.source_id,
+                        last_updated = CURRENT_TIMESTAMP
+                `, [
+                    regatta.regatta_date,
+                    regatta.regatta_name,
+                    regatta.location,
+                    regatta.event_website_url,
+                    null,
+                    null,
+                    'hssailing',
+                    sourceId
+                ]);
+                added++;
+            } catch (err) {
+                if (!err.message.includes('duplicate')) {
+                    console.error('Error inserting High School Sailing regatta:', err);
+                }
+            }
+        }
+
+        await pool.query(`
+            INSERT INTO scrape_log (source, regattas_found, regattas_added)
+            VALUES ('hssailing', $1, $2)
+        `, [regattas.length, added]);
+
+        return { found: regattas.length, added };
+    } catch (error) {
+        console.error('Error scraping High School Sailing:', error);
+        throw error;
+    }
+}
+
 // Scraping endpoint
 app.post('/api/scrape-regattas', async (req, res) => {
     console.log('=== Regatta Scraping Request Received ===');
     
     try {
-        const { source } = req.body; // 'regattanetwork', 'clubspot', or 'all'
+        const { source } = req.body; // 'regattanetwork', 'clubspot', 'hssailing', or 'all'
         let totalFound = 0;
         let totalAdded = 0;
-        const results = { regattanetwork: { found: 0, added: 0 }, clubspot: { found: 0, added: 0 } };
+        const results = { 
+            regattanetwork: { found: 0, added: 0 }, 
+            clubspot: { found: 0, added: 0 },
+            hssailing: { found: 0, added: 0 }
+        };
 
         if (!source || source === 'all' || source === 'regattanetwork') {
             console.log('Scraping Regatta Network...');
@@ -788,6 +997,14 @@ app.post('/api/scrape-regattas', async (req, res) => {
             results.regattanetwork = rnResult;
             totalFound += rnResult.found;
             totalAdded += rnResult.added;
+        }
+
+        if (!source || source === 'all' || source === 'hssailing') {
+            console.log('Scraping High School Sailing...');
+            const hsResult = await scrapeHighSchoolSailing();
+            results.hssailing = hsResult;
+            totalFound += hsResult.found;
+            totalAdded += hsResult.added;
         }
 
         if (!source || source === 'all' || source === 'clubspot') {
