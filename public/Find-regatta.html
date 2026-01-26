@@ -54,16 +54,6 @@
             font-weight: bold;
         }
 
-        .any-date-toggle {
-            margin-top: 8px;
-            font-size: 0.9em;
-            color: #cccccc;
-        }
-
-        .any-date-toggle input[type="checkbox"] {
-            margin-right: 5px;
-        }
-
         .form-group input,
         .form-group select {
             padding: 10px;
@@ -74,6 +64,31 @@
             border: 1px solid rgba(255, 255, 255, 0.3);
             max-width: 400px;
             width: 100%;
+            text-align: left;
+        }
+
+        .form-group.date-group input[type="date"] {
+            text-align: center;
+            min-width: 220px;
+            max-width: 280px;
+            padding: 12px;
+        }
+
+        .date-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .any-date-inline {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.95em;
+            color: #cccccc;
+            white-space: nowrap;
         }
 
         .autocomplete-wrapper {
@@ -330,6 +345,10 @@
             .search-form {
                 padding: 15px;
             }
+
+            .date-row {
+                gap: 10px;
+            }
         }
     </style>
 </head>
@@ -343,11 +362,11 @@
         <div class="location-status" id="locationStatus"></div>
 
         <form class="search-form" onsubmit="searchRegattas(event)">
-            <div class="form-group">
+            <div class="form-group date-group">
                 <label for="dateInput">Date:</label>
-                <input type="date" id="dateInput" name="date">
-                <div class="any-date-toggle">
-                    <label>
+                <div class="date-row">
+                    <input type="date" id="dateInput" name="date">
+                    <label class="any-date-inline">
                         <input type="checkbox" id="anyDateCheckbox">
                         Any date
                     </label>
@@ -402,6 +421,7 @@
         let userLatitude = null;
         let userLongitude = null;
         let detectedLocationName = null;
+        let hasSearched = false;
 
         function toggleMenu() {
             const mobileMenu = document.getElementById('mobileMenu');
@@ -588,11 +608,6 @@
                         } else {
                             locationStatus.textContent = 'Location detected';
                         }
-                        
-                        // Auto-search with location and next 3 days date range
-                        setTimeout(() => {
-                            searchRegattas(new Event('submit'), true); // true = auto-search with location
-                        }, 500);
                     },
                     (error) => {
                         console.log('Location access denied or unavailable');
@@ -615,8 +630,15 @@
             const resultsContent = document.getElementById('resultsContent');
             const resultsHeader = document.getElementById('resultsHeader');
 
+            // Reset results display until we know what to show
+            results.style.display = 'none';
+            resultsHeader.textContent = '';
+            resultsHeader.style.display = 'none';
+            resultsContent.innerHTML = '';
+
             button.disabled = true;
             button.textContent = 'Searching...';
+            hasSearched = true;
 
             try {
                 const date = document.getElementById('dateInput').value;
@@ -662,8 +684,9 @@
                 const data = await response.json();
 
                 if (data.success && data.regattas && data.regattas.length > 0) {
-                    resultsHeader.textContent = `Found ${data.count} regatta(s)`;
                     results.style.display = 'block';
+                    resultsHeader.style.display = 'block';
+                    resultsHeader.textContent = `Found ${data.count} regatta(s)`;
 
                     let html = '';
                     data.regattas.forEach(regatta => {
@@ -709,18 +732,19 @@
                     });
 
                     resultsContent.innerHTML = html;
-                } else {
+                } else if (hasSearched) {
                     results.style.display = 'block';
-                    resultsHeader.textContent = 'No Results';
+                    resultsHeader.style.display = 'none';
                     resultsContent.innerHTML = `
                         <div class="no-results">
-                            <p>Nothing found</p>
+                            <p>No results found. Try adjusting your date or keywords.</p>
                         </div>
                     `;
                 }
             } catch (error) {
                 console.error('Search error:', error);
                 results.style.display = 'block';
+                resultsHeader.style.display = 'block';
                 resultsHeader.textContent = 'Error';
                 resultsContent.innerHTML = `
                     <div class="no-results">
