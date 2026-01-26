@@ -3395,14 +3395,14 @@ app.get('/api/search-regattas', async (req, res) => {
     // Support date range (startDate and endDate) or single date
     if (startDate && endDate) {
       paramCount++;
-      query += ` AND regatta_date >= $${paramCount}`;
+      query += ` AND regatta_date::date >= $${paramCount}`;
       params.push(startDate);
       paramCount++;
-      query += ` AND regatta_date <= $${paramCount}`;
+      query += ` AND regatta_date::date <= $${paramCount}`;
       params.push(endDate);
     } else if (date) {
       paramCount++;
-      query += ` AND regatta_date = $${paramCount}`;
+      query += ` AND regatta_date::date = $${paramCount}`;
       params.push(date);
     }
     
@@ -3431,10 +3431,12 @@ app.get('/api/search-regattas', async (req, res) => {
       params.push(`%${location}%`);
     }
     
-    // If latitude/longitude provided, we'll order by date (location-based distance calculation 
-    // would require geocoding the location strings, which is complex)
-    // For now, just order by date and name
-    query += ' ORDER BY regatta_date ASC, regatta_name ASC';
+    // If a single date is provided, prioritize alphabetical order within that date
+    if (date && !startDate && !endDate) {
+      query += ' ORDER BY regatta_name ASC';
+    } else {
+      query += ' ORDER BY regatta_date ASC, regatta_name ASC';
+    }
     
     query += ' LIMIT 100';
     
