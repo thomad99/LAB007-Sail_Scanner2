@@ -671,8 +671,8 @@
                     url += `&location=${encodeURIComponent(location)}`;
                 }
                 
-                // If we have detected location name from reverse geocoding, use it for better matching
-                if (detectedLocationName && (isAutoSearch || !location)) {
+                // Only apply reverse-geocoded location when auto-searching; avoid narrowing manual searches
+                if (isAutoSearch && detectedLocationName && !location) {
                     url += `&locationName=${encodeURIComponent(detectedLocationName)}`;
                 }
                 
