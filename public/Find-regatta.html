@@ -156,6 +156,42 @@
             margin-top: 10px;
         }
 
+        .inline-button {
+            padding: 10px 14px;
+            font-size: 0.95em;
+            background-color: #0050a8;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .inline-button.secondary {
+            background-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .inline-button:hover:not(:disabled) {
+            background-color: #0074e8;
+        }
+
+        .inline-button.secondary:hover:not(:disabled) {
+            background-color: rgba(255, 255, 255, 0.25);
+        }
+
+        .inline-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .location-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: 8px;
+        }
+
         .search-button:hover:not(:disabled) {
             background-color: #0088ff;
             transform: scale(1.05);
@@ -363,6 +399,18 @@
         <div class="location-status" id="locationStatus"></div>
 
         <form class="search-form" onsubmit="searchRegattas(event)">
+            <div class="form-group">
+                <label for="locationInput">Location:</label>
+                <div class="autocomplete-wrapper">
+                    <input type="text" id="locationInput" name="location" placeholder="City, State" maxlength="40" autocomplete="off">
+                    <div class="autocomplete-dropdown" id="locationAutocomplete"></div>
+                </div>
+                <div class="location-actions">
+                    <button type="button" class="inline-button" id="useLocationButton" onclick="useCurrentLocation()">Use Current Location</button>
+                    <button type="button" class="inline-button secondary" id="clearLocationButton" onclick="clearLocationFilter()">Clear Location</button>
+                </div>
+            </div>
+
             <div class="form-group date-group">
                 <label for="dateInput">Date:</label>
                 <div class="date-row">
@@ -371,14 +419,6 @@
                         <input type="checkbox" id="anyDateCheckbox">
                         Any date
                     </label>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label for="locationInput">Location:</label>
-                <div class="autocomplete-wrapper">
-                    <input type="text" id="locationInput" name="location" placeholder="City, State" maxlength="40" autocomplete="off">
-                    <div class="autocomplete-dropdown" id="locationAutocomplete"></div>
                 </div>
             </div>
 
@@ -422,6 +462,7 @@
         let userLongitude = null;
         let detectedLocationName = null;
         let hasSearched = false;
+        let usingCurrentLocation = false;
 
         function toggleMenu() {
             const mobileMenu = document.getElementById('mobileMenu');
@@ -558,7 +599,7 @@
             });
         }
 
-        // Get user's location on page load
+        // Get user's location only when requested
         window.addEventListener('DOMContentLoaded', async () => {
             // Set today's date as default
             const today = new Date().toISOString().split('T')[0];
@@ -590,37 +631,60 @@
                     }
                 });
             }
-
-            // Try to get user's location
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    async (position) => {
-                        userLatitude = position.coords.latitude;
-                        userLongitude = position.coords.longitude;
-                        
-                        const locationStatus = document.getElementById('locationStatus');
-                        locationStatus.className = 'location-status active';
-                        
-                        // Get location name from coordinates
-                        detectedLocationName = await getLocationName(userLatitude, userLongitude);
-                        if (detectedLocationName) {
-                            locationStatus.textContent = `Location detected as ${detectedLocationName}`;
-                        } else {
-                            locationStatus.textContent = 'Location detected';
-                        }
-                    },
-                    (error) => {
-                        console.log('Location access denied or unavailable');
-                        const locationStatus = document.getElementById('locationStatus');
-                        locationStatus.className = 'location-status active';
-                        locationStatus.style.backgroundColor = 'rgba(255, 255, 0, 0.2)';
-                        locationStatus.textContent = '⚠️ Location not available. You can still search by name or location.';
-                    }
-                );
-            }
         });
 
-        async function searchRegattas(event, isAutoSearch = false) {
+        function clearLocationStatus(message = '') {
+            const locationStatus = document.getElementById('locationStatus');
+            locationStatus.className = message ? 'location-status active' : 'location-status';
+            locationStatus.style.backgroundColor = '';
+            locationStatus.textContent = message;
+        }
+
+        async function useCurrentLocation() {
+            const useBtn = document.getElementById('useLocationButton');
+            useBtn.disabled = true;
+            clearLocationStatus('Detecting location...');
+
+            if (!navigator.geolocation) {
+                clearLocationStatus('Geolocation not supported in this browser.');
+                useBtn.disabled = false;
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    userLatitude = position.coords.latitude;
+                    userLongitude = position.coords.longitude;
+                    usingCurrentLocation = true;
+
+                    detectedLocationName = await getLocationName(userLatitude, userLongitude);
+                    const statusText = detectedLocationName
+                        ? `Using current location: ${detectedLocationName} (within ~20 miles)`
+                        : 'Using current location (within ~20 miles)';
+                    clearLocationStatus(statusText);
+                    useBtn.disabled = false;
+                },
+                (error) => {
+                    console.log('Location access denied or unavailable', error);
+                    clearLocationStatus('⚠️ Location not available. You can still search by name or location.');
+                    usingCurrentLocation = false;
+                    userLatitude = null;
+                    userLongitude = null;
+                    detectedLocationName = null;
+                    useBtn.disabled = false;
+                }
+            );
+        }
+
+        function clearLocationFilter() {
+            usingCurrentLocation = false;
+            userLatitude = null;
+            userLongitude = null;
+            detectedLocationName = null;
+            clearLocationStatus('');
+        }
+
+        async function searchRegattas(event) {
             if (event) {
                 event.preventDefault();
             }
@@ -671,15 +735,15 @@
                     url += `&location=${encodeURIComponent(location)}`;
                 }
                 
-                // Only apply reverse-geocoded location when auto-searching; avoid narrowing manual searches
-                if (isAutoSearch && detectedLocationName && !location) {
+                if (usingCurrentLocation && detectedLocationName) {
                     url += `&locationName=${encodeURIComponent(detectedLocationName)}`;
+                    // radius hint (not used server-side yet but included for clarity)
+                    url += `&radius=20`;
+                } else if (userLatitude && userLongitude) {
+                    // If we somehow have coords but no name, still send coords
+                    url += `&latitude=${userLatitude}&longitude=${userLongitude}&radius=20`;
                 }
                 
-                if (userLatitude && userLongitude) {
-                    url += `&latitude=${userLatitude}&longitude=${userLongitude}`;
-                }
-
                 const response = await fetch(url);
                 const data = await response.json();
 
