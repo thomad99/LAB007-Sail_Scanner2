@@ -188,6 +188,20 @@
             color: #ff8888;
         }
 
+        .debug-output {
+            margin: 12px 0 0;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+            font-size: 0.85em;
+            color: #b8e0ff;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
         .links {
             margin-top: 24px;
             display: flex;
@@ -298,6 +312,16 @@
             <div class="status" id="healthcheckStatus"></div>
         </div>
 
+        <div class="section">
+            <h2>Debug</h2>
+            <p>Table and row count. Check the browser console (F12 → Console) for full response and any errors.</p>
+            <div class="btns">
+                <button type="button" class="btn btn-primary" id="debugBtn">Debug</button>
+                <button type="button" class="btn btn-secondary" id="refreshBtn">Refresh</button>
+            </div>
+            <pre class="debug-output" id="debugOutput">—</pre>
+        </div>
+
         <div class="stats" id="stats">
             <div class="stat-card">
                 <div class="label">Table</div>
@@ -324,6 +348,7 @@
                 <div class="value" id="statDates">—</div>
             </div>
         </div>
+        <p class="status" id="statsHint" style="display:none; margin-top: -12px; margin-bottom: 20px;"></p>
 
         <div class="section">
             <h2>Export filtered data</h2>
@@ -372,7 +397,6 @@
 
         <div class="links">
             <a href="Chatbot.html">Chatbot</a>
-            <a href="SailBot.html">SailBot</a>
             <a href="https://lovesailing-chatbot.onrender.com/chat">ChatBot (Legacy)</a>
             <a href="Find-regatta.html">Find Regatta</a>
             <a href="index.html">Home</a>
@@ -388,7 +412,6 @@
         <a href="SailScan.html">Photo Database</a>
         <a href="Find-regatta.html">Find Regatta</a>
         <a href="Chatbot.html">Chatbot</a>
-        <a href="SailBot.html">SailBot</a>
         <a href="https://lovesailing-chatbot.onrender.com/chat">ChatBot (Legacy)</a>
         <a href="ChatBotAdmin.html">ChatBot Admin</a>
         <a href="Shop.html">Shop</a>
@@ -404,7 +427,11 @@
             try {
                 const r = await fetch('/api/sailbot/stats');
                 const d = await r.json();
-                if (!d.success) return;
+                console.log('[SailBot Admin] Stats response:', d);
+                if (!d.success) {
+                    console.warn('[SailBot Admin] Stats success=false');
+                    return;
+                }
                 document.getElementById('statTable').textContent = d.tableName || '—';
                 document.getElementById('statRecords').textContent = (d.total_records ?? '—').toLocaleString();
                 document.getElementById('statSailors').textContent = (d.total_sailors ?? '—').toLocaleString();
@@ -413,11 +440,49 @@
                 const from = d.earliest_date || '';
                 const to = d.latest_date || '';
                 document.getElementById('statDates').textContent = (from && to) ? (from + ' … ' + to) : (from || to || '—');
+                const hint = document.getElementById('statsHint');
+                if (hint) {
+                    if (d.total_records === 0) {
+                        hint.textContent = '';
+                        hint.innerHTML = 'No data yet. Use <strong>Upload CSV</strong> or <strong>Restore</strong> below to add regatta results. The Chatbot searches this data.';
+                        hint.style.color = '#f0c050';
+                        hint.style.display = 'block';
+                    } else {
+                        hint.style.display = 'none';
+                    }
+                }
             } catch (e) {
-                console.error('Stats load error:', e);
+                console.error('[SailBot Admin] Stats error:', e);
+                const hint = document.getElementById('statsHint');
+                if (hint) {
+                    hint.textContent = 'Could not load stats. Run Healthcheck (database) to verify the connection.';
+                    hint.style.color = '#ff8888';
+                    hint.style.display = 'block';
+                }
             }
         }
+
+        async function runDebug() {
+            const out = document.getElementById('debugOutput');
+            out.textContent = 'Loading…';
+            try {
+                const r = await fetch('/api/sailbot/debug');
+                const d = await r.json();
+                console.log('[SailBot Admin] Debug response:', d);
+                if (!r.ok) {
+                    console.error('[SailBot Admin] Debug HTTP ' + r.status, d);
+                    out.textContent = 'Error ' + r.status + ': ' + (d.error || JSON.stringify(d));
+                    return;
+                }
+                out.textContent = JSON.stringify(d, null, 2);
+            } catch (e) {
+                console.error('[SailBot Admin] Debug error:', e);
+                out.textContent = 'Error: ' + e.message;
+            }
+        }
+
         loadStats();
+        runDebug();
 
         const healthcheckStatus = document.getElementById('healthcheckStatus');
         document.getElementById('healthcheckBtn').addEventListener('click', async () => {
@@ -426,14 +491,17 @@
             try {
                 const r = await fetch('/api/sailbot/healthcheck');
                 const d = await r.json();
+                console.log('[SailBot Admin] Healthcheck response:', d);
                 if (d.success) {
-                    healthcheckStatus.textContent = d.message + ' RegattaNetworkData: ' + (d.regattaNetworkDataTable || '—') + '.';
+                    healthcheckStatus.textContent = d.message + ' Table ' + (d.tableName || 'regattanetworkdata') + ': ' + (d.regattaNetworkDataTable || '—') + '.';
                     healthcheckStatus.className = 'status ok';
                 } else {
+                    console.error('[SailBot Admin] Healthcheck failed:', d);
                     healthcheckStatus.textContent = (d.message || d.error) + (d.error ? ' (' + d.error + ')' : '');
                     healthcheckStatus.className = 'status err';
                 }
             } catch (e) {
+                console.error('[SailBot Admin] Healthcheck error:', e);
                 healthcheckStatus.textContent = 'Healthcheck failed: ' + e.message;
                 healthcheckStatus.className = 'status err';
             }
@@ -444,17 +512,28 @@
             try {
                 const r = await fetch('/api/sailbot/test-openai');
                 const d = await r.json();
+                console.log('[SailBot Admin] Test OpenAI response:', d);
                 if (d.success) {
                     healthcheckStatus.textContent = (d.message || 'OpenAI OK.') + (d.reply ? ' Reply: "' + d.reply + '"' : '');
                     healthcheckStatus.className = 'status ok';
                 } else {
+                    console.error('[SailBot Admin] Test OpenAI failed:', d);
                     healthcheckStatus.textContent = (d.message || d.error) + (d.error ? ' (' + d.error + ')' : '');
                     healthcheckStatus.className = 'status err';
                 }
             } catch (e) {
+                console.error('[SailBot Admin] OpenAI test error:', e);
                 healthcheckStatus.textContent = 'OpenAI test failed: ' + e.message;
                 healthcheckStatus.className = 'status err';
             }
+        });
+
+        document.getElementById('debugBtn').addEventListener('click', async () => {
+            await runDebug();
+        });
+        document.getElementById('refreshBtn').addEventListener('click', async () => {
+            await loadStats();
+            await runDebug();
         });
 
         document.getElementById('backupBtn').addEventListener('click', async () => {
@@ -472,6 +551,7 @@
                 URL.revokeObjectURL(a.href);
                 el.textContent = 'Backup download started.';
             } catch (e) {
+                console.error('[SailBot Admin] Backup error:', e);
                 el.textContent = 'Backup failed: ' + e.message;
                 el.className = 'status err';
             }
@@ -504,6 +584,7 @@
                 URL.revokeObjectURL(a.href);
                 el.textContent = 'Download started.';
             } catch (e) {
+                console.error('[SailBot Admin] Export error:', e);
                 el.textContent = 'Export failed: ' + e.message;
                 el.className = 'status err';
             }
@@ -525,15 +606,19 @@
             try {
                 const r = await fetch('/api/sailbot/restore', { method: 'POST', body: fd });
                 const d = await r.json();
+                console.log('[SailBot Admin] Restore response:', d);
                 if (d.success) {
                     restoreStatus.textContent = 'Restored ' + (d.inserted || 0) + ' rows.';
                     restoreFile.value = '';
                     loadStats();
+                    runDebug();
                 } else {
+                    console.error('[SailBot Admin] Restore failed:', d);
                     restoreStatus.textContent = 'Restore failed: ' + (d.error || 'Unknown error');
                     restoreStatus.className = 'status err';
                 }
             } catch (err) {
+                console.error('[SailBot Admin] Restore error:', err);
                 restoreStatus.textContent = 'Restore failed: ' + err.message;
                 restoreStatus.className = 'status err';
             } finally {
@@ -556,15 +641,19 @@
             try {
                 const r = await fetch('/api/sailbot/upload', { method: 'POST', body: fd });
                 const d = await r.json();
+                console.log('[SailBot Admin] Upload response:', d);
                 if (d.success) {
                     uploadStatus.textContent = 'Uploaded ' + (d.inserted || 0) + ' rows.';
                     uploadFile.value = '';
                     loadStats();
+                    runDebug();
                 } else {
+                    console.error('[SailBot Admin] Upload failed:', d);
                     uploadStatus.textContent = 'Upload failed: ' + (d.error || 'Unknown error');
                     uploadStatus.className = 'status err';
                 }
             } catch (err) {
+                console.error('[SailBot Admin] Upload error:', err);
                 uploadStatus.textContent = 'Upload failed: ' + err.message;
                 uploadStatus.className = 'status err';
             } finally {

@@ -2099,12 +2099,22 @@ async function createRegattasTable() {
 }
 
 // RegattaNetworkData: flattened regatta results for SailBot / ChatBot
-const REGATTA_NETWORK_DATA_TABLE = 'RegattaNetworkData';
+// Use lowercase unquoted name so we hit the same table as other apps (e.g. external chatbot).
+// Override with SAILBOT_TABLE if your data lives in a different table.
+const REGATTA_NETWORK_DATA_TABLE = (() => {
+    const env = process.env.SAILBOT_TABLE;
+    if (env && /^[a-zA-Z0-9_]+$/.test(env)) return env.toLowerCase();
+    return 'regattanetworkdata';
+})();
 
 async function ensureRegattaNetworkDataTable() {
     try {
+        const createTable = !process.env.SAILBOT_TABLE;
+        if (!createTable) {
+            return; // use external table; do not create
+        }
         await pool.query(`
-            CREATE TABLE IF NOT EXISTS "${REGATTA_NETWORK_DATA_TABLE}" (
+            CREATE TABLE IF NOT EXISTS ${REGATTA_NETWORK_DATA_TABLE} (
                 id SERIAL PRIMARY KEY,
                 regatta_name TEXT,
                 regatta_date DATE,
@@ -2119,14 +2129,14 @@ async function ensureRegattaNetworkDataTable() {
                 dataset_id TEXT DEFAULT 'legacy'
             )
         `);
-        await pool.query(`CREATE INDEX IF NOT EXISTS idx_rnd_regatta_date ON "${REGATTA_NETWORK_DATA_TABLE}"(regatta_date);`);
-        await pool.query(`CREATE INDEX IF NOT EXISTS idx_rnd_regatta_name ON "${REGATTA_NETWORK_DATA_TABLE}"(regatta_name);`);
-        await pool.query(`CREATE INDEX IF NOT EXISTS idx_rnd_skipper ON "${REGATTA_NETWORK_DATA_TABLE}"(skipper);`);
-        await pool.query(`CREATE INDEX IF NOT EXISTS idx_rnd_yacht_club ON "${REGATTA_NETWORK_DATA_TABLE}"(yacht_club);`);
-        await pool.query(`ALTER TABLE "${REGATTA_NETWORK_DATA_TABLE}" ADD COLUMN IF NOT EXISTS source_url TEXT;`);
-        console.log('RegattaNetworkData table created or verified');
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_rnd_regatta_date ON ${REGATTA_NETWORK_DATA_TABLE}(regatta_date);`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_rnd_regatta_name ON ${REGATTA_NETWORK_DATA_TABLE}(regatta_name);`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_rnd_skipper ON ${REGATTA_NETWORK_DATA_TABLE}(skipper);`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_rnd_yacht_club ON ${REGATTA_NETWORK_DATA_TABLE}(yacht_club);`);
+        await pool.query(`ALTER TABLE ${REGATTA_NETWORK_DATA_TABLE} ADD COLUMN IF NOT EXISTS source_url TEXT;`);
+        console.log('regattanetworkdata table created or verified');
     } catch (err) {
-        console.error('Error creating RegattaNetworkData table:', err);
+        console.error('Error creating regattanetworkdata table:', err);
     }
 }
 
@@ -2556,7 +2566,7 @@ app.get('/api/sailbot/stats', async (req, res) => {
                 COUNT(DISTINCT yacht_club)::int AS total_clubs,
                 MIN(regatta_date)::text AS earliest_date,
                 MAX(regatta_date)::text AS latest_date
-            FROM "${RND}"
+            FROM ${RND}
         `);
         const row = r.rows[0];
         res.json({
@@ -2581,7 +2591,7 @@ app.get('/api/sailbot/healthcheck', async (req, res) => {
         let tableOk = false;
         try {
             await ensureRegattaNetworkDataTable();
-            await pool.query(`SELECT 1 FROM "${RND}" LIMIT 1`);
+            await pool.query(`SELECT 1 FROM ${RND} LIMIT 1`);
             tableOk = true;
         } catch (tErr) {
             // table may not exist yet or be empty
@@ -2589,6 +2599,7 @@ app.get('/api/sailbot/healthcheck', async (req, res) => {
         res.json({
             success: true,
             database: 'connected',
+            tableName: RND,
             regattaNetworkDataTable: tableOk ? 'ok' : 'empty or missing',
             message: 'Database connection OK.'
         });
@@ -2637,6 +2648,21 @@ app.get('/api/sailbot/test-openai', async (req, res) => {
     }
 });
 
+app.get('/api/sailbot/debug', async (req, res) => {
+    try {
+        await ensureRegattaNetworkDataTable();
+        const r = await pool.query(`SELECT COUNT(*)::int AS n FROM ${RND}`);
+        res.json({
+            success: true,
+            tableUsed: RND,
+            totalRecords: r.rows[0].n
+        });
+    } catch (e) {
+        console.error('SailBot debug error:', e);
+        res.status(500).json({ success: false, error: e.message, tableUsed: RND });
+    }
+});
+
 app.post('/api/sailbot/search', async (req, res) => {
     try {
         const { skipper, boat_name, yacht_club, regatta_name, year } = req.body || {};
@@ -2667,7 +2693,7 @@ app.post('/api/sailbot/search', async (req, res) => {
         params.push(100);
         const q = `
             SELECT id, regatta_name, regatta_date, category, position, sail_number, boat_name, skipper, yacht_club, results, total_points
-            FROM "${RND}" WHERE ${where}
+            FROM ${RND} WHERE ${where}
             ORDER BY regatta_date DESC NULLS LAST, position ASC NULLS LAST
             LIMIT $${n}
         `;
@@ -2701,7 +2727,7 @@ app.get('/api/sailbot/export', async (req, res) => {
             params.push(parseInt(String(year), 10));
         }
         const result = await pool.query(
-            `SELECT * FROM "${RND}" WHERE ${where} ORDER BY regatta_date DESC, id ASC LIMIT 10000`,
+            `SELECT * FROM ${RND} WHERE ${where} ORDER BY regatta_date DESC, id ASC LIMIT 10000`,
             params
         );
         const asCsv = (format || 'csv').toLowerCase() === 'csv';
@@ -2730,7 +2756,7 @@ app.get('/api/sailbot/export', async (req, res) => {
 
 app.get('/api/sailbot/backup', async (req, res) => {
     try {
-        const result = await pool.query(`SELECT * FROM "${RND}" ORDER BY id ASC`);
+        const result = await pool.query(`SELECT * FROM ${RND} ORDER BY id ASC`);
         const cols = result.rows.length ? Object.keys(result.rows[0]) : [];
         const header = cols.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',');
         const lines = [header];
@@ -2759,7 +2785,7 @@ app.post('/api/sailbot/restore', csvUpload.single('file'), async (req, res) => {
         const { replace } = req.body || {};
         const doReplace = replace === 'true' || replace === '1';
         if (doReplace) {
-            await pool.query(`TRUNCATE "${RND}" RESTART IDENTITY`);
+            await pool.query(`TRUNCATE ${RND} RESTART IDENTITY`);
         }
         const { headers, rows } = parseCSVBuffer(req.file.buffer);
         const colMap = {};
@@ -2775,7 +2801,7 @@ app.post('/api/sailbot/restore', csvUpload.single('file'), async (req, res) => {
             const yacht_club = get('yacht_club') || 'Unknown';
             try {
                 await pool.query(`
-                    INSERT INTO "${RND}" (regatta_name, regatta_date, category, position, sail_number, boat_name, skipper, yacht_club, results, total_points, source_url, dataset_id)
+                    INSERT INTO ${RND} (regatta_name, regatta_date, category, position, sail_number, boat_name, skipper, yacht_club, results, total_points, source_url, dataset_id)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                 `, [
                     get('regatta_name') || null,
@@ -2822,7 +2848,7 @@ app.post('/api/sailbot/upload', csvUpload.single('file'), async (req, res) => {
             const yacht_club = get('yacht_club') || 'Unknown';
             try {
                 await pool.query(`
-                    INSERT INTO "${RND}" (regatta_name, regatta_date, category, position, sail_number, boat_name, skipper, yacht_club, results, total_points, source_url, dataset_id)
+                    INSERT INTO ${RND} (regatta_name, regatta_date, category, position, sail_number, boat_name, skipper, yacht_club, results, total_points, source_url, dataset_id)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                 `, [
                     get('regatta_name') || null,
@@ -2878,7 +2904,7 @@ async function runSailbotSearch(criteria) {
     }
     params.push(500);
     const q = `SELECT id, regatta_name, regatta_date, category, position, sail_number, boat_name, skipper, yacht_club, results, total_points
-        FROM "${RND}" WHERE ${where}
+        FROM ${RND} WHERE ${where}
         ORDER BY regatta_date DESC NULLS LAST, position ASC NULLS LAST
         LIMIT $${n + 1}`;
     const result = await pool.query(q, params);
