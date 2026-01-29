@@ -11,49 +11,50 @@
             box-sizing: border-box;
         }
 
+        html,
         body {
+            height: 100%;
             margin: 0;
             padding: 0;
+            overflow: hidden;
+        }
+
+        body {
             background: linear-gradient(180deg, #020053 0%, #0a0a6e 100%);
             color: #1a1a2e;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            min-height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
         }
 
         .logo {
-            margin-top: 16px;
+            flex-shrink: 0;
+            margin-top: 12px;
             max-width: 200px;
             width: 36%;
         }
 
         .chat-container {
             flex: 1;
+            min-height: 0;
             width: 100%;
             max-width: 720px;
             display: flex;
             flex-direction: column;
-            padding: 16px;
-            padding-bottom: 0;
-        }
-
-        .chat-title {
-            text-align: center;
-            color: #e8e8ff;
-            font-size: 1.1em;
-            margin-bottom: 12px;
+            padding: 12px 16px 0;
         }
 
         .chat-pane {
             flex: 1;
+            min-height: 0;
             overflow-y: auto;
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
             background: rgba(200, 220, 255, 0.25);
             border-radius: 12px;
             padding: 20px;
             margin-bottom: 12px;
-            min-height: 320px;
         }
 
         .msg {
@@ -166,14 +167,16 @@
             height: 18px;
         }
 
+        .input-wrap {
+            flex-shrink: 0;
+            width: 100%;
+            padding: 0 0 16px;
+        }
+
         .input-row {
             display: flex;
             gap: 10px;
-            padding: 12px 0 20px;
             width: 100%;
-            max-width: 720px;
-            padding-left: 16px;
-            padding-right: 16px;
         }
 
         .input-row input {
@@ -239,18 +242,17 @@
 
 <body>
     <img src="/Images/LOVE SAILING LOGO.JPEG" alt="Love Sailing" class="logo">
-    <div class="chat-title">LoveSailing.AI ChatBot</div>
     <div class="chat-container">
         <div class="chat-pane" id="chatPane">
-            <div class="msg bot" id="welcome">
-                Welcome to LoveSailing.AI ChatBot, how can I help?
+            <div class="msg bot" id="welcome">Loading…</div>
+        </div>
+        <div class="input-wrap">
+            <div class="input-row">
+                <input type="text" id="input" placeholder="Ask me about sailing competitions..." autocomplete="off">
+                <button type="button" id="sendBtn">Send</button>
             </div>
+            <div class="status" id="status"></div>
         </div>
-        <div class="input-row">
-            <input type="text" id="input" placeholder="Ask me about sailing competitions..." autocomplete="off">
-            <button type="button" id="sendBtn">Send</button>
-        </div>
-        <div class="status" id="status"></div>
     </div>
 
     <script>
@@ -258,6 +260,20 @@
         const input = document.getElementById('input');
         const sendBtn = document.getElementById('sendBtn');
         const status = document.getElementById('status');
+        const welcomeEl = document.getElementById('welcome');
+
+        (async function setWelcome() {
+            try {
+                const r = await fetch('/api/sailbot/stats');
+                const d = await r.json();
+                const n = (d.success && d.total_sailors != null) ? Number(d.total_sailors) : null;
+                welcomeEl.textContent = (n != null && !isNaN(n))
+                    ? 'I have knowledge of ' + n.toLocaleString() + ' sailors. How can I help?'
+                    : 'How can I help?';
+            } catch (_) {
+                welcomeEl.textContent = 'How can I help?';
+            }
+        })();
 
         function addMsg(content, isUser) {
             const div = document.createElement('div');
@@ -274,35 +290,66 @@
         }
 
         function renderResultsCard(data) {
-            const { basicInfo, totalRegattas, topPosition, rows } = data;
+            const rt = data.resultType || 'race_history';
+            const hasList = (data.list && data.list.length);
+            const hasRows = (data.rows && data.rows.length);
             let html = '';
-            if (basicInfo) {
-                html += '<div class="section basic-info"><h3>Basic Info</h3><table><tr><td>Name</td><td>' + escapeHtml(basicInfo.name) + '</td></tr><tr><td>Club</td><td>' + escapeHtml(basicInfo.club) + '</td></tr></table></div>';
-            }
-            html += '<div class="section"><h3>Top Achievements</h3><table class="data"><thead><tr><th>Position</th><th>Regatta Name</th><th>Date</th></tr></thead><tbody>';
-            const topRows = (rows || []).filter(r => r.position != null && /^\d+$/.test(String(r.position).trim())).sort((a, b) => parseInt(a.position, 10) - parseInt(b.position, 10)).slice(0, 5);
-            if (topRows.length) {
-                topRows.forEach(r => {
-                    html += '<tr><td>' + escapeHtml(String(r.position)) + '</td><td>' + escapeHtml(r.regatta_name || '') + '</td><td>' + escapeHtml(r.regatta_date || '') + '</td></tr>';
+
+            if (rt === 'sailors_list' && hasList) {
+                const sub = data.subtitle ? '<h3>' + escapeHtml(data.subtitle) + '</h3>' : '';
+                html += '<div class="section">' + sub + '<table class="data"><thead><tr><th>Name</th><th>Regattas</th></tr></thead><tbody>';
+                data.list.forEach(r => {
+                    html += '<tr><td>' + escapeHtml(r.name || '') + '</td><td>' + escapeHtml(String(r.count ?? '')) + '</td></tr>';
                 });
+                html += '</tbody></table></div>';
+            } else if (rt === 'clubs_list' && hasList) {
+                const sub = data.subtitle ? '<h3>' + escapeHtml(data.subtitle) + '</h3>' : '';
+                const hasCount = data.list.some(r => r.count != null);
+                html += '<div class="section">' + sub + '<table class="data"><thead><tr><th>Club</th>' + (hasCount ? '<th>Count</th>' : '') + '</tr></thead><tbody>';
+                data.list.forEach(r => {
+                    html += '<tr><td>' + escapeHtml(r.name || '') + '</td>' + (hasCount ? '<td>' + escapeHtml(String(r.count ?? '')) + '</td>' : '') + '</tr>';
+                });
+                html += '</tbody></table></div>';
+            } else if (hasRows) {
+                const { basicInfo, totalRegattas, topPosition, rows } = data;
+                if (basicInfo) {
+                    html += '<div class="section basic-info"><h3>Basic Info</h3><table><tr><td>Name</td><td>' + escapeHtml(basicInfo.name) + '</td></tr><tr><td>Club</td><td>' + escapeHtml(basicInfo.club) + '</td></tr></table></div>';
+                }
+                html += '<div class="section"><h3>Top Achievements</h3><table class="data"><thead><tr><th>Position</th><th>Regatta Name</th><th>Date</th></tr></thead><tbody>';
+                const topRows = (rows || []).filter(r => r.position != null && /^\d+$/.test(String(r.position).trim())).sort((a, b) => parseInt(a.position, 10) - parseInt(b.position, 10)).slice(0, 5);
+                if (topRows.length) {
+                    topRows.forEach(r => {
+                        html += '<tr><td>' + escapeHtml(String(r.position)) + '</td><td>' + escapeHtml(r.regatta_name || '') + '</td><td>' + escapeHtml(r.regatta_date || '') + '</td></tr>';
+                    });
+                } else {
+                    html += '<tr><td colspan="3">—</td></tr>';
+                }
+                html += '</tbody></table></div>';
+                html += '<div class="section"><h3>Recent Race History</h3><table class="data"><thead><tr><th>Position</th><th>Regatta Name</th><th>Date</th></tr></thead><tbody>';
+                (rows || []).forEach(r => {
+                    html += '<tr><td>' + escapeHtml(String(r.position ?? '')) + '</td><td>' + escapeHtml(r.regatta_name || '') + '</td><td>' + escapeHtml(r.regatta_date || '') + '</td></tr>';
+                });
+                html += '</tbody></table></div>';
             } else {
-                html += '<tr><td colspan="3">—</td></tr>';
+                return '';
             }
-            html += '</tbody></table></div>';
-            html += '<div class="section"><h3>Recent Race History</h3><table class="data"><thead><tr><th>Position</th><th>Regatta Name</th><th>Date</th></tr></thead><tbody>';
-            (rows || []).forEach(r => {
-                html += '<tr><td>' + escapeHtml(String(r.position ?? '')) + '</td><td>' + escapeHtml(r.regatta_name || '') + '</td><td>' + escapeHtml(r.regatta_date || '') + '</td></tr>';
-            });
-            html += '</tbody></table></div>';
             html += '<button type="button" class="btn-download js-download-results"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>Download Results</button>';
             return html;
         }
 
         function doDownload(data) {
-            if (!data || !data.rows || !data.rows.length) return;
-            const cols = ['position', 'regatta_name', 'regatta_date'];
+            if (!data) return;
+            let cols, rows;
+            if (data.list && data.list.length) {
+                const hasCount = data.list.some(r => r.count != null);
+                cols = hasCount ? ['name', 'count'] : ['name'];
+                rows = data.list.map(r => hasCount ? { name: r.name, count: r.count } : { name: r.name });
+            } else if (data.rows && data.rows.length) {
+                cols = ['position', 'regatta_name', 'regatta_date'];
+                rows = data.rows;
+            } else return;
             const lines = [cols.join(',')];
-            data.rows.forEach(r => {
+            rows.forEach(r => {
                 lines.push(cols.map(c => '"' + String(r[c] ?? '').replace(/"/g, '""') + '"').join(','));
             });
             const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
@@ -326,13 +373,17 @@
             md.className = 'markdown';
             md.innerHTML = simpleMarkdown(reply);
             div.appendChild(md);
-            if (data && data.rows && data.rows.length) {
-                const card = document.createElement('div');
-                card.className = 'results-card';
-                card.innerHTML = renderResultsCard(data);
-                const btn = card.querySelector('.js-download-results');
-                if (btn) btn.addEventListener('click', () => doDownload(data));
-                div.appendChild(card);
+            const showCard = data && ((data.list && data.list.length) || (data.rows && data.rows.length));
+            if (showCard) {
+                const cardHtml = renderResultsCard(data);
+                if (cardHtml) {
+                    const card = document.createElement('div');
+                    card.className = 'results-card';
+                    card.innerHTML = cardHtml;
+                    const btn = card.querySelector('.js-download-results');
+                    if (btn) btn.addEventListener('click', () => doDownload(data));
+                    div.appendChild(card);
+                }
             }
             chatPane.appendChild(div);
             chatPane.scrollTop = chatPane.scrollHeight;

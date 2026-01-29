@@ -2877,9 +2877,27 @@ app.post('/api/sailbot/upload', csvUpload.single('file'), async (req, res) => {
 });
 
 // ---------- Chatbot (OpenAI + SailBot search) ----------
-const CHAT_SYSTEM = `You are a sailing results assistant. Users ask about sailors, boats, clubs, or regattas.
-Extract a JSON object with: "intent" (one of: sailor_search, boat_search, club_search, regatta_search) and exactly one of: "skipper", "boat_name", "yacht_club", "regatta_name". Optional: "year" (integer).
-If the user types a person name (e.g. "Dominic Thomas") with no other context, use intent "sailor_search" and set "skipper" to that name.
+const CHAT_SYSTEM = `You are a sailing results assistant. Users ask about sailors, boats, clubs, regattas, rankings, or regions.
+
+First, interpret and refine the user's question into a clear, specific search (e.g. "top 10 sailors by regatta count" → top_sailors; "sailors who race for Coral Reef YC" → club_sailors with yacht_club).
+
+Then output a JSON object with:
+- "intent": one of sailor_search, boat_search, club_search, regatta_search, club_sailors, top_sailors, top_clubs, clubs_in_region
+- "skipper": person name when searching for a sailor's results
+- "boat_name": when searching by boat
+- "yacht_club": club name when searching by club or "sailors at club X"
+- "regatta_name": when searching by regatta
+- "year": optional integer (e.g. 2024)
+- "region": location/state name for "clubs in X" (e.g. "Florida", "Texas")
+
+Rules:
+- Person name only (e.g. "Dominic Thomas") → intent "sailor_search", "skipper": "Dominic Thomas"
+- "Sailors at [club]" / "who races for [club]" / "[club name]" when meaning list sailors → intent "club_sailors", "yacht_club": "[club]"
+- "Top 10 sailors" / "best sailors" / "most active sailors" → intent "top_sailors"
+- "Top 10 clubs" / "most active clubs" → intent "top_clubs"
+- "Clubs in Florida" / "Florida clubs" → intent "clubs_in_region", "region": "Florida"
+- Use the most specific intent that matches. Prefer club_sailors over club_search when user wants a list of sailors at a club.
+
 Reply with ONLY valid JSON, no markdown or extra text.`;
 
 async function runSailbotSearch(criteria) {
@@ -2911,6 +2929,51 @@ async function runSailbotSearch(criteria) {
     return result.rows;
 }
 
+async function runClubSailors(yachtClub) {
+    if (!yachtClub || !String(yachtClub).trim()) return [];
+    const q = `SELECT skipper, COUNT(*)::int AS regattas
+        FROM ${RND}
+        WHERE yacht_club ILIKE $1 AND skipper IS NOT NULL AND TRIM(skipper) <> ''
+        GROUP BY skipper
+        ORDER BY regattas DESC, skipper ASC
+        LIMIT 200`;
+    const r = await pool.query(q, ['%' + String(yachtClub).trim() + '%']);
+    return r.rows;
+}
+
+async function runTopSailors(limit = 10) {
+    const q = `SELECT skipper, COUNT(*)::int AS regattas
+        FROM ${RND}
+        WHERE skipper IS NOT NULL AND TRIM(skipper) <> ''
+        GROUP BY skipper
+        ORDER BY regattas DESC, skipper ASC
+        LIMIT $1`;
+    const r = await pool.query(q, [limit]);
+    return r.rows;
+}
+
+async function runTopClubs(limit = 10) {
+    const q = `SELECT yacht_club AS club, COUNT(*)::int AS count
+        FROM ${RND}
+        WHERE yacht_club IS NOT NULL AND TRIM(yacht_club) <> ''
+        GROUP BY yacht_club
+        ORDER BY count DESC, yacht_club ASC
+        LIMIT $1`;
+    const r = await pool.query(q, [limit]);
+    return r.rows;
+}
+
+async function runClubsInRegion(region) {
+    if (!region || !String(region).trim()) return [];
+    const q = `SELECT DISTINCT yacht_club AS club
+        FROM ${RND}
+        WHERE yacht_club ILIKE $1 AND yacht_club IS NOT NULL AND TRIM(yacht_club) <> ''
+        ORDER BY yacht_club ASC
+        LIMIT 200`;
+    const r = await pool.query(q, ['%' + String(region).trim() + '%']);
+    return r.rows;
+}
+
 app.post('/api/chat', async (req, res) => {
     try {
         const { message } = req.body || {};
@@ -2937,57 +3000,106 @@ app.post('/api/chat', async (req, res) => {
         } catch (_) {
             return res.status(502).json({ success: false, error: 'Could not parse OpenAI reply as JSON' });
         }
+        const intent = (parsed.intent || '').toLowerCase();
         const criteria = {
             skipper: parsed.skipper,
             boat_name: parsed.boat_name,
             yacht_club: parsed.yacht_club,
             regatta_name: parsed.regatta_name,
-            year: parsed.year
+            year: parsed.year,
+            region: parsed.region
         };
-        const hasAny = [criteria.skipper, criteria.boat_name, criteria.yacht_club, criteria.regatta_name].some(Boolean);
-        if (!hasAny) {
+
+        const hasSearchCriteria = [criteria.skipper, criteria.boat_name, criteria.yacht_club, criteria.regatta_name].some(Boolean);
+        const hasAggregateIntent = ['top_sailors', 'top_clubs'].includes(intent);
+        const hasClubSailors = intent === 'club_sailors' && criteria.yacht_club;
+        const hasClubsInRegion = intent === 'clubs_in_region' && criteria.region;
+
+        if (!hasSearchCriteria && !hasAggregateIntent && !hasClubSailors && !hasClubsInRegion) {
             return res.json({
                 success: true,
-                reply: "I couldn't determine who or what to look up. Try a sailor name (e.g. Dominic Thomas), boat name, club, or regatta.",
+                reply: "I couldn't determine what to look up. Try a sailor name, boat, club, \"sailors at [club]\", \"top 10 sailors\", \"top 10 clubs\", or \"clubs in Florida\".",
                 data: null
             });
         }
-        const rows = await runSailbotSearch(criteria);
-        const seen = new Set();
-        let totalRegattas = 0;
-        for (const r of rows) {
-            const k = `${r.regatta_name}|${r.regatta_date}`;
-            if (!seen.has(k)) { seen.add(k); totalRegattas++; }
-        }
-        let topPosition = null;
-        for (const r of rows) {
-            const p = r.position;
-            if (p != null && /^\d+$/.test(String(p).trim())) {
-                const n = parseInt(String(p).trim(), 10);
-                if (topPosition == null || n < topPosition) topPosition = n;
+
+        let reply = '';
+        let data = null;
+        let resultType = 'race_history';
+
+        if (intent === 'club_sailors') {
+            const rows = await runClubSailors(criteria.yacht_club);
+            const list = rows.map(r => ({ name: r.skipper, count: r.regattas }));
+            resultType = 'sailors_list';
+            reply = list.length
+                ? `Sailors who have raced for **${String(criteria.yacht_club).trim()}** (${list.length}):\n\nSee the table below.`
+                : `I didn't find any sailors for that club. Try a different club name.`;
+            data = list.length ? { resultType, list, subtitle: 'Sailors at ' + String(criteria.yacht_club).trim() } : null;
+        } else if (intent === 'top_sailors') {
+            const rows = await runTopSailors(10);
+            const list = rows.map(r => ({ name: r.skipper, count: r.regattas }));
+            resultType = 'sailors_list';
+            reply = list.length
+                ? `**Top 10 sailors** by number of regattas:\n\nSee the table below.`
+                : "I don't have any data to rank sailors.";
+            data = list.length ? { resultType, list, subtitle: 'Top 10 sailors by regattas' } : null;
+        } else if (intent === 'top_clubs') {
+            const rows = await runTopClubs(10);
+            const list = rows.map(r => ({ name: r.club, count: r.count }));
+            resultType = 'clubs_list';
+            reply = list.length
+                ? `**Top 10 clubs** by activity (race results):\n\nSee the table below.`
+                : "I don't have any data to rank clubs.";
+            data = list.length ? { resultType, list, subtitle: 'Top 10 clubs' } : null;
+        } else if (intent === 'clubs_in_region') {
+            const rows = await runClubsInRegion(criteria.region);
+            const list = rows.map(r => ({ name: r.club }));
+            resultType = 'clubs_list';
+            reply = list.length
+                ? `Clubs in **${String(criteria.region).trim()}** (${list.length}):\n\nSee the table below.`
+                : `I didn't find any clubs matching "${String(criteria.region).trim()}".`;
+            data = list.length ? { resultType, list, subtitle: 'Clubs in ' + String(criteria.region).trim() } : null;
+        } else {
+            const rows = await runSailbotSearch(criteria);
+            const seen = new Set();
+            let totalRegattas = 0;
+            for (const r of rows) {
+                const k = `${r.regatta_name}|${r.regatta_date}`;
+                if (!seen.has(k)) { seen.add(k); totalRegattas++; }
             }
-        }
-        const basicInfo = rows.length ? {
-            name: (parsed.intent === 'sailor_search' ? rows[0].skipper : null) || rows[0].boat_name || rows[0].regatta_name || '—',
-            club: rows[0].yacht_club || '—'
-        } : null;
-        const raceHistory = rows.map(r => ({
-            position: r.position,
-            regatta_name: r.regatta_name,
-            regatta_date: r.regatta_date ? String(r.regatta_date).slice(0, 10) : null
-        }));
-        const reply = rows.length
-            ? `I found the following information:\n\n**Total number of regattas:** ${totalRegattas}\n**Top position:** ${topPosition != null ? topPosition : '—'}\n\nSee the table below for each regatta and result.`
-            : "I didn't find any results for that search. Try a different sailor, boat, club, or regatta.";
-        res.json({
-            success: true,
-            reply,
-            data: rows.length ? {
+            let topPosition = null;
+            for (const r of rows) {
+                const p = r.position;
+                if (p != null && /^\d+$/.test(String(p).trim())) {
+                    const n = parseInt(String(p).trim(), 10);
+                    if (topPosition == null || n < topPosition) topPosition = n;
+                }
+            }
+            const basicInfo = rows.length ? {
+                name: (intent === 'sailor_search' ? rows[0].skipper : null) || rows[0].boat_name || rows[0].regatta_name || '—',
+                club: rows[0].yacht_club || '—'
+            } : null;
+            const raceHistory = rows.map(r => ({
+                position: r.position,
+                regatta_name: r.regatta_name,
+                regatta_date: r.regatta_date ? String(r.regatta_date).slice(0, 10) : null
+            }));
+            reply = rows.length
+                ? `I found the following information:\n\n**Total number of regattas:** ${totalRegattas}\n**Top position:** ${topPosition != null ? topPosition : '—'}\n\nSee the table below for each regatta and result.`
+                : "I didn't find any results for that search. Try a different sailor, boat, club, or regatta.";
+            data = rows.length ? {
+                resultType: 'race_history',
                 basicInfo,
                 totalRegattas,
                 topPosition: topPosition != null ? topPosition : null,
                 rows: raceHistory
-            } : null
+            } : null;
+        }
+
+        res.json({
+            success: true,
+            reply,
+            data
         });
     } catch (e) {
         console.error('Chat API error:', e);
