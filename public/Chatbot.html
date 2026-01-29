@@ -295,7 +295,16 @@
             const hasRows = (data.rows && data.rows.length);
             let html = '';
 
-            if (rt === 'sailors_list' && hasList) {
+            if (rt === 'regatta_summary' && (data.dates || data.sailorCount != null)) {
+                html += '<div class="section basic-info"><h3>Summary</h3><table><tr><td>Dates</td><td>' + escapeHtml((data.dates || []).join(', ') || '—') + '</td></tr><tr><td>Sailors</td><td>' + escapeHtml(String(data.sailorCount ?? '—')) + '</td></tr></table></div>';
+                (data.byClass || []).forEach(function (bc) {
+                    html += '<div class="section"><h3>Class: ' + escapeHtml(bc.class || '—') + '</h3><table class="data"><thead><tr><th>Position</th><th>Sailor</th><th>Club</th></tr></thead><tbody>';
+                    (bc.topSailors || []).forEach(function (s) {
+                        html += '<tr><td>' + escapeHtml(String(s.position ?? '')) + '</td><td>' + escapeHtml(s.skipper || '') + '</td><td>' + escapeHtml(s.yacht_club || '') + '</td></tr>';
+                    });
+                    html += '</tbody></table></div>';
+                });
+            } else if (rt === 'sailors_list' && hasList) {
                 const sub = data.subtitle ? '<h3>' + escapeHtml(data.subtitle) + '</h3>' : '';
                 html += '<div class="section">' + sub + '<table class="data"><thead><tr><th>Name</th><th>Regattas</th></tr></thead><tbody>';
                 data.list.forEach(r => {
@@ -340,7 +349,19 @@
         function doDownload(data) {
             if (!data) return;
             let cols, rows;
-            if (data.list && data.list.length) {
+            if (data.resultType === 'regatta_summary' && (data.byClass?.length || data.dates?.length)) {
+                cols = ['class', 'position', 'skipper', 'yacht_club'];
+                rows = [];
+                (data.byClass || []).forEach(function (bc) {
+                    (bc.topSailors || []).forEach(function (s) {
+                        rows.push({ class: bc.class, position: s.position, skipper: s.skipper, yacht_club: s.yacht_club || '' });
+                    });
+                });
+                if (!rows.length && data.dates?.length) {
+                    cols = ['regatta', 'dates', 'sailor_count'];
+                    rows = [{ regatta: data.regattaName || '', dates: (data.dates || []).join('; '), sailor_count: data.sailorCount ?? '' }];
+                } else if (!rows.length) return;
+            } else if (data.list && data.list.length) {
                 const hasCount = data.list.some(r => r.count != null);
                 cols = hasCount ? ['name', 'count'] : ['name'];
                 rows = data.list.map(r => hasCount ? { name: r.name, count: r.count } : { name: r.name });
@@ -373,7 +394,7 @@
             md.className = 'markdown';
             md.innerHTML = simpleMarkdown(reply);
             div.appendChild(md);
-            const showCard = data && ((data.list && data.list.length) || (data.rows && data.rows.length));
+            const showCard = data && ((data.list && data.list.length) || (data.rows && data.rows.length) || (data.resultType === 'regatta_summary' && (data.dates?.length || data.sailorCount != null || (data.byClass && data.byClass.length))));
             if (showCard) {
                 const cardHtml = renderResultsCard(data);
                 if (cardHtml) {

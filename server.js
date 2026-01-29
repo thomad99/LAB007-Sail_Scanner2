@@ -2891,12 +2891,14 @@ Then output a JSON object with:
 - "region": location/state name for "clubs in X" (e.g. "Florida", "Texas")
 
 Rules:
-- Person name only (e.g. "Dominic Thomas") → intent "sailor_search", "skipper": "Dominic Thomas"
+- If the user's message contains "regatta" (or "the regatta") and any name or phrase → intent "regatta_search", "regatta_name": that phrase. Extract the regatta name (e.g. "Optimist regatta", "Coral Reef", "Natl Champs") and use it as regatta_name. Do NOT treat it as a sailor. Match broadly: even partial names like "Optimist" or "Spring" are fine.
+- Person name only, no "regatta" (e.g. "Dominic Thomas") → intent "sailor_search", "skipper": "Dominic Thomas"
 - "Sailors at [club]" / "who races for [club]" / "[club name]" when meaning list sailors → intent "club_sailors", "yacht_club": "[club]"
 - "Top 10 sailors" / "best sailors" / "most active sailors" → intent "top_sailors"
 - "Top 10 clubs" / "most active clubs" → intent "top_clubs"
 - "Clubs in Florida" / "Florida clubs" → intent "clubs_in_region", "region": "Florida"
 - Use the most specific intent that matches. Prefer club_sailors over club_search when user wants a list of sailors at a club.
+- For regatta_search, always set regatta_name to the best matching phrase from the user (even if vague); we will match flexibly.
 
 Reply with ONLY valid JSON, no markdown or extra text.`;
 
@@ -2974,6 +2976,49 @@ async function runClubsInRegion(region) {
     return r.rows;
 }
 
+/** Regatta summary: dates, sailor count, top 5 sailors per class (by best position). */
+async function runRegattaSummary(regattaName) {
+    if (!regattaName || !String(regattaName).trim()) return null;
+    const q = `SELECT regatta_date, category, position, skipper, yacht_club
+        FROM ${RND}
+        WHERE regatta_name ILIKE $1
+        ORDER BY regatta_date, category, position`;
+    const r = await pool.query(q, ['%' + String(regattaName).trim() + '%']);
+    const rows = r.rows;
+    if (!rows.length) return null;
+
+    const dates = [...new Set(rows.map(x => x.regatta_date ? String(x.regatta_date).slice(0, 10) : null).filter(Boolean))].sort();
+    const sailors = new Set();
+    rows.forEach(x => { if (x.skipper && String(x.skipper).trim()) sailors.add(String(x.skipper).trim()); });
+
+    const byCategory = {};
+    for (const row of rows) {
+        const cat = row.category || 'Unclassified';
+        if (!byCategory[cat]) byCategory[cat] = {};
+        const pos = row.position;
+        if (pos == null || !/^\d+$/.test(String(pos).trim())) continue;
+        const n = parseInt(String(pos).trim(), 10);
+        const sk = (row.skipper || '').trim();
+        if (!sk) continue;
+        if (!byCategory[cat][sk] || byCategory[cat][sk].position > n) {
+            byCategory[cat][sk] = { skipper: sk, position: n, yacht_club: row.yacht_club || null };
+        }
+    }
+    const byClass = [];
+    for (const [cls, map] of Object.entries(byCategory)) {
+        const arr = Object.values(map).sort((a, b) => a.position - b.position);
+        byClass.push({ class: cls, topSailors: arr.slice(0, 5) });
+    }
+    byClass.sort((a, b) => (a.class || '').localeCompare(b.class || ''));
+
+    return {
+        regattaName: String(regattaName).trim(),
+        dates,
+        sailorCount: sailors.size,
+        byClass
+    };
+}
+
 app.post('/api/chat', async (req, res) => {
     try {
         const { message } = req.body || {};
@@ -3014,11 +3059,17 @@ app.post('/api/chat', async (req, res) => {
         const hasAggregateIntent = ['top_sailors', 'top_clubs'].includes(intent);
         const hasClubSailors = intent === 'club_sailors' && criteria.yacht_club;
         const hasClubsInRegion = intent === 'clubs_in_region' && criteria.region;
-
+        if (intent === 'regatta_search' && !criteria.regatta_name) {
+            return res.json({
+                success: true,
+                reply: "Which regatta? Please include the regatta name (e.g. \"Optimist regatta\", \"Spring Champs\"). I'll show dates, sailor count, and top 5 per class.",
+                data: null
+            });
+        }
         if (!hasSearchCriteria && !hasAggregateIntent && !hasClubSailors && !hasClubsInRegion) {
             return res.json({
                 success: true,
-                reply: "I couldn't determine what to look up. Try a sailor name, boat, club, \"sailors at [club]\", \"top 10 sailors\", \"top 10 clubs\", or \"clubs in Florida\".",
+                reply: "I couldn't determine what to look up. Try a sailor name, boat, club, a regatta name (e.g. \"Optimist regatta\"), \"sailors at [club]\", \"top 10 sailors\", \"top 10 clubs\", or \"clubs in Florida\".",
                 data: null
             });
         }
@@ -3059,6 +3110,17 @@ app.post('/api/chat', async (req, res) => {
                 ? `Clubs in **${String(criteria.region).trim()}** (${list.length}):\n\nSee the table below.`
                 : `I didn't find any clubs matching "${String(criteria.region).trim()}".`;
             data = list.length ? { resultType, list, subtitle: 'Clubs in ' + String(criteria.region).trim() } : null;
+        } else if (intent === 'regatta_search' && criteria.regatta_name) {
+            const summary = await runRegattaSummary(criteria.regatta_name);
+            resultType = 'regatta_summary';
+            if (summary) {
+                const dateStr = summary.dates.length ? summary.dates.join(', ') : '—';
+                reply = `**${summary.regattaName}**\n\n**Dates:** ${dateStr}\n**Sailors:** ${summary.sailorCount}\n\nTop 5 sailors per class below.`;
+                data = { resultType: 'regatta_summary', ...summary };
+            } else {
+                reply = `I didn't find a regatta matching "${String(criteria.regatta_name).trim()}". Try a different name or partial match (e.g. "Optimist", "Spring").`;
+                data = null;
+            }
         } else {
             const rows = await runSailbotSearch(criteria);
             const seen = new Set();
