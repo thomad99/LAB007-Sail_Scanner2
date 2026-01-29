@@ -2553,6 +2553,14 @@ async function checkForDuplicate(checksum) {
 
 // ---------- SailBot / RegattaNetworkData API ----------
 const RND = REGATTA_NETWORK_DATA_TABLE;
+/** Exclude SOZNODATA ("sorry no data") placeholder from all results. */
+const SOZNODATA_EXCLUDE = ` AND NOT (
+    UPPER(TRIM(COALESCE(skipper,''))) = 'SOZNODATA' OR
+    UPPER(TRIM(COALESCE(yacht_club,''))) = 'SOZNODATA' OR
+    UPPER(TRIM(COALESCE(regatta_name,''))) = 'SOZNODATA' OR
+    UPPER(TRIM(COALESCE(boat_name,''))) = 'SOZNODATA' OR
+    UPPER(TRIM(COALESCE(category,''))) = 'SOZNODATA'
+)`;
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 
 app.get('/api/sailbot/stats', async (req, res) => {
@@ -2567,6 +2575,7 @@ app.get('/api/sailbot/stats', async (req, res) => {
                 MIN(regatta_date)::text AS earliest_date,
                 MAX(regatta_date)::text AS latest_date
             FROM ${RND}
+            WHERE 1=1${SOZNODATA_EXCLUDE}
         `);
         const row = r.rows[0];
         res.json({
@@ -2651,7 +2660,7 @@ app.get('/api/sailbot/test-openai', async (req, res) => {
 app.get('/api/sailbot/debug', async (req, res) => {
     try {
         await ensureRegattaNetworkDataTable();
-        const r = await pool.query(`SELECT COUNT(*)::int AS n FROM ${RND}`);
+        const r = await pool.query(`SELECT COUNT(*)::int AS n FROM ${RND} WHERE 1=1${SOZNODATA_EXCLUDE}`);
         res.json({
             success: true,
             tableUsed: RND,
@@ -2727,7 +2736,7 @@ app.get('/api/sailbot/export', async (req, res) => {
             params.push(parseInt(String(year), 10));
         }
         const result = await pool.query(
-            `SELECT * FROM ${RND} WHERE ${where} ORDER BY regatta_date DESC, id ASC LIMIT 10000`,
+            `SELECT * FROM ${RND} WHERE ${where}${SOZNODATA_EXCLUDE} ORDER BY regatta_date DESC, id ASC LIMIT 10000`,
             params
         );
         const asCsv = (format || 'csv').toLowerCase() === 'csv';
@@ -2756,7 +2765,7 @@ app.get('/api/sailbot/export', async (req, res) => {
 
 app.get('/api/sailbot/backup', async (req, res) => {
     try {
-        const result = await pool.query(`SELECT * FROM ${RND} ORDER BY id ASC`);
+        const result = await pool.query(`SELECT * FROM ${RND} WHERE 1=1${SOZNODATA_EXCLUDE} ORDER BY id ASC`);
         const cols = result.rows.length ? Object.keys(result.rows[0]) : [];
         const header = cols.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',');
         const lines = [header];
@@ -2924,7 +2933,7 @@ async function runSailbotSearch(criteria) {
     }
     params.push(500);
     const q = `SELECT id, regatta_name, regatta_date, category, position, sail_number, boat_name, skipper, yacht_club, results, total_points
-        FROM ${RND} WHERE ${where}
+        FROM ${RND} WHERE ${where}${SOZNODATA_EXCLUDE}
         ORDER BY regatta_date DESC NULLS LAST, position ASC NULLS LAST
         LIMIT $${n + 1}`;
     const result = await pool.query(q, params);
@@ -2935,7 +2944,7 @@ async function runClubSailors(yachtClub) {
     if (!yachtClub || !String(yachtClub).trim()) return [];
     const q = `SELECT skipper, COUNT(*)::int AS regattas
         FROM ${RND}
-        WHERE yacht_club ILIKE $1 AND skipper IS NOT NULL AND TRIM(skipper) <> ''
+        WHERE yacht_club ILIKE $1 AND skipper IS NOT NULL AND TRIM(skipper) <> ''${SOZNODATA_EXCLUDE}
         GROUP BY skipper
         ORDER BY regattas DESC, skipper ASC
         LIMIT 200`;
@@ -2946,7 +2955,7 @@ async function runClubSailors(yachtClub) {
 async function runTopSailors(limit = 10) {
     const q = `SELECT skipper, COUNT(*)::int AS regattas
         FROM ${RND}
-        WHERE skipper IS NOT NULL AND TRIM(skipper) <> ''
+        WHERE skipper IS NOT NULL AND TRIM(skipper) <> ''${SOZNODATA_EXCLUDE}
         GROUP BY skipper
         ORDER BY regattas DESC, skipper ASC
         LIMIT $1`;
@@ -2957,7 +2966,7 @@ async function runTopSailors(limit = 10) {
 async function runTopClubs(limit = 10) {
     const q = `SELECT yacht_club AS club, COUNT(*)::int AS count
         FROM ${RND}
-        WHERE yacht_club IS NOT NULL AND TRIM(yacht_club) <> ''
+        WHERE yacht_club IS NOT NULL AND TRIM(yacht_club) <> ''${SOZNODATA_EXCLUDE}
         GROUP BY yacht_club
         ORDER BY count DESC, yacht_club ASC
         LIMIT $1`;
@@ -2969,7 +2978,7 @@ async function runClubsInRegion(region) {
     if (!region || !String(region).trim()) return [];
     const q = `SELECT DISTINCT yacht_club AS club
         FROM ${RND}
-        WHERE yacht_club ILIKE $1 AND yacht_club IS NOT NULL AND TRIM(yacht_club) <> ''
+        WHERE yacht_club ILIKE $1 AND yacht_club IS NOT NULL AND TRIM(yacht_club) <> ''${SOZNODATA_EXCLUDE}
         ORDER BY yacht_club ASC
         LIMIT 200`;
     const r = await pool.query(q, ['%' + String(region).trim() + '%']);
@@ -2981,7 +2990,7 @@ async function runRegattaSummary(regattaName) {
     if (!regattaName || !String(regattaName).trim()) return null;
     const q = `SELECT regatta_date, category, position, skipper, yacht_club
         FROM ${RND}
-        WHERE regatta_name ILIKE $1
+        WHERE regatta_name ILIKE $1${SOZNODATA_EXCLUDE}
         ORDER BY regatta_date, category, position`;
     const r = await pool.query(q, ['%' + String(regattaName).trim() + '%']);
     const rows = r.rows;

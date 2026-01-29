@@ -179,7 +179,7 @@
         }
 
         .hamburger-menu {
-            display: none;
+            display: block;
             cursor: pointer;
             position: fixed;
             top: 16px;
@@ -218,10 +218,13 @@
             border-radius: 8px;
             background: rgba(255, 255, 255, 0.1);
             font-size: 1.1em;
+            font-weight: bold;
+            transition: all 0.3s ease;
         }
 
         .mobile-menu a:hover {
-            background: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.25);
+            transform: scale(1.05);
         }
 
         .close-menu {
@@ -234,10 +237,6 @@
         }
 
         @media (max-width: 768px) {
-            .hamburger-menu {
-                display: block;
-            }
-
             .search-form {
                 grid-template-columns: 1fr;
             }
@@ -315,8 +314,10 @@
         <a href="Find-regatta.html">Find Regatta</a>
         <a href="Chatbot.html">Chatbot</a>
         <a href="https://lovesailing-chatbot.onrender.com/chat">ChatBot (Legacy)</a>
+        <a href="SailBot.html">SailBot</a>
         <a href="ChatBotAdmin.html">ChatBot Admin</a>
         <a href="Shop.html">Shop</a>
+        <a href="game.html">GAME</a>
     </div>
 
     <script>
@@ -390,8 +391,11 @@
         });
 
         function escapeHtml(s) {
+            if (s == null) return '';
+            const t = String(s).trim();
+            if (t.toUpperCase() === 'SOZNODATA') return '';
             const d = document.createElement('div');
-            d.textContent = s;
+            d.textContent = t || s;
             return d.innerHTML;
         }
     </script>

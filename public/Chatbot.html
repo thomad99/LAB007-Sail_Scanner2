@@ -38,8 +38,8 @@
         .chat-container {
             flex: 1;
             min-height: 0;
-            width: 100%;
-            max-width: 720px;
+            width: 75%;
+            max-width: 75%;
             display: flex;
             flex-direction: column;
             padding: 12px 16px 0;
@@ -266,12 +266,19 @@
             try {
                 const r = await fetch('/api/sailbot/stats');
                 const d = await r.json();
-                const n = (d.success && d.total_sailors != null) ? Number(d.total_sailors) : null;
-                welcomeEl.textContent = (n != null && !isNaN(n))
-                    ? 'I have knowledge of ' + n.toLocaleString() + ' sailors. How can I help?'
-                    : 'How can I help?';
+                if (!d.success) {
+                    welcomeEl.innerHTML = 'How can I help?';
+                    return;
+                }
+                const sailors = (d.total_sailors != null && !isNaN(Number(d.total_sailors)))
+                    ? Number(d.total_sailors).toLocaleString() : '—';
+                const regattas = (d.total_regattas != null && !isNaN(Number(d.total_regattas)))
+                    ? Number(d.total_regattas).toLocaleString() : '—';
+                const clubs = (d.total_clubs != null && !isNaN(Number(d.total_clubs)))
+                    ? Number(d.total_clubs).toLocaleString() : '—';
+                welcomeEl.innerHTML = 'I have knowledge of<br>' + sailors + ' sailors.<br>' + regattas + ' Regattas<br>' + clubs + ' Sailing Clubs<br><br>How can I help?';
             } catch (_) {
-                welcomeEl.textContent = 'How can I help?';
+                welcomeEl.innerHTML = 'How can I help?';
             }
         })();
 
@@ -382,8 +389,11 @@
         }
 
         function escapeHtml(s) {
+            if (s == null) return '';
+            const t = String(s).trim();
+            if (t.toUpperCase() === 'SOZNODATA') return '';
             const d = document.createElement('div');
-            d.textContent = s;
+            d.textContent = t || s;
             return d.innerHTML;
         }
 
