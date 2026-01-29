@@ -682,7 +682,8 @@
                         </div>
                         <div class="search-row">
                             <label for="regattaName" class="search-label">Regatta Name</label>
-                            <input type="text" id="regattaName" class="search-input" autocomplete="off">
+                            <input type="text" id="regattaName" class="search-input" autocomplete="off" list="regattaNameList">
+                            <datalist id="regattaNameList"></datalist>
                         </div>
                         <div class="search-row">
                             <label for="yachtClub" class="search-label">Yacht Club</label>
@@ -719,7 +720,8 @@
                         </div>
                         <div class="search-row">
                             <label for="location" class="search-label">Location</label>
-                            <input type="text" id="location" class="search-input" autocomplete="off">
+                            <input type="text" id="location" class="search-input" autocomplete="off" list="locationList">
+                            <datalist id="locationList"></datalist>
                         </div>
                         <div class="search-buttons">
                             <button class="search-button" id="searchBtn"
@@ -839,6 +841,9 @@
             } else {
                 console.error('Search button not found!');
             }
+
+            // Load helper dropdowns
+            loadPhotoFilters();
         });
 
         async function loadPhotoCount() {
@@ -853,6 +858,44 @@
             } catch (err) {
                 console.error('Error loading photo count:', err);
                 document.getElementById('photoCount').innerHTML = 'Error loading photo count';
+            }
+        }
+
+        async function loadPhotoFilters() {
+            try {
+                const regattaResp = await fetch('/api/photo-regattas');
+                const regattaData = await regattaResp.json();
+                if (regattaData && regattaData.regattas) {
+                    const dl = document.getElementById('regattaNameList');
+                    if (dl) {
+                        dl.innerHTML = '';
+                        regattaData.regattas.forEach(name => {
+                            const opt = document.createElement('option');
+                            opt.value = name;
+                            dl.appendChild(opt);
+                        });
+                    }
+                }
+            } catch (err) {
+                console.error('Error loading regatta list:', err);
+            }
+
+            try {
+                const locResp = await fetch('/api/photo-locations');
+                const locData = await locResp.json();
+                if (locData && locData.locations) {
+                    const dl = document.getElementById('locationList');
+                    if (dl) {
+                        dl.innerHTML = '';
+                        locData.locations.forEach(loc => {
+                            const opt = document.createElement('option');
+                            opt.value = loc;
+                            dl.appendChild(opt);
+                        });
+                    }
+                }
+            } catch (err) {
+                console.error('Error loading location list:', err);
             }
         }
 

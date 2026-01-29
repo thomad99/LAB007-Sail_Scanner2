@@ -1596,6 +1596,40 @@ app.get('/api/photo-count', async (req, res) => {
     }
 });
 
+// Get distinct regatta names that have photos
+app.get('/api/photo-regattas', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT DISTINCT regatta_name
+            FROM photo_metadata
+            WHERE regatta_name IS NOT NULL AND regatta_name <> ''
+            ORDER BY regatta_name ASC
+        `);
+        const names = result.rows.map(r => r.regatta_name);
+        res.json({ success: true, regattas: names });
+    } catch (err) {
+        console.error('Error fetching photo regattas:', err);
+        res.status(500).json({ success: false, error: 'Error fetching regatta list' });
+    }
+});
+
+// Get distinct locations that have photos
+app.get('/api/photo-locations', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT DISTINCT location
+            FROM photo_metadata
+            WHERE location IS NOT NULL AND location <> ''
+            ORDER BY location ASC
+        `);
+        const locations = result.rows.map(r => r.location);
+        res.json({ success: true, locations });
+    } catch (err) {
+        console.error('Error fetching photo locations:', err);
+        res.status(500).json({ success: false, error: 'Error fetching location list' });
+    }
+});
+
 // Add endpoint to get most recent upload date
 app.get('/api/recent-upload', async (req, res) => {
     try {

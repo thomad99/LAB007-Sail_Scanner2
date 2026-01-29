@@ -83,15 +83,6 @@
             flex-wrap: wrap;
         }
 
-        .any-date-inline {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 0.95em;
-            color: #cccccc;
-            white-space: nowrap;
-        }
-
         .autocomplete-wrapper {
             position: relative;
             max-width: 400px;
@@ -402,30 +393,29 @@
             <div class="form-group">
                 <label for="locationInput">Location:</label>
                 <div class="autocomplete-wrapper">
-                    <input type="text" id="locationInput" name="location" placeholder="City, State" maxlength="40" autocomplete="off">
+                    <input type="text" id="locationInput" name="location" placeholder="City, State" maxlength="40"
+                        autocomplete="off">
                     <div class="autocomplete-dropdown" id="locationAutocomplete"></div>
                 </div>
                 <div class="location-actions">
-                    <button type="button" class="inline-button" id="useLocationButton" onclick="useCurrentLocation()">Use Current Location</button>
-                    <button type="button" class="inline-button secondary" id="clearLocationButton" onclick="clearLocationFilter()">Clear Location</button>
+                    <button type="button" class="inline-button" id="useLocationButton"
+                        onclick="useCurrentLocation()">Use Current Location</button>
                 </div>
             </div>
 
             <div class="form-group date-group">
-                <label for="dateInput">Date:</label>
+                <label for="dateInput">Date <span style="font-weight:normal;opacity:0.85">(leave empty for
+                        any)</span>:</label>
                 <div class="date-row">
-                    <input type="date" id="dateInput" name="date">
-                    <label class="any-date-inline">
-                        <input type="checkbox" id="anyDateCheckbox">
-                        Any date
-                    </label>
+                    <input type="date" id="dateInput" name="date" title="Leave empty to search any date">
                 </div>
             </div>
 
             <div class="form-group">
                 <label for="nameInput">Regatta Name:</label>
                 <div class="autocomplete-wrapper">
-                    <input type="text" id="nameInput" name="name" placeholder="Search by name..." maxlength="40" autocomplete="off">
+                    <input type="text" id="nameInput" name="name" placeholder="Search by name..." maxlength="40"
+                        autocomplete="off">
                     <div class="autocomplete-dropdown" id="nameAutocomplete"></div>
                 </div>
             </div>
@@ -505,8 +495,8 @@
             }
 
             try {
-                const endpoint = type === 'location' 
-                    ? '/api/location-suggestions' 
+                const endpoint = type === 'location'
+                    ? '/api/location-suggestions'
                     : '/api/regatta-name-suggestions';
                 const response = await fetch(`${endpoint}?query=${encodeURIComponent(query)}`);
                 const data = await response.json();
@@ -546,9 +536,9 @@
 
             input.addEventListener('input', async (e) => {
                 const query = e.target.value.trim();
-                
+
                 clearTimeout(autocompleteTimeout);
-                
+
                 if (query.length < 2) {
                     dropdown.classList.remove('active');
                     return;
@@ -562,7 +552,7 @@
 
             input.addEventListener('keydown', (e) => {
                 const items = dropdown.querySelectorAll('.autocomplete-item');
-                
+
                 if (e.key === 'ArrowDown') {
                     e.preventDefault();
                     selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
@@ -599,38 +589,10 @@
             });
         }
 
-        // Get user's location only when requested
         window.addEventListener('DOMContentLoaded', async () => {
-            // Set today's date as default
-            const today = new Date().toISOString().split('T')[0];
-            const dateInput = document.getElementById('dateInput');
-            const anyDateCheckbox = document.getElementById('anyDateCheckbox');
-
-            if (dateInput) {
-                dateInput.value = today;
-            }
-
-            // Setup autocomplete for location and name inputs
+            // Date starts empty = "any date". User can set a date to filter.
             setupAutocomplete('locationInput', 'locationAutocomplete', 'location');
             setupAutocomplete('nameInput', 'nameAutocomplete', 'name');
-
-            // Setup Any date toggle
-            if (anyDateCheckbox && dateInput) {
-                anyDateCheckbox.addEventListener('change', (e) => {
-                    const checked = e.target.checked;
-                    if (checked) {
-                        // Disable and clear date when Any date is selected
-                        dateInput.disabled = true;
-                        dateInput.value = '';
-                    } else {
-                        // Re-enable date and default to today if empty
-                        dateInput.disabled = false;
-                        if (!dateInput.value) {
-                            dateInput.value = today;
-                        }
-                    }
-                });
-            }
         });
 
         function clearLocationStatus(message = '') {
@@ -676,14 +638,6 @@
             );
         }
 
-        function clearLocationFilter() {
-            usingCurrentLocation = false;
-            userLatitude = null;
-            userLongitude = null;
-            detectedLocationName = null;
-            clearLocationStatus('');
-        }
-
         async function searchRegattas(event) {
             if (event) {
                 event.preventDefault();
@@ -706,44 +660,30 @@
 
             try {
                 const date = document.getElementById('dateInput').value;
-                const anyDateCheckbox = document.getElementById('anyDateCheckbox');
-                const anyDate = anyDateCheckbox && anyDateCheckbox.checked;
                 const name = document.getElementById('nameInput').value.trim();
                 const location = document.getElementById('locationInput').value.trim();
 
-                let url = '/api/search-regattas?';
-                
-                // If auto-searching with location, use date range (today to 3 days from now)
-                if (isAutoSearch && userLatitude && userLongitude) {
+                const params = new URLSearchParams();
+                if (typeof isAutoSearch !== 'undefined' && isAutoSearch && userLatitude && userLongitude) {
                     const today = new Date();
                     const threeDaysLater = new Date(today);
                     threeDaysLater.setDate(today.getDate() + 3);
-                    
-                    const startDate = today.toISOString().split('T')[0];
-                    const endDate = threeDaysLater.toISOString().split('T')[0];
-                    
-                    url += `startDate=${startDate}&endDate=${endDate}`;
-                } else if (!anyDate && date) {
-                    // Only apply specific date filter when Any date is not selected
-                    url += `date=${date}`;
+                    params.set('startDate', today.toISOString().split('T')[0]);
+                    params.set('endDate', threeDaysLater.toISOString().split('T')[0]);
+                } else if (date) {
+                    params.set('date', date);
                 }
-                
-                if (name) {
-                    url += `&name=${encodeURIComponent(name)}`;
-                }
-                if (location) {
-                    url += `&location=${encodeURIComponent(location)}`;
-                }
-                
+                if (name) params.set('name', name);
+                if (location) params.set('location', location);
                 if (usingCurrentLocation && detectedLocationName) {
-                    url += `&locationName=${encodeURIComponent(detectedLocationName)}`;
-                    // radius hint (not used server-side yet but included for clarity)
-                    url += `&radius=20`;
+                    params.set('locationName', detectedLocationName);
+                    params.set('radius', '20');
                 } else if (userLatitude && userLongitude) {
-                    // If we somehow have coords but no name, still send coords
-                    url += `&latitude=${userLatitude}&longitude=${userLongitude}&radius=20`;
+                    params.set('latitude', userLatitude);
+                    params.set('longitude', userLongitude);
+                    params.set('radius', '20');
                 }
-                
+                const url = '/api/search-regattas?' + params.toString();
                 const response = await fetch(url);
                 const data = await response.json();
 
@@ -782,14 +722,26 @@
                             html += `<div class="location">👥 Entrants: ${regatta.registrant_count}</div>`;
                         }
                         html += `<div class="links">`;
-                        if (regatta.event_website_url) {
-                            html += `<a href="${regatta.event_website_url}" target="_blank">Event Website</a>`;
-                        }
-                        if (regatta.registrants_url) {
-                            const registrantLabel = typeof regatta.registrant_count === 'number'
-                                ? `View Registrants (${regatta.registrant_count})`
-                                : 'View Registrants';
-                            html += `<a href="${regatta.registrants_url}" target="_blank">${registrantLabel}</a>`;
+                        const rnUrl = regatta.event_website_url || regatta.registrants_url;
+                        const rnId = (regatta.source === 'regattanetwork' && rnUrl)
+                            ? (/\/event\/(\d+)/.exec(rnUrl)?.[1])
+                            : null;
+                        if (rnId) {
+                            const base = `https://www.regattanetwork.com/event/${rnId}`;
+                            html += `<a href="${base}" target="_blank" rel="noopener">Event</a>`;
+                            html += `<a href="${base}#_registration" target="_blank" rel="noopener">Entrants</a>`;
+                            html += `<a href="${base}#_newsroom" target="_blank" rel="noopener">Results</a>`;
+                        } else {
+                            if (regatta.event_website_url) {
+                                html += `<a href="${regatta.event_website_url}" target="_blank" rel="noopener">Event</a>`;
+                            }
+                            if (regatta.registrants_url) {
+                                const isHs = regatta.source === 'hssailing';
+                                const registrantLabel = isHs ? 'Entrants' : (typeof regatta.registrant_count === 'number'
+                                    ? `View Registrants (${regatta.registrant_count})`
+                                    : 'View Registrants');
+                                html += `<a href="${regatta.registrants_url}" target="_blank" rel="noopener">${registrantLabel}</a>`;
+                            }
                         }
                         html += `</div>`;
                         html += `</div>`;
@@ -824,4 +776,3 @@
 </body>
 
 </html>
-

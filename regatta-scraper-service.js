@@ -11,25 +11,25 @@ let playwright = null;
 let playwrightLoadAttempted = false;
 
 function loadPlaywright() {
-  if (playwrightLoadAttempted) {
-    return playwright;
-  }
-  playwrightLoadAttempted = true;
-  
-  const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
-  if (enablePuppeteer) {
-    try {
-      playwright = require('playwright');
-      console.log('✓ Playwright loaded successfully (ENABLE_PUPPETEER=true)');
-    } catch (playwrightError) {
-      console.error('✗ Failed to load Playwright:', playwrightError.message);
-      console.error('Playwright may not be installed. Run: npm install playwright');
-      console.error('Service will start but Clubspot scraping will not work');
+    if (playwrightLoadAttempted) {
+        return playwright;
     }
-  } else {
-    console.log('ℹ Playwright not loaded (ENABLE_PUPPETEER not set to true)');
-  }
-  return playwright;
+    playwrightLoadAttempted = true;
+
+    const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
+    if (enablePuppeteer) {
+        try {
+            playwright = require('playwright');
+            console.log('✓ Playwright loaded successfully (ENABLE_PUPPETEER=true)');
+        } catch (playwrightError) {
+            console.error('✗ Failed to load Playwright:', playwrightError.message);
+            console.error('Playwright may not be installed. Run: npm install playwright');
+            console.error('Service will start but Clubspot scraping will not work');
+        }
+    } else {
+        console.log('ℹ Playwright not loaded (ENABLE_PUPPETEER not set to true)');
+    }
+    return playwright;
 }
 
 // Load Playwright immediately (synchronously) so it's ready when service starts
@@ -70,12 +70,12 @@ async function ensureRegattasTable() {
                 UNIQUE(regatta_name, regatta_date, source)
             )
         `);
-        
+
         await pool.query(`CREATE INDEX IF NOT EXISTS idx_regattas_date ON regattas(regatta_date);`);
         await pool.query(`CREATE INDEX IF NOT EXISTS idx_regattas_name ON regattas(regatta_name);`);
         await pool.query(`CREATE INDEX IF NOT EXISTS idx_regattas_location ON regattas(location);`);
         await pool.query(`ALTER TABLE regattas ADD COLUMN IF NOT EXISTS registrant_count INTEGER;`);
-        
+
         await pool.query(`
             CREATE TABLE IF NOT EXISTS scrape_log (
                 id SERIAL PRIMARY KEY,
@@ -85,7 +85,7 @@ async function ensureRegattasTable() {
                 scrape_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
-        
+
         console.log('Regattas table verified');
     } catch (err) {
         console.error('Error ensuring regattas table:', err);
@@ -203,6 +203,33 @@ function parseHighSchoolSailingPage(html, defaultYear) {
     return regattas;
 }
 
+/** Fetch event page and extract "Entry List" link href. Returns absolute URL or null. */
+async function fetchHSSailingEntryListUrl(eventPageUrl) {
+    if (!eventPageUrl) return null;
+    try {
+        const response = await axios.get(eventPageUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+            timeout: 15000
+        });
+        const $ = cheerio.load(response.data);
+        let href = null;
+        $('a').each((i, el) => {
+            const text = $(el).text().trim();
+            if (/^Entry\s*List$/i.test(text)) {
+                const h = $(el).attr('href');
+                if (h) {
+                    href = h.startsWith('http') ? h : `https://hssailing.org${h.startsWith('/') ? h : '/' + h}`;
+                    return false;
+                }
+            }
+        });
+        return href;
+    } catch (err) {
+        console.error(`Error fetching HS Sailing entry list for ${eventPageUrl}:`, err.message);
+        return null;
+    }
+}
+
 // Scrape Regatta Network
 async function scrapeRegattaNetwork() {
     try {
@@ -213,19 +240,19 @@ async function scrapeRegattaNetwork() {
             },
             timeout: 30000
         });
-        
+
         const $ = cheerio.load(response.data);
         const regattas = [];
-        
+
         $('table tr').each((index, element) => {
             const $row = $(element);
             const $cells = $row.find('td');
-            
+
             if ($cells.length >= 3) {
                 const dateText = $cells.eq(0).text().trim();
                 const eventCell = $cells.eq(1);
                 const linksCell = $cells.eq(2);
-                
+
                 let regattaDate = null;
                 if (dateText) {
                     const dateMatch = dateText.match(/(\d{2})\/(\d{2})\/(\d{2})/);
@@ -235,24 +262,51 @@ async function scrapeRegattaNetwork() {
                         regattaDate = `${fullYear}-${month}-${day}`;
                     }
                 }
-                
-                let eventName = eventCell.clone().children().remove().end().text().trim();
-                if (!eventName) {
-                    eventName = eventCell.text().trim().split('\n')[0];
-                }
-                
-                let location = '';
+
                 const fullText = eventCell.text();
-                const locationMatch = fullText.match(/([A-Z][^,]+(?:,\s*[A-Z][^,]+)*,\s*[A-Z]{2})/);
-                if (locationMatch) {
-                    location = locationMatch[1].trim();
-                } else {
-                    const lines = fullText.split('\n').map(l => l.trim()).filter(l => l);
-                    if (lines.length > 1) {
-                        location = lines[1];
+                const lines = fullText.split('\n').map(l => l.trim()).filter(l => l);
+                const line0 = lines[0] || '';
+                const locationLinePattern = /^.*,\s*[A-Z]{2}$/;
+                const locationLike = lines.filter(l => l.length > 3 && locationLinePattern.test(l));
+                const lastLocationLine = locationLike.length > 0 ? locationLike[locationLike.length - 1].trim() : null;
+
+                let location = '';
+                const allMatches = fullText.match(/[^,\n]+(?:,\s*[^,\n]+)*,\s*[A-Z]{2}/g);
+                let lastMatch = allMatches && allMatches.length > 0 ? allMatches[allMatches.length - 1].trim() : null;
+                if (lines.length === 1 && lastMatch === line0) {
+                    const parts = line0.split(/,\s*/);
+                    if (parts.length >= 2 && /^[A-Z]{2}$/.test(parts[parts.length - 1])) {
+                        const citySt = parts.slice(-2).join(', ');
+                        location = (parts.length >= 3 ? parts.slice(-3).join(', ') : citySt);
+                        lastMatch = null;
                     }
                 }
-                
+                if (lastLocationLine && (lines.length > 1 || lastLocationLine !== line0)) {
+                    location = lastLocationLine;
+                } else if (lastMatch) {
+                    location = lastMatch;
+                } else if (!location && lines.length > 1 && locationLinePattern.test(lines[1])) {
+                    location = lines[1];
+                }
+
+                let eventName = eventCell.clone().children().remove().end().text().trim();
+                if (!eventName) {
+                    eventName = line0;
+                } else {
+                    const firstLine = eventName.split('\n').map(l => l.trim()).filter(l => l)[0] || eventName;
+                    if (firstLine && firstLine.length > 2) eventName = firstLine;
+                }
+                if (lines.length === 1 && location && fullText.includes(location)) {
+                    const before = fullText.replace(location, '').replace(/,+\s*$/, '').trim();
+                    if (before.length >= 3) eventName = before;
+                }
+                if (eventName && location && (location.startsWith(eventName) || location.includes('\n'))) {
+                    location = location.replace(eventName, '').replace(/^[\s,\-]+/, '').trim();
+                }
+                if (location && eventName && location.includes(eventName)) {
+                    location = location.replace(eventName, '').replace(/^[\s,\-]+/, '').trim();
+                }
+
                 let eventWebsiteUrl = '';
                 eventCell.find('a').each((i, link) => {
                     const href = $(link).attr('href');
@@ -262,7 +316,7 @@ async function scrapeRegattaNetwork() {
                         return false;
                     }
                 });
-                
+
                 let registrantsUrl = '';
                 linksCell.find('a').each((i, link) => {
                     const href = $(link).attr('href');
@@ -272,14 +326,14 @@ async function scrapeRegattaNetwork() {
                         return false;
                     }
                 });
-                
+
                 if (eventName && location && eventName.includes(location)) {
                     eventName = eventName.replace(location, '').trim();
                 }
-                
+
                 if (regattaDate && eventName && eventName.length > 3) {
                     const sourceId = `${regattaDate}-${eventName.replace(/\s+/g, '-').toLowerCase().substring(0, 100)}`;
-                    
+
                     regattas.push({
                         regatta_date: regattaDate,
                         regatta_name: eventName,
@@ -292,9 +346,9 @@ async function scrapeRegattaNetwork() {
                 }
             }
         });
-        
+
         console.log(`Found ${regattas.length} regattas from Regatta Network`);
-        
+
         let added = 0;
         for (const regatta of regattas) {
             try {
@@ -309,7 +363,7 @@ async function scrapeRegattaNetwork() {
                             registrantsUrl = `${baseUrl}#_registration+current`;
                             regatta.registrants_url = registrantsUrl;
                         }
-                        
+
                         if (registrantsUrl) {
                             const registrantsResponse = await axios.get(registrantsUrl, {
                                 headers: {
@@ -318,7 +372,7 @@ async function scrapeRegattaNetwork() {
                                 timeout: 20000
                             });
                             const $r = cheerio.load(registrantsResponse.data);
-                            
+
                             // Heuristic: count data rows in tables on the page (excluding header rows)
                             let count = 0;
                             $r('table').each((i, table) => {
@@ -335,7 +389,7 @@ async function scrapeRegattaNetwork() {
                                     count = Math.max(count, dataRows);
                                 }
                             });
-                            
+
                             if (count > 0) {
                                 registrantCount = count;
                             }
@@ -344,7 +398,7 @@ async function scrapeRegattaNetwork() {
                         console.error('Error fetching registrant count:', registrantError.message);
                     }
                 }
-                
+
                 await pool.query(`
                     INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -373,12 +427,12 @@ async function scrapeRegattaNetwork() {
                 }
             }
         }
-        
+
         await pool.query(`
             INSERT INTO scrape_log (source, regattas_found, regattas_added)
             VALUES ('regattanetwork', $1, $2)
         `, [regattas.length, added]);
-        
+
         return { found: regattas.length, added };
     } catch (error) {
         console.error('Error scraping Regatta Network:', error);
@@ -390,33 +444,33 @@ async function scrapeRegattaNetwork() {
 async function scrapeClubspot() {
     // Verify Playwright is enabled
     const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
-    
+
     if (!enablePuppeteer) {
         throw new Error('Playwright is disabled. Set ENABLE_PUPPETEER=true to enable Clubspot scraping.');
     }
-    
+
     // Wait for Playwright to be loaded (with timeout)
     let playwrightInstance = loadPlaywright();
     let attempts = 0;
     const maxAttempts = 10;
-    
+
     while (!playwrightInstance && attempts < maxAttempts) {
         console.log(`⏳ Waiting for Playwright to load... (attempt ${attempts + 1}/${maxAttempts})`);
         await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms
         playwrightInstance = loadPlaywright();
         attempts++;
     }
-    
+
     if (!playwrightInstance) {
         throw new Error('Playwright is not available. Cannot scrape Clubspot. Ensure Playwright is installed and ENABLE_PUPPETEER=true is set.');
     }
-    
+
     console.log('✓ Playwright is ready, starting scrape...');
-    
+
     let browser = null;
     try {
         console.log('Launching headless browser for Clubspot...');
-        
+
         const fs = require('fs');
         const launchOptions = {
             headless: true,
@@ -432,7 +486,7 @@ async function scrapeClubspot() {
                 '--no-zygote' // Important for memory efficiency
             ]
         };
-        
+
         // Try to launch browser - if it fails due to missing browsers, install them
         try {
             browser = await playwrightInstance.chromium.launch(launchOptions);
@@ -444,7 +498,7 @@ async function scrapeClubspot() {
                     const { execSync } = require('child_process');
                     // Skip system dependencies as they're not needed on Render
                     process.env.PLAYWRIGHT_SKIP_DEPENDENCY_DOWNLOAD = '1';
-                    execSync('npx playwright install chromium', { 
+                    execSync('npx playwright install chromium', {
                         stdio: 'inherit',
                         timeout: 300000, // 5 minutes timeout
                         env: { ...process.env, PLAYWRIGHT_SKIP_DEPENDENCY_DOWNLOAD: '1' }
@@ -465,40 +519,40 @@ async function scrapeClubspot() {
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         });
         const page = await context.newPage();
-        
+
         // Set up debug directory for screenshots
         const debugDir = path.join(process.cwd(), 'debug_screenshots');
         if (!fs.existsSync(debugDir)) {
             fs.mkdirSync(debugDir, { recursive: true });
         }
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
-        
+
         // Track navigation
         page.on('framenavigated', frame => {
             if (frame === page.mainFrame()) {
                 console.log(`🔗 Navigated to URL: ${frame.url()}`);
             }
         });
-        
+
         const targetUrl = 'https://racing.theclubspot.com/';
         console.log(`🌐 Navigating to Clubspot: ${targetUrl}`);
-        
+
         await page.goto(targetUrl, {
             waitUntil: 'networkidle',
             timeout: 60000
         });
-        
+
         // Log page info
         const pageTitle = await page.title();
         const currentUrl = page.url();
         console.log(`📄 Page Title: "${pageTitle}"`);
         console.log(`📍 Current URL: ${currentUrl}`);
-        
+
         // Take screenshot after initial load (non-blocking)
         const screenshot1Path = path.join(debugDir, `clubspot-initial-${timestamp}.png`);
         try {
-            await page.screenshot({ 
-                path: screenshot1Path, 
+            await page.screenshot({
+                path: screenshot1Path,
                 fullPage: false, // Use viewport instead of fullPage to avoid timeout
                 timeout: 10000 // 10 second timeout
             });
@@ -506,18 +560,18 @@ async function scrapeClubspot() {
         } catch (screenshotError) {
             console.log(`⚠️ Screenshot failed (non-critical): ${screenshotError.message}`);
         }
-        
+
         // Get page HTML content for debugging
         const pageContent = await page.content();
         const contentLength = pageContent.length;
         console.log(`📊 Page HTML length: ${contentLength} characters`);
-        
+
         // Log visible text sample
         const visibleText = await page.evaluate(() => {
             return document.body.innerText.substring(0, 1000);
         });
         console.log(`📝 Visible text sample (first 1000 chars):\n${visibleText}\n`);
-        
+
         console.log('⏳ Waiting for regatta data to load...');
         try {
             await page.waitForSelector('[class*="regatta"], [class*="event"], [class*="card"], .regatta-item, .event-item', {
@@ -528,12 +582,12 @@ async function scrapeClubspot() {
             console.log('⚠️ Regatta selector not found, waiting additional time...');
             await page.waitForTimeout(5000);
         }
-        
+
         // Take screenshot after waiting (non-blocking)
         const screenshot2Path = path.join(debugDir, `clubspot-after-wait-${timestamp}.png`);
         try {
-            await page.screenshot({ 
-                path: screenshot2Path, 
+            await page.screenshot({
+                path: screenshot2Path,
                 fullPage: false, // Use viewport instead of fullPage to avoid timeout
                 timeout: 10000 // 10 second timeout
             });
@@ -541,9 +595,9 @@ async function scrapeClubspot() {
         } catch (screenshotError) {
             console.log(`⚠️ Screenshot failed (non-critical): ${screenshotError.message}`);
         }
-        
+
         console.log('🔍 Extracting regatta data...');
-        
+
         // First, let's see what's actually on the page
         const pageInfo = await page.evaluate(() => {
             return {
@@ -558,7 +612,7 @@ async function scrapeClubspot() {
                 allEvents: Array.from(document.querySelectorAll('[class*="event"], [class*="Event"]')).length
             };
         });
-        
+
         console.log(`\n📊 Page Analysis:`);
         console.log(`  - Total divs: ${pageInfo.allDivs}`);
         console.log(`  - Elements with "card" in class: ${pageInfo.allCards}`);
@@ -572,11 +626,11 @@ async function scrapeClubspot() {
             });
         }
         console.log(`\n📝 Page text sample:\n${pageInfo.bodyText.substring(0, 500)}...\n`);
-        
+
         const extractionResult = await page.evaluate(() => {
             const regattas = [];
             const debugInfo = { foundElements: [], processedElements: [] };
-            
+
             // Try to find regatta cards/items - Clubspot uses a specific structure
             const selectors = [
                 '[class*="regatta"]',
@@ -588,10 +642,10 @@ async function scrapeClubspot() {
                 'a[href*="/regatta/"]',
                 '[data-regatta]'
             ];
-            
+
             let elements = [];
             let usedSelector = null;
-            
+
             // Try each selector
             for (const selector of selectors) {
                 const found = document.querySelectorAll(selector);
@@ -601,86 +655,86 @@ async function scrapeClubspot() {
                     break;
                 }
             }
-            
+
             // If elements found but they might be too granular, try to find parent containers
             // Look for divs that contain both a date pattern and regatta-like text
             // This helps find the actual regatta card containers
             if (elements.length === 0 || elements.length > 100) {
                 const allDivs = Array.from(document.querySelectorAll('div'));
                 const clubspotDatePattern = /(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s+[A-Z][a-z]{2}\s+\d{1,2}/i;
-                
+
                 elements = allDivs.filter(div => {
                     const text = div.textContent || '';
                     const hasDate = clubspotDatePattern.test(text);
                     const hasName = /[A-Z][a-z]+.*(?:Series|Regatta|Championship|Cup|Race|Invitational)/i.test(text);
                     const hasLocation = /[A-Z][a-z]+,\s+[A-Z]{2}/.test(text); // City, State format
                     const textLength = text.trim().length;
-                    
+
                     // Should have date, name-like text, and reasonable length
                     return hasDate && (hasName || textLength > 30) && textLength > 20 && textLength < 1000;
                 });
-                
+
                 // Remove nested duplicates - keep only top-level containers
                 elements = elements.filter((el, idx) => {
-                    return !elements.some((otherEl, otherIdx) => 
+                    return !elements.some((otherEl, otherIdx) =>
                         otherIdx !== idx && otherEl.contains(el)
                     );
                 });
-                
+
                 usedSelector = 'div-with-regatta-content';
             }
-            
+
             debugInfo.totalElements = elements.length;
             debugInfo.usedSelector = usedSelector;
-            
+
             // Month abbreviations for Clubspot format
             const monthAbbrev = {
                 'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
                 'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
                 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
             };
-            
+
             // Pattern for Clubspot date format: "Sat, Jan 10 - Sun, Jan 11" or "Sat, Jan 10"
             const clubspotDatePattern = /(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s+([A-Z][a-z]{2})\s+(\d{1,2})(?:\s*-\s*(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s+[A-Z][a-z]{2}\s+\d{1,2})?/i;
-            
+
             elements.forEach((element, index) => {
                 try {
                     const text = element.textContent || element.innerText || '';
                     const href = element.href || element.getAttribute('href') || '';
                     const elementHtml = element.outerHTML.substring(0, 200);
-                    
+
                     console.log(`\n--- Element ${index + 1} ---`);
                     console.log(`Text: "${text.substring(0, 200)}"`);
                     console.log(`Href: ${href}`);
                     console.log(`HTML: ${elementHtml}...`);
-                    
+
                     // Try Clubspot format first: "Sat, Jan 10 - Sun, Jan 11" or "Sat, Jan 10"
                     let dateMatch = null;
                     let regattaDate = null;
-                    
+
                     const clubspotMatch = text.match(clubspotDatePattern);
-                    
+
                     if (clubspotMatch) {
                         const monthAbbr = clubspotMatch[1];
                         const day = clubspotMatch[2];
                         const month = monthAbbrev[monthAbbr];
-                        
+
                         // Try to find year in the text or use current/next year
                         const yearMatch = text.match(/(\d{4})/);
                         let year = yearMatch ? yearMatch[1] : new Date().getFullYear().toString();
-                        
+
                         // If we're in December and see Jan dates, it's probably next year
                         const currentMonth = new Date().getMonth() + 1;
                         if (month === '01' && currentMonth === 12) {
                             year = (parseInt(year) + 1).toString();
                         }
-                        
+
                         if (month && day) {
                             regattaDate = `${year}-${month}-${day.padStart(2, '0')}`;
                             dateMatch = clubspotMatch;
                         }
                     }
-                    
+
                     // Fallback to other date patterns if Clubspot format not found
                     if (!dateMatch) {
                         const datePatterns = [
@@ -689,7 +743,7 @@ async function scrapeClubspot() {
                             /([A-Z][a-z]+)\s+(\d{1,2}),\s+(\d{4})/,  // Month DD, YYYY
                             /(\d{1,2})\s+([A-Z][a-z]+)\s+(\d{4})/,   // DD Month YYYY
                         ];
-                        
+
                         for (const pattern of datePatterns) {
                             const match = text.match(pattern);
                             if (match) {
@@ -701,9 +755,11 @@ async function scrapeClubspot() {
                                         const [, month, day, year] = match;
                                         regattaDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
                                     } else {
-                                        const months = { 'January': '01', 'February': '02', 'March': '03', 'April': '04',
-                                                       'May': '05', 'June': '06', 'July': '07', 'August': '08', 
-                                                       'September': '09', 'October': '10', 'November': '11', 'December': '12' };
+                                        const months = {
+                                            'January': '01', 'February': '02', 'March': '03', 'April': '04',
+                                            'May': '05', 'June': '06', 'July': '07', 'August': '08',
+                                            'September': '09', 'October': '10', 'November': '11', 'December': '12'
+                                        };
                                         if (match.length >= 4) {
                                             const month = months[match[1]] || months[match[2]];
                                             const day = match[2] || match[1];
@@ -720,15 +776,15 @@ async function scrapeClubspot() {
                             }
                         }
                     }
-                    
+
                     // Extract regatta name and location from text
                     const lines = text.split('\n').map(l => l.trim()).filter(l => l && l.length > 2);
-                    
+
                     // Find regatta name - usually the first substantial line that's not a date
                     let nameText = '';
                     for (const line of lines) {
-                        if (line.length > 5 && 
-                            !clubspotDatePattern.test(line) && 
+                        if (line.length > 5 &&
+                            !clubspotDatePattern.test(line) &&
                             !line.match(/^[A-Z][a-z]+,\s+[A-Z]{2}$/) && // Not location
                             !line.match(/^[A-Z][a-z]+\s+Yacht Club$/) && // Not just club name
                             !line.match(/^\d{4}$/)) { // Not just year
@@ -736,13 +792,13 @@ async function scrapeClubspot() {
                             if (nameText.length > 3) break;
                         }
                     }
-                    
+
                     // If no name found, try first line
                     if (!nameText || nameText.length < 3) {
                         nameText = lines.find(l => l.length > 3 && !clubspotDatePattern.test(l)) || lines[0] || text.substring(0, 100).trim();
                         nameText = nameText.replace(/^(SCYYRA|2026|2025|2024|2023|2022|2021|2020)\s+/i, '').trim();
                     }
-                    
+
                     // Find location - usually after date, format like "City, State"
                     let locationText = '';
                     const dateLineIndex = lines.findIndex(line => clubspotDatePattern.test(line));
@@ -757,21 +813,21 @@ async function scrapeClubspot() {
                             }
                         }
                     }
-                    
+
                     // Fallback: find any location-like text
                     if (!locationText) {
-                        locationText = lines.find(line => 
+                        locationText = lines.find(line =>
                             line.match(/^[A-Z][a-z]+,\s+[A-Z]{2}$/) || // City, State
                             line.match(/^[A-Z][a-z]+\s+Yacht Club$/) // Club name
                         ) || '';
                     }
-                    
+
                     let eventWebsiteUrl = null;
                     if (href) {
                         eventWebsiteUrl = href.startsWith('http') ? href : `https://racing.theclubspot.com${href}`;
                         console.log(`Event URL: ${eventWebsiteUrl}`);
                     }
-                    
+
                     if (regattaDate && nameText && nameText.length > 3) {
                         console.log(`✅ Valid regatta found!`);
                         regattas.push({
@@ -787,23 +843,23 @@ async function scrapeClubspot() {
                     console.log(`❌ Error processing element ${index + 1}: ${err.message}`);
                 }
             });
-            
+
             return { regattas, debugInfo };
         });
-        
+
         // Log debug info
         console.log(`\n=== Extraction Debug Info ===`);
         console.log(`Total elements found: ${extractionResult.debugInfo.totalElements}`);
         console.log(`Selector used: "${extractionResult.debugInfo.usedSelector}"`);
-        
+
         // Extract regattas from result
         const extractedRegattas = extractionResult.regattas;
-        
+
         // Take final screenshot (non-blocking)
         const screenshot3Path = path.join(debugDir, `clubspot-final-${timestamp}.png`);
         try {
-            await page.screenshot({ 
-                path: screenshot3Path, 
+            await page.screenshot({
+                path: screenshot3Path,
                 fullPage: false, // Use viewport instead of fullPage to avoid timeout
                 timeout: 10000 // 10 second timeout
             });
@@ -811,7 +867,7 @@ async function scrapeClubspot() {
         } catch (screenshotError) {
             console.log(`⚠️ Final screenshot failed (non-critical): ${screenshotError.message}`);
         }
-        
+
         console.log(`\n✅ Found ${extractedRegattas.length} regattas from Clubspot`);
         if (extractedRegattas.length === 0) {
             console.log('⚠️ WARNING: No regattas found!');
@@ -826,12 +882,12 @@ async function scrapeClubspot() {
                 }
             });
         }
-        
+
         let added = 0;
         for (const regatta of extractedRegattas) {
             try {
                 const sourceId = `${regatta.regatta_date}-${regatta.regatta_name.replace(/\s+/g, '-').toLowerCase().substring(0, 100)}`;
-                
+
                 await pool.query(`
                     INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -860,14 +916,14 @@ async function scrapeClubspot() {
                 }
             }
         }
-        
+
         await pool.query(`
             INSERT INTO scrape_log (source, regattas_found, regattas_added)
             VALUES ('clubspot', $1, $2)
         `, [extractedRegattas.length, added]);
-        
+
         return { found: extractedRegattas.length, added };
-        
+
     } catch (error) {
         console.error('Error scraping Clubspot:', error);
         throw error;
@@ -932,6 +988,18 @@ async function scrapeHighSchoolSailing() {
 
         console.log(`Found ${regattas.length} regattas from High School Sailing`);
 
+        console.log('Fetching Entry List links from event pages...');
+        for (const regatta of regattas) {
+            if (regatta.event_website_url) {
+                const entryListUrl = await fetchHSSailingEntryListUrl(regatta.event_website_url);
+                if (entryListUrl) {
+                    regatta.registrants_url = entryListUrl;
+                    console.log(`  Entry List: ${regatta.regatta_name} -> ${entryListUrl}`);
+                }
+                await new Promise(r => setTimeout(r, 350));
+            }
+        }
+
         let added = 0;
         for (const regatta of regattas) {
             try {
@@ -952,7 +1020,7 @@ async function scrapeHighSchoolSailing() {
                     regatta.regatta_name,
                     regatta.location,
                     regatta.event_website_url,
-                    null,
+                    regatta.registrants_url || null,
                     null,
                     'hssailing',
                     sourceId
@@ -980,13 +1048,13 @@ async function scrapeHighSchoolSailing() {
 // Scraping endpoint
 app.post('/api/scrape-regattas', async (req, res) => {
     console.log('=== Regatta Scraping Request Received ===');
-    
+
     try {
         const { source } = req.body; // 'regattanetwork', 'clubspot', 'hssailing', or 'all'
         let totalFound = 0;
         let totalAdded = 0;
-        const results = { 
-            regattanetwork: { found: 0, added: 0 }, 
+        const results = {
+            regattanetwork: { found: 0, added: 0 },
             clubspot: { found: 0, added: 0 },
             hssailing: { found: 0, added: 0 }
         };
@@ -1016,10 +1084,10 @@ app.post('/api/scrape-regattas', async (req, res) => {
                 totalAdded += csResult.added;
             } catch (csError) {
                 console.error('Clubspot scraping error:', csError);
-                results.clubspot = { 
-                    found: 0, 
-                    added: 0, 
-                    error: csError.message || 'Failed to scrape Clubspot' 
+                results.clubspot = {
+                    found: 0,
+                    added: 0,
+                    error: csError.message || 'Failed to scrape Clubspot'
                 };
             }
         }
@@ -1074,10 +1142,10 @@ async function initializeDatabase() {
         // Test database connection
         await pool.query('SELECT 1');
         console.log('✓ Database connected');
-        
+
         // Ensure tables exist
         await ensureRegattasTable();
-        
+
         console.log('✓ Service ready to accept scraping requests');
         console.log('  - Regatta Network scraping: Available');
         const enablePuppeteer = process.env.ENABLE_PUPPETEER === 'true' || process.env.ENABLE_PUPPETEER === 'TRUE';
