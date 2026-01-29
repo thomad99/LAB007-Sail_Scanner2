@@ -2543,6 +2543,7 @@ async function checkForDuplicate(checksum) {
 
 // ---------- SailBot / RegattaNetworkData API ----------
 const RND = REGATTA_NETWORK_DATA_TABLE;
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 
 app.get('/api/sailbot/stats', async (req, res) => {
     try {
@@ -2571,6 +2572,68 @@ app.get('/api/sailbot/stats', async (req, res) => {
     } catch (e) {
         console.error('SailBot stats error:', e);
         res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.get('/api/sailbot/healthcheck', async (req, res) => {
+    try {
+        await pool.query('SELECT 1');
+        let tableOk = false;
+        try {
+            await ensureRegattaNetworkDataTable();
+            await pool.query(`SELECT 1 FROM "${RND}" LIMIT 1`);
+            tableOk = true;
+        } catch (tErr) {
+            // table may not exist yet or be empty
+        }
+        res.json({
+            success: true,
+            database: 'connected',
+            regattaNetworkDataTable: tableOk ? 'ok' : 'empty or missing',
+            message: 'Database connection OK.'
+        });
+    } catch (e) {
+        console.error('SailBot healthcheck error:', e);
+        res.status(500).json({
+            success: false,
+            database: 'error',
+            error: e.message,
+            message: 'Database connection failed.'
+        });
+    }
+});
+
+app.get('/api/sailbot/test-openai', async (req, res) => {
+    try {
+        if (!openai) {
+            return res.status(503).json({
+                success: false,
+                openai: 'not configured',
+                error: 'OPENAI_API_KEY not set',
+                message: 'OpenAI is not configured.'
+            });
+        }
+        const completion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
+            max_tokens: 10,
+            temperature: 0
+        });
+        const reply = completion.choices?.[0]?.message?.content?.trim() || '';
+        res.json({
+            success: true,
+            openai: 'ok',
+            reply,
+            message: 'OpenAI connection OK.'
+        });
+    } catch (e) {
+        console.error('SailBot test-openai error:', e);
+        res.status(500).json({
+            success: false,
+            openai: 'error',
+            error: e.message,
+            message: 'OpenAI test failed.'
+        });
     }
 });
 
@@ -2788,8 +2851,6 @@ app.post('/api/sailbot/upload', csvUpload.single('file'), async (req, res) => {
 });
 
 // ---------- Chatbot (OpenAI + SailBot search) ----------
-const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
-
 const CHAT_SYSTEM = `You are a sailing results assistant. Users ask about sailors, boats, clubs, or regattas.
 Extract a JSON object with: "intent" (one of: sailor_search, boat_search, club_search, regatta_search) and exactly one of: "skipper", "boat_name", "yacht_club", "regatta_name". Optional: "year" (integer).
 If the user types a person name (e.g. "Dominic Thomas") with no other context, use intent "sailor_search" and set "skipper" to that name.

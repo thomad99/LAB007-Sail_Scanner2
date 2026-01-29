@@ -288,6 +288,16 @@
         <h1>ChatBot Admin</h1>
         <p class="sub">Dashboard, exports, backup/restore, and CSV upload for RegattaNetworkData.</p>
 
+        <div class="section">
+            <h2>Health &amp; connectivity</h2>
+            <p>Test database and OpenAI before using the dashboard or Chatbot.</p>
+            <div class="btns">
+                <button type="button" class="btn btn-primary" id="healthcheckBtn">Healthcheck (database)</button>
+                <button type="button" class="btn btn-secondary" id="testOpenaiBtn">Test OpenAI</button>
+            </div>
+            <div class="status" id="healthcheckStatus"></div>
+        </div>
+
         <div class="stats" id="stats">
             <div class="stat-card">
                 <div class="label">Table</div>
@@ -408,6 +418,44 @@
             }
         }
         loadStats();
+
+        const healthcheckStatus = document.getElementById('healthcheckStatus');
+        document.getElementById('healthcheckBtn').addEventListener('click', async () => {
+            healthcheckStatus.textContent = 'Checking database…';
+            healthcheckStatus.className = 'status ok';
+            try {
+                const r = await fetch('/api/sailbot/healthcheck');
+                const d = await r.json();
+                if (d.success) {
+                    healthcheckStatus.textContent = d.message + ' RegattaNetworkData: ' + (d.regattaNetworkDataTable || '—') + '.';
+                    healthcheckStatus.className = 'status ok';
+                } else {
+                    healthcheckStatus.textContent = (d.message || d.error) + (d.error ? ' (' + d.error + ')' : '');
+                    healthcheckStatus.className = 'status err';
+                }
+            } catch (e) {
+                healthcheckStatus.textContent = 'Healthcheck failed: ' + e.message;
+                healthcheckStatus.className = 'status err';
+            }
+        });
+        document.getElementById('testOpenaiBtn').addEventListener('click', async () => {
+            healthcheckStatus.textContent = 'Testing OpenAI…';
+            healthcheckStatus.className = 'status ok';
+            try {
+                const r = await fetch('/api/sailbot/test-openai');
+                const d = await r.json();
+                if (d.success) {
+                    healthcheckStatus.textContent = (d.message || 'OpenAI OK.') + (d.reply ? ' Reply: "' + d.reply + '"' : '');
+                    healthcheckStatus.className = 'status ok';
+                } else {
+                    healthcheckStatus.textContent = (d.message || d.error) + (d.error ? ' (' + d.error + ')' : '');
+                    healthcheckStatus.className = 'status err';
+                }
+            } catch (e) {
+                healthcheckStatus.textContent = 'OpenAI test failed: ' + e.message;
+                healthcheckStatus.className = 'status err';
+            }
+        });
 
         document.getElementById('backupBtn').addEventListener('click', async () => {
             const el = document.getElementById('backupStatus');
