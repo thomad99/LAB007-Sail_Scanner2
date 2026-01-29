@@ -67,7 +67,7 @@
         }
 
         .msg.bot {
-            background: rgba(255, 255, 255, 0.5);
+            background: #a8d8f0;
             color: #1a1a2e;
             align-self: flex-start;
             border-bottom-left-radius: 4px;
@@ -267,7 +267,7 @@
                 const r = await fetch('/api/sailbot/stats');
                 const d = await r.json();
                 if (!d.success) {
-                    welcomeEl.innerHTML = 'How can I help?';
+                    welcomeEl.textContent = 'How can I help?';
                     return;
                 }
                 const sailors = (d.total_sailors != null && !isNaN(Number(d.total_sailors)))
@@ -276,9 +276,9 @@
                     ? Number(d.total_regattas).toLocaleString() : '—';
                 const clubs = (d.total_clubs != null && !isNaN(Number(d.total_clubs)))
                     ? Number(d.total_clubs).toLocaleString() : '—';
-                welcomeEl.innerHTML = 'I have knowledge of<br>' + sailors + ' sailors.<br>' + regattas + ' Regattas<br>' + clubs + ' Sailing Clubs<br><br>How can I help?';
+                welcomeEl.textContent = 'I have knowledge of ' + sailors + ' sailors. ' + regattas + ' Regattas ' + clubs + ' Sailing Clubs. How can I help?';
             } catch (_) {
-                welcomeEl.innerHTML = 'How can I help?';
+                welcomeEl.textContent = 'How can I help?';
             }
         })();
 
