@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoveSailing.AI ChatBot – Regatta Results</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(180deg, #020053 0%, #0a0a6e 100%);
+            color: #1a1a2e;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .logo {
+            margin-top: 16px;
+            max-width: 200px;
+            width: 36%;
+        }
+
+        .chat-container {
+            flex: 1;
+            width: 100%;
+            max-width: 720px;
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
+            padding-bottom: 0;
+        }
+
+        .chat-title {
+            text-align: center;
+            color: #e8e8ff;
+            font-size: 1.1em;
+            margin-bottom: 12px;
+        }
+
+        .chat-pane {
+            flex: 1;
+            overflow-y: auto;
+            background: rgba(200, 220, 255, 0.25);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 12px;
+            min-height: 320px;
+        }
+
+        .msg {
+            max-width: 85%;
+            margin-bottom: 14px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            line-height: 1.4;
+            font-size: 0.95em;
+        }
+
+        .msg.bot {
+            background: rgba(255, 255, 255, 0.5);
+            color: #1a1a2e;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+
+        .msg.user {
+            background: rgba(0, 80, 180, 0.35);
+            color: #fff;
+            margin-left: auto;
+            border-bottom-right-radius: 4px;
+        }
+
+        .msg.bot .results-card {
+            margin-top: 14px;
+            background: #fff;
+            border-radius: 10px;
+            padding: 18px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            color: #1a1a2e;
+            text-align: left;
+        }
+
+        .results-card h3 {
+            margin: 0 0 12px;
+            color: #0066cc;
+            font-size: 1em;
+            text-decoration: underline;
+            text-decoration-color: #0066cc;
+        }
+
+        .results-card .basic-info table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 16px;
+        }
+
+        .results-card .basic-info td {
+            padding: 6px 10px 6px 0;
+            vertical-align: top;
+        }
+
+        .results-card .basic-info td:first-child {
+            font-weight: 600;
+            color: #333;
+            width: 1%;
+            white-space: nowrap;
+        }
+
+        .results-card table.data {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+        }
+
+        .results-card table.data th,
+        .results-card table.data td {
+            padding: 8px 10px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .results-card table.data th {
+            background: #f0f4ff;
+            color: #0066cc;
+            font-weight: 600;
+        }
+
+        .results-card .section {
+            margin-bottom: 18px;
+        }
+
+        .results-card .section:last-child {
+            margin-bottom: 0;
+        }
+
+        .btn-download {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 14px;
+            padding: 10px 18px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95em;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-download:hover {
+            background: #0088ff;
+        }
+
+        .btn-download svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 10px;
+            padding: 12px 0 20px;
+            width: 100%;
+            max-width: 720px;
+            padding-left: 16px;
+            padding-right: 16px;
+        }
+
+        .input-row input {
+            flex: 1;
+            padding: 14px 18px;
+            border-radius: 10px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.15);
+            color: #fff;
+            font-size: 1em;
+        }
+
+        .input-row input::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .input-row input:focus {
+            outline: none;
+            border-color: #0088ff;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .input-row button {
+            padding: 14px 24px;
+            border-radius: 10px;
+            border: none;
+            background: #0066cc;
+            color: white;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .input-row button:hover:not(:disabled) {
+            background: #0088ff;
+        }
+
+        .input-row button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .status {
+            font-size: 0.9em;
+            color: #aaa;
+            margin-top: 6px;
+        }
+
+        .status.err {
+            color: #ff8888;
+        }
+
+        .markdown {
+            white-space: pre-wrap;
+        }
+
+        .markdown strong {
+            font-weight: 700;
+        }
+    </style>
+</head>
+
+<body>
+    <img src="/Images/LOVE SAILING LOGO.JPEG" alt="Love Sailing" class="logo">
+    <div class="chat-title">LoveSailing.AI ChatBot</div>
+    <div class="chat-container">
+        <div class="chat-pane" id="chatPane">
+            <div class="msg bot" id="welcome">
+                Welcome to LoveSailing.AI ChatBot, how can I help?
+            </div>
+        </div>
+        <div class="input-row">
+            <input type="text" id="input" placeholder="Ask me about sailing competitions..." autocomplete="off">
+            <button type="button" id="sendBtn">Send</button>
+        </div>
+        <div class="status" id="status"></div>
+    </div>
+
+    <script>
+        const chatPane = document.getElementById('chatPane');
+        const input = document.getElementById('input');
+        const sendBtn = document.getElementById('sendBtn');
+        const status = document.getElementById('status');
+
+        function addMsg(content, isUser) {
+            const div = document.createElement('div');
+            div.className = 'msg ' + (isUser ? 'user' : 'bot');
+            div.textContent = content;
+            chatPane.appendChild(div);
+            chatPane.scrollTop = chatPane.scrollHeight;
+        }
+
+        function simpleMarkdown(s) {
+            return s
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\n/g, '<br>');
+        }
+
+        function renderResultsCard(data) {
+            const { basicInfo, totalRegattas, topPosition, rows } = data;
+            let html = '';
+            if (basicInfo) {
+                html += '<div class="section basic-info"><h3>Basic Info</h3><table><tr><td>Name</td><td>' + escapeHtml(basicInfo.name) + '</td></tr><tr><td>Club</td><td>' + escapeHtml(basicInfo.club) + '</td></tr></table></div>';
+            }
+            html += '<div class="section"><h3>Top Achievements</h3><table class="data"><thead><tr><th>Position</th><th>Regatta Name</th><th>Date</th></tr></thead><tbody>';
+            const topRows = (rows || []).filter(r => r.position != null && /^\d+$/.test(String(r.position).trim())).sort((a, b) => parseInt(a.position, 10) - parseInt(b.position, 10)).slice(0, 5);
+            if (topRows.length) {
+                topRows.forEach(r => {
+                    html += '<tr><td>' + escapeHtml(String(r.position)) + '</td><td>' + escapeHtml(r.regatta_name || '') + '</td><td>' + escapeHtml(r.regatta_date || '') + '</td></tr>';
+                });
+            } else {
+                html += '<tr><td colspan="3">—</td></tr>';
+            }
+            html += '</tbody></table></div>';
+            html += '<div class="section"><h3>Recent Race History</h3><table class="data"><thead><tr><th>Position</th><th>Regatta Name</th><th>Date</th></tr></thead><tbody>';
+            (rows || []).forEach(r => {
+                html += '<tr><td>' + escapeHtml(String(r.position ?? '')) + '</td><td>' + escapeHtml(r.regatta_name || '') + '</td><td>' + escapeHtml(r.regatta_date || '') + '</td></tr>';
+            });
+            html += '</tbody></table></div>';
+            html += '<button type="button" class="btn-download js-download-results"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>Download Results</button>';
+            return html;
+        }
+
+        function doDownload(data) {
+            if (!data || !data.rows || !data.rows.length) return;
+            const cols = ['position', 'regatta_name', 'regatta_date'];
+            const lines = [cols.join(',')];
+            data.rows.forEach(r => {
+                lines.push(cols.map(c => '"' + String(r[c] ?? '').replace(/"/g, '""') + '"').join(','));
+            });
+            const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'sailing-results-' + Date.now() + '.csv';
+            a.click();
+            URL.revokeObjectURL(a.href);
+        }
+
+        function escapeHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        function addBotMsg(reply, data) {
+            const div = document.createElement('div');
+            div.className = 'msg bot';
+            const md = document.createElement('div');
+            md.className = 'markdown';
+            md.innerHTML = simpleMarkdown(reply);
+            div.appendChild(md);
+            if (data && data.rows && data.rows.length) {
+                const card = document.createElement('div');
+                card.className = 'results-card';
+                card.innerHTML = renderResultsCard(data);
+                const btn = card.querySelector('.js-download-results');
+                if (btn) btn.addEventListener('click', () => doDownload(data));
+                div.appendChild(card);
+            }
+            chatPane.appendChild(div);
+            chatPane.scrollTop = chatPane.scrollHeight;
+        }
+
+        async function send() {
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = '';
+            addMsg(text, true);
+            sendBtn.disabled = true;
+            status.textContent = '';
+            status.className = 'status';
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text })
+                });
+                const j = await res.json();
+                if (!j.success) {
+                    status.textContent = j.error || 'Request failed';
+                    status.className = 'status err';
+                    addBotMsg("Sorry, I couldn't complete that. " + (j.error || 'Please try again.'));
+                    return;
+                }
+                addBotMsg(j.reply || "I didn't find anything.", j.data);
+            } catch (e) {
+                status.textContent = e.message || 'Network error';
+                status.className = 'status err';
+                addBotMsg("Sorry, something went wrong. Please try again.");
+            } finally {
+                sendBtn.disabled = false;
+            }
+        }
+
+        sendBtn.addEventListener('click', send);
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+    </script>
+</body>
+
+</html>

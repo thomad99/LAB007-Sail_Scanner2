@@ -1,16 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sailing Chatbot - Love Sailing</title>
-    <meta name="description" content="The Love Sailing Chatbot provides sailing information, race data insights, and assistance for sailors. Get answers to your sailing questions with our AI-powered sailing assistant.">
-    <meta name="keywords" content="sailing chatbot, sailing assistant, AI sailing, sailing information, regatta help, sailboat racing">
-    <meta name="robots" content="index, follow">
-    <meta property="og:title" content="Sailing Chatbot - Love Sailing">
-    <meta property="og:description" content="Get sailing information and race data insights with our AI-powered sailing chatbot.">
-    <meta property="og:type" content="website">
+    <title>SailBot – Regatta Results | Love Sailing</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <style>
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             margin: 0;
             padding: 0;
@@ -22,138 +22,379 @@
             align-items: center;
             min-height: 100vh;
         }
+
         .logo {
-            margin-top: 50px;
-            max-width: 600px;
-            width: 90%;
-        }
-        .content {
-            margin-top: 50px;
-            text-align: center;
-            width: 80%;
-            max-width: 800px;
-        }
-        .back-link {
             margin-top: 20px;
+            max-width: 280px;
+            width: 45%;
+        }
+
+        .content {
+            margin-top: 24px;
+            text-align: center;
+            width: 90%;
+            max-width: 960px;
+        }
+
+        .content h1 {
+            margin: 0 0 8px;
+            color: #0088ff;
+            font-size: 1.6em;
+        }
+
+        .content .sub {
+            color: #aaa;
+            margin-bottom: 20px;
+            font-size: 0.95em;
+        }
+
+        .search-form {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 12px;
+            align-items: end;
+            text-align: left;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .field label {
+            font-size: 0.9em;
+            color: #ccc;
+        }
+
+        .field input {
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            background: rgba(255, 255, 255, 0.08);
             color: white;
+            font-size: 0.95em;
+        }
+
+        .field input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .btn {
+            padding: 10px 18px;
+            border-radius: 6px;
+            border: none;
+            font-size: 0.95em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #0066cc;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #0088ff;
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .links {
+            margin-top: 16px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .links a {
+            color: #66b3ff;
             text-decoration: none;
         }
-        .back-link:hover {
+
+        .links a:hover {
             text-decoration: underline;
         }
-        
-        /* Mobile menu styling */
+
+        .results {
+            width: 100%;
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .results table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .results th,
+        .results td {
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: left;
+            font-size: 0.9em;
+        }
+
+        .results th {
+            background: rgba(0, 136, 255, 0.2);
+            color: #b3e0ff;
+        }
+
+        .results tr:hover {
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .results .empty {
+            padding: 40px;
+            text-align: center;
+            color: #888;
+        }
+
+        .results .count {
+            margin-bottom: 10px;
+            color: #00cc77;
+            font-size: 0.95em;
+        }
+
+        .back-link {
+            margin-top: 24px;
+            color: #aaa;
+            text-decoration: none;
+            font-size: 0.95em;
+        }
+
+        .back-link:hover {
+            color: white;
+        }
+
         .hamburger-menu {
             display: none;
             cursor: pointer;
             position: fixed;
-            top: 20px;
-            right: 20px;
+            top: 16px;
+            right: 16px;
             z-index: 1000;
-            background-color: rgba(2, 0, 83, 0.8);
+            background: rgba(2, 0, 83, 0.9);
             padding: 10px;
-            border-radius: 5px;
+            border-radius: 6px;
         }
+
         .hamburger-menu span {
             display: block;
-            width: 30px;
-            height: 3px;
-            margin: 6px 0;
-            background-color: white;
-            transition: all 0.3s ease;
+            width: 24px;
+            height: 2px;
+            margin: 5px 0;
+            background: white;
         }
+
         .mobile-menu {
             display: none;
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: #020053;
+            inset: 0;
+            background: #020053;
             z-index: 999;
             flex-direction: column;
             justify-content: center;
             align-items: center;
+            gap: 12px;
             text-align: center;
-        }
-        .mobile-menu a {
-            display: block;
-            padding: 20px;
-            margin: 10px 0;
-            font-size: 1.5em;
-            color: white;
-            text-decoration: none;
-            width: 80%;
-            text-align: center;
-            border-radius: 8px;
-            background-color: rgba(255, 255, 255, 0.1);
-            transition: all 0.3s ease;
-        }
-        .mobile-menu a:hover {
-            background-color: rgba(255, 255, 255, 0.2);
-        }
-        .close-menu {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            font-size: 24px;
-            color: white;
-            cursor: pointer;
         }
 
-        /* Responsive styles */
+        .mobile-menu a {
+            color: white;
+            text-decoration: none;
+            padding: 14px 24px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            font-size: 1.1em;
+        }
+
+        .mobile-menu a:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .close-menu {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            color: white;
+            cursor: pointer;
+            font-size: 1.4em;
+        }
+
         @media (max-width: 768px) {
             .hamburger-menu {
                 display: block;
             }
-            .logo {
-                margin-top: 30px;
-                max-width: 80%;
+
+            .search-form {
+                grid-template-columns: 1fr;
             }
-            .content {
-                margin-top: 30px;
-                width: 90%;
+
+            .results {
+                overflow-x: auto;
+            }
+
+            .results table {
+                min-width: 700px;
             }
         }
     </style>
 </head>
+
 <body>
-    <img src="Images/LOVE SAILING LOGO.JPEG" alt="Love Sailing Logo" class="logo">
-    
+    <img src="/Images/LOVE SAILING LOGO.JPEG" alt="Love Sailing" class="logo">
     <div class="content">
-        <h1>Sailbot</h1>
-        <p>Welcome to the Sailbot page</p>
+        <h1>SailBot</h1>
+        <p class="sub">Search regatta results by sailor, boat, club, regatta, or year.</p>
+
+        <form class="search-form" id="searchForm">
+            <div class="field">
+                <label for="skipper">Skipper</label>
+                <input type="text" id="skipper" name="skipper" placeholder="Sailor name" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="boat_name">Boat name</label>
+                <input type="text" id="boat_name" name="boat_name" placeholder="Boat" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="yacht_club">Yacht club</label>
+                <input type="text" id="yacht_club" name="yacht_club" placeholder="Club" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="regatta_name">Regatta</label>
+                <input type="text" id="regatta_name" name="regatta_name" placeholder="Regatta name" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="year">Year</label>
+                <input type="text" id="year" name="year" placeholder="e.g. 2024" autocomplete="off" maxlength="4">
+            </div>
+            <div class="field">
+                <button type="submit" class="btn btn-primary" id="searchBtn">Search</button>
+            </div>
+        </form>
+
+        <div class="links">
+            <a href="Chatbot.html">Chatbot</a>
+            <a href="https://lovesailing-chatbot.onrender.com/chat">ChatBot (Legacy)</a>
+            <a href="ChatBotAdmin.html">ChatBot Admin</a>
+            <a href="Find-regatta.html">Find Regatta</a>
+            <a href="index.html">Home</a>
+        </div>
+
+        <div class="results" id="results" style="display:none;">
+            <div class="count" id="resultsCount"></div>
+            <table>
+                <thead id="resultsHead"></thead>
+                <tbody id="resultsBody"></tbody>
+            </table>
+            <div class="empty" id="resultsEmpty" style="display:none;">No rows match your filters.</div>
+        </div>
     </div>
 
-    <a href="index.html" class="back-link">Back to Home</a>
-    
-    <!-- Hamburger menu icon -->
+    <a href="index.html" class="back-link">← Back to Home</a>
+
     <div class="hamburger-menu" onclick="toggleMenu()">
-        <span></span>
-        <span></span>
-        <span></span>
+        <span></span><span></span><span></span>
     </div>
-
-    <!-- Mobile menu -->
     <div class="mobile-menu" id="mobileMenu">
         <div class="close-menu" onclick="toggleMenu()">✕</div>
-        
         <a href="index.html">Home</a>
-        <a href="https://lovesailing.ai/SailScan.html">Photo Database</a>
-        <a href="https://lovesailing-chatbot.onrender.com/chat">ChatBot</a>
+        <a href="SailScan.html">Photo Database</a>
+        <a href="Find-regatta.html">Find Regatta</a>
+        <a href="Chatbot.html">Chatbot</a>
+        <a href="https://lovesailing-chatbot.onrender.com/chat">ChatBot (Legacy)</a>
+        <a href="ChatBotAdmin.html">ChatBot Admin</a>
         <a href="Shop.html">Shop</a>
-        <a href="game.html">GAME</a>
     </div>
 
     <script>
         function toggleMenu() {
-            const mobileMenu = document.getElementById('mobileMenu');
-            if (mobileMenu.style.display === 'flex') {
-                mobileMenu.style.display = 'none';
-            } else {
-                mobileMenu.style.display = 'flex';
+            const m = document.getElementById('mobileMenu');
+            m.style.display = m.style.display === 'flex' ? 'none' : 'flex';
+        }
+
+        const form = document.getElementById('searchForm');
+        const results = document.getElementById('results');
+        const resultsCount = document.getElementById('resultsCount');
+        const resultsHead = document.getElementById('resultsHead');
+        const resultsBody = document.getElementById('resultsBody');
+        const resultsEmpty = document.getElementById('resultsEmpty');
+        const searchBtn = document.getElementById('searchBtn');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            searchBtn.disabled = true;
+            searchBtn.textContent = 'Searching…';
+            results.style.display = 'block';
+            resultsEmpty.style.display = 'none';
+            resultsHead.innerHTML = '';
+            resultsBody.innerHTML = '';
+            resultsCount.textContent = '';
+
+            const payload = {
+                skipper: document.getElementById('skipper').value.trim(),
+                boat_name: document.getElementById('boat_name').value.trim(),
+                yacht_club: document.getElementById('yacht_club').value.trim(),
+                regatta_name: document.getElementById('regatta_name').value.trim(),
+                year: document.getElementById('year').value.trim()
+            };
+
+            try {
+                const res = await fetch('/api/sailbot/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    resultsCount.textContent = 'Error: ' + (data.error || 'Search failed');
+                    resultsCount.style.color = '#ff8888';
+                    return;
+                }
+                const rows = data.rows || [];
+                resultsCount.style.color = '#00cc77';
+                resultsCount.textContent = rows.length ? `Showing ${rows.length} result(s)` : 'No results found.';
+
+                if (rows.length === 0) {
+                    resultsEmpty.style.display = 'block';
+                    return;
+                }
+                const cols = ['regatta_name', 'regatta_date', 'category', 'position', 'sail_number', 'boat_name', 'skipper', 'yacht_club', 'results', 'total_points'];
+                resultsHead.innerHTML = '<tr>' + cols.map(c => '<th>' + c.replace(/_/g, ' ') + '</th>').join('') + '</tr>';
+                resultsBody.innerHTML = rows.map(r => {
+                    return '<tr>' + cols.map(c => {
+                        const v = r[c];
+                        const s = v == null ? '' : String(v);
+                        return '<td>' + escapeHtml(s) + '</td>';
+                    }).join('') + '</tr>';
+                }).join('');
+            } catch (err) {
+                resultsCount.textContent = 'Error: ' + err.message;
+                resultsCount.style.color = '#ff8888';
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.textContent = 'Search';
             }
+        });
+
+        function escapeHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
         }
     </script>
 </body>
-</html> 
+
+</html>

@@ -23,6 +23,7 @@ const ExifParser = require('exif-parser');
 const nodemailer = require('nodemailer');
 const cheerio = require('cheerio');
 const axios = require('axios');
+const OpenAI = require('openai').default;
 
 // Load Puppeteer only if ENABLE_PUPPETEER environment variable is set to 'true'
 // Main server should NOT have this set - only the dedicated scraper service should
@@ -505,6 +506,58 @@ const upload = multer({
         fileSize: 5 * 1024 * 1024 // 5MB limit
     }
 });
+
+const csvUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 25 * 1024 * 1024 }
+});
+
+function parseCSVLine(line) {
+    const out = [];
+    let cur = '';
+    let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (c === '"') inQ = !inQ;
+        else if (c === ',' && !inQ) { out.push(cur.trim()); cur = ''; }
+        else cur += c;
+    }
+    out.push(cur.trim());
+    return out;
+}
+
+function parseCSVBuffer(buf) {
+    let text = buf.toString('utf8').replace(/\uFEFF/g, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+    if (lines.length < 1) return { headers: [], rows: [] };
+    const headers = parseCSVLine(lines[0]).map(h => h.replace(/^"|"$/g, '').trim());
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) rows.push(parseCSVLine(lines[i]));
+    return { headers, rows };
+}
+
+const MONTHS = {
+    january: '01', february: '02', march: '03', april: '04', may: '05', june: '06',
+    july: '07', august: '08', september: '09', october: '10', november: '11', december: '12'
+};
+
+function parseRegattaDate(s) {
+    if (!s || !String(s).trim()) return null;
+    const raw = String(s).trim();
+    const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+    const slash = raw.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (slash) return `${slash[3]}-${slash[1].padStart(2, '0')}-${slash[2].padStart(2, '0')}`;
+    const monthName = raw.match(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:\s*-\s*\d{1,2})?\s*,?\s*(\d{4})/i);
+    if (monthName) {
+        const key = monthName[1].toLowerCase();
+        const m = MONTHS[key];
+        const d = monthName[2].padStart(2, '0');
+        const y = monthName[3];
+        if (m && d && y) return `${y}-${m}-${d}`;
+    }
+    return null;
+}
 
 // Add these environment variables in Render
 const computerVisionKey = process.env.AZURE_VISION_KEY;
@@ -2045,6 +2098,38 @@ async function createRegattasTable() {
     }
 }
 
+// RegattaNetworkData: flattened regatta results for SailBot / ChatBot
+const REGATTA_NETWORK_DATA_TABLE = 'RegattaNetworkData';
+
+async function ensureRegattaNetworkDataTable() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS "${REGATTA_NETWORK_DATA_TABLE}" (
+                id SERIAL PRIMARY KEY,
+                regatta_name TEXT,
+                regatta_date DATE,
+                category TEXT,
+                position TEXT,
+                sail_number TEXT,
+                boat_name TEXT,
+                skipper TEXT,
+                yacht_club TEXT,
+                results TEXT,
+                total_points TEXT,
+                dataset_id TEXT DEFAULT 'legacy'
+            )
+        `);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_rnd_regatta_date ON "${REGATTA_NETWORK_DATA_TABLE}"(regatta_date);`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_rnd_regatta_name ON "${REGATTA_NETWORK_DATA_TABLE}"(regatta_name);`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_rnd_skipper ON "${REGATTA_NETWORK_DATA_TABLE}"(skipper);`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_rnd_yacht_club ON "${REGATTA_NETWORK_DATA_TABLE}"(yacht_club);`);
+        await pool.query(`ALTER TABLE "${REGATTA_NETWORK_DATA_TABLE}" ADD COLUMN IF NOT EXISTS source_url TEXT;`);
+        console.log('RegattaNetworkData table created or verified');
+    } catch (err) {
+        console.error('Error creating RegattaNetworkData table:', err);
+    }
+}
+
 // Add middleware for authentication
 const authenticateToken = async (req, res, next) => {
     const token = req.headers['authorization']?.split(' ')[1];
@@ -2455,6 +2540,373 @@ async function checkForDuplicate(checksum) {
         return null;
     }
 }
+
+// ---------- SailBot / RegattaNetworkData API ----------
+const RND = REGATTA_NETWORK_DATA_TABLE;
+
+app.get('/api/sailbot/stats', async (req, res) => {
+    try {
+        await ensureRegattaNetworkDataTable();
+        const r = await pool.query(`
+            SELECT
+                COUNT(*)::int AS total_records,
+                COUNT(DISTINCT skipper)::int AS total_sailors,
+                COUNT(DISTINCT regatta_name)::int AS total_regattas,
+                COUNT(DISTINCT yacht_club)::int AS total_clubs,
+                MIN(regatta_date)::text AS earliest_date,
+                MAX(regatta_date)::text AS latest_date
+            FROM "${RND}"
+        `);
+        const row = r.rows[0];
+        res.json({
+            success: true,
+            tableName: RND,
+            total_records: row.total_records,
+            total_sailors: row.total_sailors,
+            total_regattas: row.total_regattas,
+            total_clubs: row.total_clubs,
+            earliest_date: row.earliest_date,
+            latest_date: row.latest_date
+        });
+    } catch (e) {
+        console.error('SailBot stats error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.post('/api/sailbot/search', async (req, res) => {
+    try {
+        const { skipper, boat_name, yacht_club, regatta_name, year } = req.body || {};
+        const params = [];
+        let n = 0;
+        let where = '1=1';
+        const add = (col, val, op = 'ILIKE') => {
+            if (!val || String(val).trim() === '') return;
+            n++;
+            if (op === 'ILIKE') {
+                where += ` AND ${col} ILIKE $${n}`;
+                params.push(`%${String(val).trim()}%`);
+            } else {
+                where += ` AND ${col} = $${n}`;
+                params.push(val);
+            }
+        };
+        add('skipper', skipper);
+        add('boat_name', boat_name);
+        add('yacht_club', yacht_club);
+        add('regatta_name', regatta_name);
+        if (year != null && year !== '') {
+            n++;
+            where += ` AND EXTRACT(YEAR FROM regatta_date) = $${n}`;
+            params.push(parseInt(String(year), 10));
+        }
+        n++;
+        params.push(100);
+        const q = `
+            SELECT id, regatta_name, regatta_date, category, position, sail_number, boat_name, skipper, yacht_club, results, total_points
+            FROM "${RND}" WHERE ${where}
+            ORDER BY regatta_date DESC NULLS LAST, position ASC NULLS LAST
+            LIMIT $${n}
+        `;
+        const result = await pool.query(q, params);
+        res.json({ success: true, rows: result.rows });
+    } catch (e) {
+        console.error('SailBot search error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.get('/api/sailbot/export', async (req, res) => {
+    try {
+        const { skipper, boat_name, yacht_club, regatta_name, year, format } = req.query;
+        const params = [];
+        let n = 0;
+        let where = '1=1';
+        const add = (col, val) => {
+            if (!val || String(val).trim() === '') return;
+            n++;
+            where += ` AND ${col} ILIKE $${n}`;
+            params.push(`%${String(val).trim()}%`);
+        };
+        add('skipper', skipper);
+        add('boat_name', boat_name);
+        add('yacht_club', yacht_club);
+        add('regatta_name', regatta_name);
+        if (year != null && year !== '') {
+            n++;
+            where += ` AND EXTRACT(YEAR FROM regatta_date) = $${n}`;
+            params.push(parseInt(String(year), 10));
+        }
+        const result = await pool.query(
+            `SELECT * FROM "${RND}" WHERE ${where} ORDER BY regatta_date DESC, id ASC LIMIT 10000`,
+            params
+        );
+        const asCsv = (format || 'csv').toLowerCase() === 'csv';
+        if (asCsv) {
+            const cols = result.rows.length ? Object.keys(result.rows[0]) : [];
+            const header = cols.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',');
+            const lines = [header];
+            for (const row of result.rows) {
+                const vs = cols.map(c => {
+                    const v = row[c];
+                    const s = v == null ? '' : String(v).replace(/"/g, '""');
+                    return `"${s}"`;
+                });
+                lines.push(vs.join(','));
+            }
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename=sailbot-export-${Date.now()}.csv`);
+            return res.send(lines.join('\n'));
+        }
+        res.json({ success: true, rows: result.rows, count: result.rows.length });
+    } catch (e) {
+        console.error('SailBot export error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.get('/api/sailbot/backup', async (req, res) => {
+    try {
+        const result = await pool.query(`SELECT * FROM "${RND}" ORDER BY id ASC`);
+        const cols = result.rows.length ? Object.keys(result.rows[0]) : [];
+        const header = cols.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',');
+        const lines = [header];
+        for (const row of result.rows) {
+            const vs = cols.map(c => {
+                const v = row[c];
+                const s = v == null ? '' : String(v).replace(/"/g, '""');
+                return `"${s}"`;
+            });
+            lines.push(vs.join(','));
+        }
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename=RegattaNetworkData-backup-${Date.now()}.csv`);
+        res.send(lines.join('\n'));
+    } catch (e) {
+        console.error('SailBot backup error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.post('/api/sailbot/restore', csvUpload.single('file'), async (req, res) => {
+    try {
+        if (!req.file || !req.file.buffer) {
+            return res.status(400).json({ success: false, error: 'No file uploaded' });
+        }
+        const { replace } = req.body || {};
+        const doReplace = replace === 'true' || replace === '1';
+        if (doReplace) {
+            await pool.query(`TRUNCATE "${RND}" RESTART IDENTITY`);
+        }
+        const { headers, rows } = parseCSVBuffer(req.file.buffer);
+        const colMap = {};
+        const schemaCols = ['regatta_name', 'regatta_date', 'category', 'position', 'sail_number', 'boat_name', 'skipper', 'yacht_club', 'results', 'total_points', 'source_url'];
+        headers.forEach((h, i) => {
+            const k = h.replace(/\s+/g, '_').toLowerCase().replace(/"/g, '');
+            if (schemaCols.includes(k) || k === 'dataset_id') colMap[k] = i;
+        });
+        let inserted = 0;
+        for (const row of rows) {
+            const get = (k) => (colMap[k] != null && row[colMap[k]] != null) ? String(row[colMap[k]]).trim() : null;
+            const regatta_date = parseRegattaDate(get('regatta_date'));
+            const yacht_club = get('yacht_club') || 'Unknown';
+            try {
+                await pool.query(`
+                    INSERT INTO "${RND}" (regatta_name, regatta_date, category, position, sail_number, boat_name, skipper, yacht_club, results, total_points, source_url, dataset_id)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                `, [
+                    get('regatta_name') || null,
+                    regatta_date || null,
+                    get('category') || null,
+                    get('position') || null,
+                    get('sail_number') || null,
+                    get('boat_name') || null,
+                    get('skipper') || null,
+                    yacht_club,
+                    get('results') || null,
+                    get('total_points') || null,
+                    get('source_url') || null,
+                    get('dataset_id') || 'new'
+                ]);
+                inserted++;
+            } catch (err) {
+                console.warn('SailBot restore skip row:', err.message);
+            }
+        }
+        res.json({ success: true, inserted });
+    } catch (e) {
+        console.error('SailBot restore error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.post('/api/sailbot/upload', csvUpload.single('file'), async (req, res) => {
+    try {
+        if (!req.file || !req.file.buffer) {
+            return res.status(400).json({ success: false, error: 'No file uploaded' });
+        }
+        const { headers, rows } = parseCSVBuffer(req.file.buffer);
+        const colMap = {};
+        const schemaCols = ['regatta_name', 'regatta_date', 'category', 'position', 'sail_number', 'boat_name', 'skipper', 'yacht_club', 'results', 'total_points', 'source_url'];
+        headers.forEach((h, i) => {
+            const k = h.replace(/\s+/g, '_').toLowerCase().replace(/"/g, '');
+            if (schemaCols.includes(k) || k === 'dataset_id') colMap[k] = i;
+        });
+        let inserted = 0;
+        for (const row of rows) {
+            const get = (k) => (colMap[k] != null && row[colMap[k]] != null) ? String(row[colMap[k]]).trim() : null;
+            const regatta_date = parseRegattaDate(get('regatta_date'));
+            const yacht_club = get('yacht_club') || 'Unknown';
+            try {
+                await pool.query(`
+                    INSERT INTO "${RND}" (regatta_name, regatta_date, category, position, sail_number, boat_name, skipper, yacht_club, results, total_points, source_url, dataset_id)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                `, [
+                    get('regatta_name') || null,
+                    regatta_date || null,
+                    get('category') || null,
+                    get('position') || null,
+                    get('sail_number') || null,
+                    get('boat_name') || null,
+                    get('skipper') || null,
+                    yacht_club,
+                    get('results') || null,
+                    get('total_points') || null,
+                    get('source_url') || null,
+                    get('dataset_id') || 'new'
+                ]);
+                inserted++;
+            } catch (err) {
+                console.warn('SailBot upload skip row:', err.message);
+            }
+        }
+        res.json({ success: true, inserted });
+    } catch (e) {
+        console.error('SailBot upload error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ---------- Chatbot (OpenAI + SailBot search) ----------
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+
+const CHAT_SYSTEM = `You are a sailing results assistant. Users ask about sailors, boats, clubs, or regattas.
+Extract a JSON object with: "intent" (one of: sailor_search, boat_search, club_search, regatta_search) and exactly one of: "skipper", "boat_name", "yacht_club", "regatta_name". Optional: "year" (integer).
+If the user types a person name (e.g. "Dominic Thomas") with no other context, use intent "sailor_search" and set "skipper" to that name.
+Reply with ONLY valid JSON, no markdown or extra text.`;
+
+async function runSailbotSearch(criteria) {
+    const { skipper, boat_name, yacht_club, regatta_name, year } = criteria || {};
+    const params = [];
+    let n = 0;
+    let where = '1=1';
+    const add = (col, val) => {
+        if (!val || String(val).trim() === '') return;
+        n++;
+        where += ` AND ${col} ILIKE $${n}`;
+        params.push(`%${String(val).trim()}%`);
+    };
+    add('skipper', skipper);
+    add('boat_name', boat_name);
+    add('yacht_club', yacht_club);
+    add('regatta_name', regatta_name);
+    if (year != null && year !== '') {
+        n++;
+        where += ` AND EXTRACT(YEAR FROM regatta_date) = $${n}`;
+        params.push(parseInt(String(year), 10));
+    }
+    params.push(500);
+    const q = `SELECT id, regatta_name, regatta_date, category, position, sail_number, boat_name, skipper, yacht_club, results, total_points
+        FROM "${RND}" WHERE ${where}
+        ORDER BY regatta_date DESC NULLS LAST, position ASC NULLS LAST
+        LIMIT $${n + 1}`;
+    const result = await pool.query(q, params);
+    return result.rows;
+}
+
+app.post('/api/chat', async (req, res) => {
+    try {
+        const { message } = req.body || {};
+        if (!message || !String(message).trim()) {
+            return res.status(400).json({ success: false, error: 'Message required' });
+        }
+        if (!openai) {
+            return res.status(503).json({ success: false, error: 'OpenAI not configured (OPENAI_API_KEY)' });
+        }
+        const completion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+                { role: 'system', content: CHAT_SYSTEM },
+                { role: 'user', content: String(message).trim() }
+            ],
+            max_tokens: 256,
+            temperature: 0
+        });
+        const raw = completion.choices?.[0]?.message?.content?.trim() || '{}';
+        let parsed = {};
+        try {
+            const json = raw.replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
+            parsed = JSON.parse(json);
+        } catch (_) {
+            return res.status(502).json({ success: false, error: 'Could not parse OpenAI reply as JSON' });
+        }
+        const criteria = {
+            skipper: parsed.skipper,
+            boat_name: parsed.boat_name,
+            yacht_club: parsed.yacht_club,
+            regatta_name: parsed.regatta_name,
+            year: parsed.year
+        };
+        const hasAny = [criteria.skipper, criteria.boat_name, criteria.yacht_club, criteria.regatta_name].some(Boolean);
+        if (!hasAny) {
+            return res.json({
+                success: true,
+                reply: "I couldn't determine who or what to look up. Try a sailor name (e.g. Dominic Thomas), boat name, club, or regatta.",
+                data: null
+            });
+        }
+        const rows = await runSailbotSearch(criteria);
+        const seen = new Set();
+        let totalRegattas = 0;
+        for (const r of rows) {
+            const k = `${r.regatta_name}|${r.regatta_date}`;
+            if (!seen.has(k)) { seen.add(k); totalRegattas++; }
+        }
+        let topPosition = null;
+        for (const r of rows) {
+            const p = r.position;
+            if (p != null && /^\d+$/.test(String(p).trim())) {
+                const n = parseInt(String(p).trim(), 10);
+                if (topPosition == null || n < topPosition) topPosition = n;
+            }
+        }
+        const basicInfo = rows.length ? {
+            name: (parsed.intent === 'sailor_search' ? rows[0].skipper : null) || rows[0].boat_name || rows[0].regatta_name || '—',
+            club: rows[0].yacht_club || '—'
+        } : null;
+        const raceHistory = rows.map(r => ({
+            position: r.position,
+            regatta_name: r.regatta_name,
+            regatta_date: r.regatta_date ? String(r.regatta_date).slice(0, 10) : null
+        }));
+        const reply = rows.length
+            ? `I found the following information:\n\n**Total number of regattas:** ${totalRegattas}\n**Top position:** ${topPosition != null ? topPosition : '—'}\n\nSee the table below for each regatta and result.`
+            : "I didn't find any results for that search. Try a different sailor, boat, club, or regatta.";
+        res.json({
+            success: true,
+            reply,
+            data: rows.length ? {
+                basicInfo,
+                totalRegattas,
+                topPosition: topPosition != null ? topPosition : null,
+                rows: raceHistory
+            } : null
+        });
+    } catch (e) {
+        console.error('Chat API error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
 
 // Static file serving (AFTER all API routes)
 app.use(express.static(path.join(__dirname, 'public')));
@@ -3802,6 +4254,7 @@ async function initializeServer() {
         await createPhotoMetadataTable();
         await createUserTables();
         await createRegattasTable();
+        await ensureRegattaNetworkDataTable();
         await testS3Connection();
         console.log('✓ Server initialization complete');
     } catch (startupError) {

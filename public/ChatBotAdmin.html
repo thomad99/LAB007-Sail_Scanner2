@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatBot Admin – RegattaNetworkData | Love Sailing</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #020053;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .logo {
+            margin-top: 20px;
+            max-width: 260px;
+            width: 42%;
+        }
+
+        .content {
+            margin-top: 20px;
+            width: 90%;
+            max-width: 1000px;
+        }
+
+        .content h1 {
+            margin: 0 0 6px;
+            color: #0088ff;
+            font-size: 1.5em;
+        }
+
+        .content .sub {
+            color: #aaa;
+            margin-bottom: 24px;
+            font-size: 0.9em;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 18px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-card .label {
+            color: #aaa;
+            font-size: 0.85em;
+            margin-bottom: 6px;
+        }
+
+        .stat-card .value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #00dd88;
+        }
+
+        .section {
+            background: rgba(255, 255, 255, 0.06);
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .section h2 {
+            margin: 0 0 14px;
+            color: #66b3ff;
+            font-size: 1.15em;
+        }
+
+        .section p {
+            margin: 0 0 12px;
+            color: #ccc;
+            font-size: 0.9em;
+        }
+
+        .filters {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .filters .field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .filters label {
+            font-size: 0.85em;
+            color: #aaa;
+        }
+
+        .filters input {
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.08);
+            color: white;
+            font-size: 0.9em;
+        }
+
+        .btns {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+
+        .btn {
+            padding: 10px 16px;
+            border-radius: 6px;
+            border: none;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #0066cc;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #0088ff;
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        .btn-danger {
+            background: #aa3333;
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: #cc4444;
+        }
+
+        .upload-wrap {
+            margin-top: 10px;
+        }
+
+        .upload-wrap input[type="file"] {
+            color: #ccc;
+        }
+
+        .status {
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+
+        .status.ok {
+            color: #00cc77;
+        }
+
+        .status.err {
+            color: #ff8888;
+        }
+
+        .links {
+            margin-top: 24px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .links a {
+            color: #66b3ff;
+            text-decoration: none;
+        }
+
+        .links a:hover {
+            text-decoration: underline;
+        }
+
+        .back-link {
+            margin-top: 20px;
+            color: #888;
+            text-decoration: none;
+            font-size: 0.9em;
+        }
+
+        .back-link:hover {
+            color: white;
+        }
+
+        .hamburger-menu {
+            display: none;
+            cursor: pointer;
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            z-index: 1000;
+            background: rgba(2, 0, 83, 0.9);
+            padding: 10px;
+            border-radius: 6px;
+        }
+
+        .hamburger-menu span {
+            display: block;
+            width: 24px;
+            height: 2px;
+            margin: 5px 0;
+            background: white;
+        }
+
+        .mobile-menu {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: #020053;
+            z-index: 999;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 12px;
+            text-align: center;
+        }
+
+        .mobile-menu a {
+            color: white;
+            text-decoration: none;
+            padding: 14px 24px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            font-size: 1.1em;
+        }
+
+        .mobile-menu a:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .close-menu {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            color: white;
+            cursor: pointer;
+            font-size: 1.4em;
+        }
+
+        @media (max-width: 768px) {
+            .hamburger-menu {
+                display: block;
+            }
+
+            .filters {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <img src="/Images/LOVE SAILING LOGO.JPEG" alt="Love Sailing" class="logo">
+    <div class="content">
+        <h1>ChatBot Admin</h1>
+        <p class="sub">Dashboard, exports, backup/restore, and CSV upload for RegattaNetworkData.</p>
+
+        <div class="stats" id="stats">
+            <div class="stat-card">
+                <div class="label">Table</div>
+                <div class="value" id="statTable">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Record count</div>
+                <div class="value" id="statRecords">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Unique sailors</div>
+                <div class="value" id="statSailors">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Unique regattas</div>
+                <div class="value" id="statRegattas">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Unique clubs</div>
+                <div class="value" id="statClubs">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Date range</div>
+                <div class="value" id="statDates">—</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Export filtered data</h2>
+            <p>Apply filters and download CSV for validation.</p>
+            <div class="filters" id="exportFilters">
+                <div class="field"><label>Skipper</label><input type="text" id="exSkipper" placeholder="Sailor"></div>
+                <div class="field"><label>Boat name</label><input type="text" id="exBoat" placeholder="Boat"></div>
+                <div class="field"><label>Yacht club</label><input type="text" id="exClub" placeholder="Club"></div>
+                <div class="field"><label>Regatta</label><input type="text" id="exRegatta" placeholder="Regatta"></div>
+                <div class="field"><label>Year</label><input type="text" id="exYear" placeholder="e.g. 2024"></div>
+            </div>
+            <div class="btns">
+                <button type="button" class="btn btn-primary" id="exportBtn">Export CSV</button>
+            </div>
+            <div class="status" id="exportStatus"></div>
+        </div>
+
+        <div class="section">
+            <h2>Backup &amp; restore</h2>
+            <p>Backup: download full table as CSV. Restore: upload CSV to replace or append.</p>
+            <div class="btns">
+                <button type="button" class="btn btn-primary" id="backupBtn">Download backup (CSV)</button>
+            </div>
+            <div class="status" id="backupStatus"></div>
+            <div class="upload-wrap">
+                <label><input type="checkbox" id="restoreReplace"> Replace existing data (truncate before
+                    restore)</label>
+            </div>
+            <form id="restoreForm" style="margin-top:10px;">
+                <input type="file" id="restoreFile" name="file" accept=".csv,.txt" required>
+                <button type="submit" class="btn btn-secondary" id="restoreBtn">Restore from CSV</button>
+            </form>
+            <div class="status" id="restoreStatus"></div>
+        </div>
+
+        <div class="section">
+            <h2>Upload CSV (new results)</h2>
+            <p>Upload a CSV of regatta results. Columns: regatta_name, regatta_date, category, position, sail_number,
+                boat_name, skipper, yacht_club, results, total_points. Missing yacht_club → "Unknown".</p>
+            <form id="uploadForm">
+                <input type="file" id="uploadFile" name="file" accept=".csv,.txt" required>
+                <button type="submit" class="btn btn-primary" id="uploadBtn">Upload CSV</button>
+            </form>
+            <div class="status" id="uploadStatus"></div>
+        </div>
+
+        <div class="links">
+            <a href="Chatbot.html">Chatbot</a>
+            <a href="SailBot.html">SailBot</a>
+            <a href="https://lovesailing-chatbot.onrender.com/chat">ChatBot (Legacy)</a>
+            <a href="Find-regatta.html">Find Regatta</a>
+            <a href="index.html">Home</a>
+        </div>
+    </div>
+
+    <a href="index.html" class="back-link">← Back to Home</a>
+
+    <div class="hamburger-menu" onclick="toggleMenu()"><span></span><span></span><span></span></div>
+    <div class="mobile-menu" id="mobileMenu">
+        <div class="close-menu" onclick="toggleMenu()">✕</div>
+        <a href="index.html">Home</a>
+        <a href="SailScan.html">Photo Database</a>
+        <a href="Find-regatta.html">Find Regatta</a>
+        <a href="Chatbot.html">Chatbot</a>
+        <a href="SailBot.html">SailBot</a>
+        <a href="https://lovesailing-chatbot.onrender.com/chat">ChatBot (Legacy)</a>
+        <a href="ChatBotAdmin.html">ChatBot Admin</a>
+        <a href="Shop.html">Shop</a>
+    </div>
+
+    <script>
+        function toggleMenu() {
+            const m = document.getElementById('mobileMenu');
+            m.style.display = m.style.display === 'flex' ? 'none' : 'flex';
+        }
+
+        async function loadStats() {
+            try {
+                const r = await fetch('/api/sailbot/stats');
+                const d = await r.json();
+                if (!d.success) return;
+                document.getElementById('statTable').textContent = d.tableName || '—';
+                document.getElementById('statRecords').textContent = (d.total_records ?? '—').toLocaleString();
+                document.getElementById('statSailors').textContent = (d.total_sailors ?? '—').toLocaleString();
+                document.getElementById('statRegattas').textContent = (d.total_regattas ?? '—').toLocaleString();
+                document.getElementById('statClubs').textContent = (d.total_clubs ?? '—').toLocaleString();
+                const from = d.earliest_date || '';
+                const to = d.latest_date || '';
+                document.getElementById('statDates').textContent = (from && to) ? (from + ' … ' + to) : (from || to || '—');
+            } catch (e) {
+                console.error('Stats load error:', e);
+            }
+        }
+        loadStats();
+
+        document.getElementById('backupBtn').addEventListener('click', async () => {
+            const el = document.getElementById('backupStatus');
+            el.textContent = 'Preparing backup…';
+            el.className = 'status ok';
+            try {
+                const r = await fetch('/api/sailbot/backup');
+                if (!r.ok) throw new Error(r.statusText);
+                const blob = await r.blob();
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'RegattaNetworkData-backup-' + Date.now() + '.csv';
+                a.click();
+                URL.revokeObjectURL(a.href);
+                el.textContent = 'Backup download started.';
+            } catch (e) {
+                el.textContent = 'Backup failed: ' + e.message;
+                el.className = 'status err';
+            }
+        });
+
+        document.getElementById('exportBtn').addEventListener('click', async () => {
+            const params = new URLSearchParams();
+            params.set('format', 'csv');
+            const s = document.getElementById('exSkipper').value.trim();
+            const b = document.getElementById('exBoat').value.trim();
+            const c = document.getElementById('exClub').value.trim();
+            const g = document.getElementById('exRegatta').value.trim();
+            const y = document.getElementById('exYear').value.trim();
+            if (s) params.set('skipper', s);
+            if (b) params.set('boat_name', b);
+            if (c) params.set('yacht_club', c);
+            if (g) params.set('regatta_name', g);
+            if (y) params.set('year', y);
+            const el = document.getElementById('exportStatus');
+            el.textContent = 'Preparing download…';
+            el.className = 'status ok';
+            try {
+                const r = await fetch('/api/sailbot/export?' + params.toString());
+                if (!r.ok) throw new Error(r.statusText);
+                const blob = await r.blob();
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'sailbot-export-' + Date.now() + '.csv';
+                a.click();
+                URL.revokeObjectURL(a.href);
+                el.textContent = 'Download started.';
+            } catch (e) {
+                el.textContent = 'Export failed: ' + e.message;
+                el.className = 'status err';
+            }
+        });
+
+        const restoreForm = document.getElementById('restoreForm');
+        const restoreFile = document.getElementById('restoreFile');
+        const restoreBtn = document.getElementById('restoreBtn');
+        const restoreStatus = document.getElementById('restoreStatus');
+        restoreForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!restoreFile.files.length) return;
+            restoreBtn.disabled = true;
+            restoreStatus.textContent = 'Restoring…';
+            restoreStatus.className = 'status ok';
+            const fd = new FormData();
+            fd.append('file', restoreFile.files[0]);
+            fd.append('replace', document.getElementById('restoreReplace').checked ? 'true' : 'false');
+            try {
+                const r = await fetch('/api/sailbot/restore', { method: 'POST', body: fd });
+                const d = await r.json();
+                if (d.success) {
+                    restoreStatus.textContent = 'Restored ' + (d.inserted || 0) + ' rows.';
+                    restoreFile.value = '';
+                    loadStats();
+                } else {
+                    restoreStatus.textContent = 'Restore failed: ' + (d.error || 'Unknown error');
+                    restoreStatus.className = 'status err';
+                }
+            } catch (err) {
+                restoreStatus.textContent = 'Restore failed: ' + err.message;
+                restoreStatus.className = 'status err';
+            } finally {
+                restoreBtn.disabled = false;
+            }
+        });
+
+        const uploadForm = document.getElementById('uploadForm');
+        const uploadFile = document.getElementById('uploadFile');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const uploadStatus = document.getElementById('uploadStatus');
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!uploadFile.files.length) return;
+            uploadBtn.disabled = true;
+            uploadStatus.textContent = 'Uploading…';
+            uploadStatus.className = 'status ok';
+            const fd = new FormData();
+            fd.append('file', uploadFile.files[0]);
+            try {
+                const r = await fetch('/api/sailbot/upload', { method: 'POST', body: fd });
+                const d = await r.json();
+                if (d.success) {
+                    uploadStatus.textContent = 'Uploaded ' + (d.inserted || 0) + ' rows.';
+                    uploadFile.value = '';
+                    loadStats();
+                } else {
+                    uploadStatus.textContent = 'Upload failed: ' + (d.error || 'Unknown error');
+                    uploadStatus.className = 'status err';
+                }
+            } catch (err) {
+                uploadStatus.textContent = 'Upload failed: ' + err.message;
+                uploadStatus.className = 'status err';
+            } finally {
+                uploadBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+
+</html>
