@@ -3422,7 +3422,7 @@ async function scrapeClubspot() {
 // Search regattas endpoint
 app.get('/api/search-regattas', async (req, res) => {
     try {
-        const { date, startDate, endDate, location, name, latitude, longitude, radius, locationName } = req.query;
+        const { date, startDate, endDate, location, name, q, latitude, longitude, radius, locationName } = req.query;
 
         let query = 'SELECT * FROM regattas WHERE 1=1';
         const params = [];
@@ -3444,29 +3444,34 @@ app.get('/api/search-regattas', async (req, res) => {
             query += ' AND regatta_date::date >= CURRENT_DATE';
         }
 
-        if (name) {
+        if (q) {
             paramCount++;
-            query += ` AND regatta_name ILIKE $${paramCount}`;
-            params.push(`%${name}%`);
+            const qParam = paramCount;
+            query += ` AND (location ILIKE $${qParam} OR regatta_name ILIKE $${qParam})`;
+            params.push(`%${q}%`);
+        } else {
+            if (name) {
+                paramCount++;
+                query += ` AND regatta_name ILIKE $${paramCount}`;
+                params.push(`%${name}%`);
+            }
+            if (location) {
+                paramCount++;
+                query += ` AND location ILIKE $${paramCount}`;
+                params.push(`%${location}%`);
+            }
         }
 
         // If locationName is provided (from reverse geocoding), try to match against regatta locations
-        // This helps find regattas near the user's detected location
         if (locationName) {
-            // Extract city name from locationName (format: "City, State")
             const cityName = locationName.split(',')[0].trim();
             paramCount++;
             const cityParam = paramCount;
             paramCount++;
             const fullLocationParam = paramCount;
-            // Match if location contains the city name or the full location name
             query += ` AND (location ILIKE $${cityParam} OR location ILIKE $${fullLocationParam})`;
             params.push(`%${cityName}%`);
             params.push(`%${locationName}%`);
-        } else if (location) {
-            paramCount++;
-            query += ` AND location ILIKE $${paramCount}`;
-            params.push(`%${location}%`);
         }
 
         // If a single date is provided, prioritize alphabetical order within that date

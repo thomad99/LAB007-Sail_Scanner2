@@ -391,9 +391,9 @@
 
         <form class="search-form" onsubmit="searchRegattas(event)">
             <div class="form-group">
-                <label for="locationInput">Location:</label>
+                <label for="locationInput">Regatta or Location Name:</label>
                 <div class="autocomplete-wrapper">
-                    <input type="text" id="locationInput" name="location" placeholder="City, State" maxlength="40"
+                    <input type="text" id="locationInput" name="q" placeholder="Regatta or location..." maxlength="60"
                         autocomplete="off">
                     <div class="autocomplete-dropdown" id="locationAutocomplete"></div>
                 </div>
@@ -404,19 +404,9 @@
             </div>
 
             <div class="form-group date-group">
-                <label for="dateInput">Date <span style="font-weight:normal;opacity:0.85">(leave empty for today &amp;
-                        future)</span>:</label>
+                <label for="dateInput">Date:</label>
                 <div class="date-row">
                     <input type="date" id="dateInput" name="date" title="Leave empty for today and future regattas">
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label for="nameInput">Regatta Name:</label>
-                <div class="autocomplete-wrapper">
-                    <input type="text" id="nameInput" name="name" placeholder="Search by name..." maxlength="40"
-                        autocomplete="off">
-                    <div class="autocomplete-dropdown" id="nameAutocomplete"></div>
                 </div>
             </div>
 
@@ -493,8 +483,24 @@
             if (!query || query.length < 2) {
                 return [];
             }
-
             try {
+                if (type === 'location-or-name') {
+                    const [locRes, nameRes] = await Promise.all([
+                        fetch(`/api/location-suggestions?query=${encodeURIComponent(query)}`),
+                        fetch(`/api/regatta-name-suggestions?query=${encodeURIComponent(query)}`)
+                    ]);
+                    const locData = await locRes.json();
+                    const nameData = await nameRes.json();
+                    const locs = locData.success ? locData.suggestions : [];
+                    const names = nameData.success ? nameData.suggestions : [];
+                    const seen = new Set();
+                    const merged = [];
+                    [...locs, ...names].forEach(s => {
+                        const k = String(s).trim().toLowerCase();
+                        if (!seen.has(k)) { seen.add(k); merged.push(s); }
+                    });
+                    return merged.slice(0, 15);
+                }
                 const endpoint = type === 'location'
                     ? '/api/location-suggestions'
                     : '/api/regatta-name-suggestions';
@@ -590,9 +596,7 @@
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
-            // Date starts empty = "any date". User can set a date to filter.
-            setupAutocomplete('locationInput', 'locationAutocomplete', 'location');
-            setupAutocomplete('nameInput', 'nameAutocomplete', 'name');
+            setupAutocomplete('locationInput', 'locationAutocomplete', 'location-or-name');
         });
 
         function clearLocationStatus(message = '') {
@@ -660,8 +664,7 @@
 
             try {
                 const date = document.getElementById('dateInput').value;
-                const name = document.getElementById('nameInput').value.trim();
-                const location = document.getElementById('locationInput').value.trim();
+                const q = document.getElementById('locationInput').value.trim();
 
                 const params = new URLSearchParams();
                 if (typeof isAutoSearch !== 'undefined' && isAutoSearch && userLatitude && userLongitude) {
@@ -673,8 +676,7 @@
                 } else if (date) {
                     params.set('date', date);
                 }
-                if (name) params.set('name', name);
-                if (location) params.set('location', location);
+                if (q) params.set('q', q);
                 if (usingCurrentLocation && detectedLocationName) {
                     params.set('locationName', detectedLocationName);
                     params.set('radius', '20');
