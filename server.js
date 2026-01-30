@@ -2569,9 +2569,9 @@ app.get('/api/sailbot/stats', async (req, res) => {
         const r = await pool.query(`
             SELECT
                 COUNT(*)::int AS total_records,
-                COUNT(DISTINCT skipper)::int AS total_sailors,
-                COUNT(DISTINCT regatta_name)::int AS total_regattas,
-                COUNT(DISTINCT yacht_club)::int AS total_clubs,
+                COUNT(DISTINCT TRIM(skipper)) FILTER (WHERE skipper IS NOT NULL AND TRIM(skipper) <> '')::int AS total_sailors,
+                COUNT(DISTINCT TRIM(regatta_name)) FILTER (WHERE regatta_name IS NOT NULL AND TRIM(regatta_name) <> '')::int AS total_regattas,
+                COUNT(DISTINCT TRIM(yacht_club)) FILTER (WHERE yacht_club IS NOT NULL AND TRIM(yacht_club) <> '')::int AS total_clubs,
                 MIN(regatta_date)::text AS earliest_date,
                 MAX(regatta_date)::text AS latest_date
             FROM ${RND}
@@ -2669,6 +2669,63 @@ app.get('/api/sailbot/debug', async (req, res) => {
     } catch (e) {
         console.error('SailBot debug error:', e);
         res.status(500).json({ success: false, error: e.message, tableUsed: RND });
+    }
+});
+
+app.get('/api/sailbot/download-sailors', async (req, res) => {
+    try {
+        await ensureRegattaNetworkDataTable();
+        const r = await pool.query(`
+            SELECT DISTINCT TRIM(skipper) AS name FROM ${RND}
+            WHERE skipper IS NOT NULL AND TRIM(skipper) <> ''${SOZNODATA_EXCLUDE}
+            ORDER BY name ASC
+        `);
+        const lines = ['"name"'];
+        r.rows.forEach(row => lines.push('"' + String(row.name || '').replace(/"/g, '""') + '"'));
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename=sailors-${Date.now()}.csv`);
+        res.send(lines.join('\n'));
+    } catch (e) {
+        console.error('Download sailors error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.get('/api/sailbot/download-clubs', async (req, res) => {
+    try {
+        await ensureRegattaNetworkDataTable();
+        const r = await pool.query(`
+            SELECT DISTINCT TRIM(yacht_club) AS name FROM ${RND}
+            WHERE yacht_club IS NOT NULL AND TRIM(yacht_club) <> ''${SOZNODATA_EXCLUDE}
+            ORDER BY name ASC
+        `);
+        const lines = ['"name"'];
+        r.rows.forEach(row => lines.push('"' + String(row.name || '').replace(/"/g, '""') + '"'));
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename=clubs-${Date.now()}.csv`);
+        res.send(lines.join('\n'));
+    } catch (e) {
+        console.error('Download clubs error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.get('/api/sailbot/download-regattas', async (req, res) => {
+    try {
+        await ensureRegattaNetworkDataTable();
+        const r = await pool.query(`
+            SELECT DISTINCT TRIM(regatta_name) AS name FROM ${RND}
+            WHERE regatta_name IS NOT NULL AND TRIM(regatta_name) <> ''${SOZNODATA_EXCLUDE}
+            ORDER BY name ASC
+        `);
+        const lines = ['"name"'];
+        r.rows.forEach(row => lines.push('"' + String(row.name || '').replace(/"/g, '""') + '"'));
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename=regattas-${Date.now()}.csv`);
+        res.send(lines.join('\n'));
+    } catch (e) {
+        console.error('Download regattas error:', e);
+        res.status(500).json({ success: false, error: e.message });
     }
 });
 

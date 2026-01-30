@@ -351,6 +351,16 @@
         <p class="status" id="statsHint" style="display:none; margin-top: -12px; margin-bottom: 20px;"></p>
 
         <div class="section">
+            <h2>Download distinct lists</h2>
+            <p>CSV files of all unique values. Use to check for duplicates or bad data (e.g. spacing, typos).</p>
+            <div class="btns">
+                <a href="/api/sailbot/download-sailors" class="btn btn-primary" download>All sailor names</a>
+                <a href="/api/sailbot/download-clubs" class="btn btn-primary" download>All club names</a>
+                <a href="/api/sailbot/download-regattas" class="btn btn-primary" download>All regattas</a>
+            </div>
+        </div>
+
+        <div class="section">
             <h2>Export filtered data</h2>
             <p>Apply filters and download CSV for validation.</p>
             <div class="filters" id="exportFilters">
