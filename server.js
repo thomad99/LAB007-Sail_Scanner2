@@ -2729,6 +2729,27 @@ app.get('/api/sailbot/download-regattas', async (req, res) => {
     }
 });
 
+app.post('/api/sailbot/cleanup-clubs', async (req, res) => {
+    try {
+        await ensureRegattaNetworkDataTable();
+        const r = await pool.query(`
+            UPDATE ${RND}
+            SET yacht_club = 'Unknown'
+            WHERE yacht_club IS NOT NULL
+              AND TRIM(yacht_club) <> ''
+              AND yacht_club !~ '^[A-Za-z]'
+        `);
+        res.json({
+            success: true,
+            updated: r.rowCount,
+            message: `Set ${r.rowCount} invalid club name(s) to "Unknown".`
+        });
+    } catch (e) {
+        console.error('Cleanup clubs error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 app.post('/api/sailbot/search', async (req, res) => {
     try {
         const { skipper, boat_name, yacht_club, regatta_name, year } = req.body || {};
