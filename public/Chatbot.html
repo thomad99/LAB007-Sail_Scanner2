@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>LoveSailing.AI ChatBot – Regatta Results</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <style>
@@ -74,8 +74,8 @@
         }
 
         .msg.user {
-            background: rgba(0, 80, 180, 0.35);
-            color: #fff;
+            background: #fff;
+            color: #1a1a2e;
             margin-left: auto;
             border-bottom-right-radius: 4px;
         }
@@ -236,6 +236,49 @@
 
         .markdown strong {
             font-weight: 700;
+        }
+
+        @media (max-width: 768px) {
+
+            html,
+            body {
+                height: 100dvh;
+                min-height: 100vh;
+            }
+
+            .logo {
+                max-width: 100px;
+                width: 28%;
+                margin-top: 8px;
+            }
+
+            .chat-container {
+                width: 100%;
+                max-width: 100%;
+                padding: 8px 8px 0;
+                flex: 1;
+                min-height: 0;
+            }
+
+            .chat-pane {
+                padding: 12px;
+                margin-bottom: 8px;
+            }
+
+            .input-wrap {
+                padding: 0 0 12px;
+            }
+
+            .msg {
+                max-width: 92%;
+                padding: 10px 12px;
+                font-size: 0.9em;
+            }
+
+            .input-row input,
+            .input-row button {
+                padding: 12px 14px;
+            }
         }
     </style>
 </head>
