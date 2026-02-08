@@ -629,8 +629,8 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             websiteUrl: url,
-                            duration: '10',
-                            pollingInterval: '3'
+                            duration: '420',
+                            pollingInterval: '10'
                         })
                     });
                     const d = await r.json().catch(() => ({}));

@@ -4368,8 +4368,8 @@ app.post('/api/webalert/monitor', async (req, res) => {
         }
         const payload = {
             websiteUrl: String(websiteUrl).trim(),
-            duration: duration || '10',
-            pollingInterval: pollingInterval || '3'
+            duration: duration || '420',
+            pollingInterval: pollingInterval || '10'
         };
         if (email) payload.email = String(email).trim();
         if (phone) payload.phone = String(phone).trim();
