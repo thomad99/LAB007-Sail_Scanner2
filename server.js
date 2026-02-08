@@ -4352,6 +4352,42 @@ app.get('/api/location-suggestions', async (req, res) => {
     }
 });
 
+// Web-Alert proxy: forward to external monitor service (set WEBALERT_API_URL env, e.g. https://webalert.lab007.ai)
+app.post('/api/webalert/monitor', async (req, res) => {
+    try {
+        const baseUrl = process.env.WEBALERT_API_URL;
+        if (!baseUrl || !baseUrl.trim()) {
+            return res.status(503).json({
+                success: false,
+                error: 'Web-Alert service not configured. Set WEBALERT_API_URL environment variable.'
+            });
+        }
+        const { websiteUrl, email, phone, duration, pollingInterval } = req.body || {};
+        if (!websiteUrl || !String(websiteUrl).trim()) {
+            return res.status(400).json({ success: false, error: 'websiteUrl is required' });
+        }
+        const payload = {
+            websiteUrl: String(websiteUrl).trim(),
+            duration: duration || '10',
+            pollingInterval: pollingInterval || '3'
+        };
+        if (email) payload.email = String(email).trim();
+        if (phone) payload.phone = String(phone).trim();
+        const target = baseUrl.replace(/\/$/, '') + '/webalert/api/monitor';
+        const r = await axios.post(target, payload, {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 15000
+        });
+        res.json(r.data || { success: true });
+    } catch (e) {
+        console.error('Web-Alert proxy error:', e.message);
+        res.status(502).json({
+            success: false,
+            error: e.response?.data?.error || e.message
+        });
+    }
+});
+
 // Admin stats endpoint
 app.get('/api/regatta-stats', async (req, res) => {
     try {

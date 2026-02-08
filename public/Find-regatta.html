@@ -270,6 +270,21 @@
             background-color: #0088ff;
         }
 
+        .regatta-item .links button.link-btn {
+            padding: 8px 15px;
+            background-color: #0055aa;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .regatta-item .links button.link-btn:hover {
+            background-color: #0088ff;
+        }
+
         .no-results {
             text-align: center;
             padding: 40px;
@@ -600,6 +615,39 @@
 
         window.addEventListener('DOMContentLoaded', async () => {
             setupAutocomplete('locationInput', 'locationAutocomplete', 'location-or-name');
+
+            document.getElementById('resultsContent').addEventListener('click', async (e) => {
+                const btn = e.target.closest('button.link-btn[data-results-url]');
+                if (!btn) return;
+                const url = btn.getAttribute('data-results-url');
+                if (!url) return;
+                btn.disabled = true;
+                btn.textContent = 'Setting up…';
+                try {
+                    const r = await fetch('/api/webalert/monitor', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            websiteUrl: url,
+                            duration: '10',
+                            pollingInterval: '3'
+                        })
+                    });
+                    const d = await r.json().catch(() => ({}));
+                    if (r.ok && !d.error) {
+                        btn.textContent = 'Alerts on';
+                        btn.style.backgroundColor = '#00aa44';
+                    } else {
+                        btn.textContent = 'Alerts';
+                        btn.disabled = false;
+                        alert(d.error || 'Could not set up alerts. Check that WEBALERT_API_URL is configured.');
+                    }
+                } catch (err) {
+                    btn.textContent = 'Alerts';
+                    btn.disabled = false;
+                    alert('Could not connect to Alerts service.');
+                }
+            });
         });
 
         function clearLocationStatus(message = '') {
@@ -733,10 +781,13 @@
                             : null;
                         if (rnId) {
                             const base = `https://www.regattanetwork.com/event/${rnId}`;
+                            const resultsUrl = base + '#_newsroom';
                             html += `<a href="${base}" target="_blank" rel="noopener">Event</a>`;
                             html += `<a href="${base}#_registration" target="_blank" rel="noopener">Entrants</a>`;
-                            html += `<a href="${base}#_newsroom" target="_blank" rel="noopener">Results</a>`;
+                            html += `<a href="${resultsUrl}" target="_blank" rel="noopener">Results</a>`;
+                            html += `<button type="button" class="link-btn" data-results-url="${resultsUrl.replace(/"/g, '&quot;')}">Alerts</button>`;
                         } else {
+                            const altUrl = regatta.event_website_url || regatta.registrants_url;
                             if (regatta.event_website_url) {
                                 html += `<a href="${regatta.event_website_url}" target="_blank" rel="noopener">Event</a>`;
                             }
@@ -746,6 +797,9 @@
                                     ? `View Registrants (${regatta.registrant_count})`
                                     : 'View Registrants');
                                 html += `<a href="${regatta.registrants_url}" target="_blank" rel="noopener">${registrantLabel}</a>`;
+                            }
+                            if (altUrl) {
+                                html += `<button type="button" class="link-btn" data-results-url="${altUrl.replace(/"/g, '&quot;')}">Alerts</button>`;
                             }
                         }
                         html += `</div>`;
