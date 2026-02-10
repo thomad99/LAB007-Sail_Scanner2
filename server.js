@@ -4355,11 +4355,17 @@ app.get('/api/location-suggestions', async (req, res) => {
 // Web-Alert proxy: forward to external monitor service (set WEBALERT_API_URL env, e.g. https://webalert.lab007.ai)
 app.post('/api/webalert/monitor', async (req, res) => {
     try {
-        const baseUrl = process.env.WEBALERT_API_URL;
-        if (!baseUrl || !baseUrl.trim()) {
+        const baseUrl = (process.env.WEBALERT_API_URL || '').trim();
+        if (!baseUrl) {
             return res.status(503).json({
                 success: false,
                 error: 'Web-Alert service not configured. Set WEBALERT_API_URL environment variable.'
+            });
+        }
+        if (!/^https?:\/\//i.test(baseUrl)) {
+            return res.status(503).json({
+                success: false,
+                error: 'WEBALERT_API_URL must include protocol (e.g. https://webalert.lab007.ai)'
             });
         }
         const { websiteUrl, email, phone, duration, pollingInterval } = req.body || {};
@@ -4374,13 +4380,14 @@ app.post('/api/webalert/monitor', async (req, res) => {
         if (email) payload.email = String(email).trim();
         if (phone) payload.phone = String(phone).trim();
         const target = baseUrl.replace(/\/$/, '') + '/webalert/api/monitor';
+        console.log('[Web-Alert] websiteUrl:', payload.websiteUrl, '| target:', target);
         const r = await axios.post(target, payload, {
             headers: { 'Content-Type': 'application/json' },
             timeout: 15000
         });
         res.json(r.data || { success: true });
     } catch (e) {
-        console.error('Web-Alert proxy error:', e.message);
+        console.error('[Web-Alert] error:', e.message, '| response:', e.response?.data, '| target:', baseUrl ? baseUrl.replace(/\/$/, '') + '/webalert/api/monitor' : 'N/A');
         res.status(502).json({
             success: false,
             error: e.response?.data?.error || e.message
