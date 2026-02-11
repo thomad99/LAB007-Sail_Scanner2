@@ -4388,7 +4388,7 @@ app.post('/api/webalert/monitor', async (req, res) => {
         console.log('[Web-Alert] websiteUrl:', payload.websiteUrl, '| target:', target);
         const r = await axios.post(target, payload, {
             headers: { 'Content-Type': 'application/json' },
-            timeout: 15000
+            timeout: 30000
         });
         res.json(r.data || { success: true });
     } catch (e) {

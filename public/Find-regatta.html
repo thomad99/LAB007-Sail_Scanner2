@@ -621,6 +621,17 @@
                 if (!btn) return;
                 const url = btn.getAttribute('data-results-url');
                 if (!url) return;
+                const email = prompt('Enter your email to receive alerts when results are updated:');
+                if (email === null) return; // user cancelled
+                const trimmed = (email || '').trim();
+                if (!trimmed) {
+                    alert('Please enter a valid email address.');
+                    return;
+                }
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+                    alert('Please enter a valid email address.');
+                    return;
+                }
                 btn.disabled = true;
                 btn.textContent = 'Setting up…';
                 try {
@@ -629,6 +640,7 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             websiteUrl: url,
+                            email: trimmed,
                             duration: '420',
                             pollingInterval: '10'
                         })
