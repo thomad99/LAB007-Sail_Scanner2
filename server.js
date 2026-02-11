@@ -4352,10 +4352,12 @@ app.get('/api/location-suggestions', async (req, res) => {
     }
 });
 
-// Web-Alert proxy: forward to external monitor service (set WEBALERT_API_URL env, e.g. https://webalert.lab007.ai)
+// Web-Alert proxy: forward to external monitor service
+// WEBALERT_API_URL: base (e.g. https://webalert.lab007.ai) or full endpoint (e.g. https://www.lab007.ai/webalert/api/monitor)
 app.post('/api/webalert/monitor', async (req, res) => {
+    const baseUrl = (process.env.WEBALERT_API_URL || '').trim();
+    let target;
     try {
-        const baseUrl = (process.env.WEBALERT_API_URL || '').trim();
         if (!baseUrl) {
             return res.status(503).json({
                 success: false,
@@ -4368,6 +4370,10 @@ app.post('/api/webalert/monitor', async (req, res) => {
                 error: 'WEBALERT_API_URL must include protocol (e.g. https://webalert.lab007.ai)'
             });
         }
+        // If baseUrl already ends with /webalert/api/monitor, use as-is; otherwise append
+        target = /\/webalert\/api\/monitor\/?$/i.test(baseUrl)
+            ? baseUrl.replace(/\/$/, '')
+            : baseUrl.replace(/\/$/, '') + '/webalert/api/monitor';
         const { websiteUrl, email, phone, duration, pollingInterval } = req.body || {};
         if (!websiteUrl || !String(websiteUrl).trim()) {
             return res.status(400).json({ success: false, error: 'websiteUrl is required' });
@@ -4379,7 +4385,6 @@ app.post('/api/webalert/monitor', async (req, res) => {
         };
         if (email) payload.email = String(email).trim();
         if (phone) payload.phone = String(phone).trim();
-        const target = baseUrl.replace(/\/$/, '') + '/webalert/api/monitor';
         console.log('[Web-Alert] websiteUrl:', payload.websiteUrl, '| target:', target);
         const r = await axios.post(target, payload, {
             headers: { 'Content-Type': 'application/json' },
@@ -4387,7 +4392,7 @@ app.post('/api/webalert/monitor', async (req, res) => {
         });
         res.json(r.data || { success: true });
     } catch (e) {
-        console.error('[Web-Alert] error:', e.message, '| response:', e.response?.data, '| target:', baseUrl ? baseUrl.replace(/\/$/, '') + '/webalert/api/monitor' : 'N/A');
+        console.error('[Web-Alert] error:', e.message, '| response:', e.response?.data, '| target:', target || baseUrl || 'N/A');
         res.status(502).json({
             success: false,
             error: e.response?.data?.error || e.message
