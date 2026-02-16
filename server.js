@@ -1701,6 +1701,134 @@ app.get('/api/recent-upload', async (req, res) => {
     }
 });
 
+// Preview bulk photo metadata update by upload date (admin)
+app.get('/api/photo-bulk-preview', async (req, res) => {
+    try {
+        const { upload_date } = req.query;
+
+        if (!upload_date || !/^\d{4}-\d{2}-\d{2}$/.test(upload_date)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid or missing upload_date. Expected format YYYY-MM-DD.'
+            });
+        }
+
+        const MAX_BULK_UPDATE = 100;
+
+        const result = await pool.query(
+            `
+            SELECT COUNT(*) AS total
+            FROM photo_metadata
+            WHERE upload_timestamp::date = $1
+            `,
+            [upload_date]
+        );
+
+        const total = parseInt(result.rows[0].total, 10) || 0;
+        const affected = Math.min(total, MAX_BULK_UPDATE);
+
+        res.json({
+            success: true,
+            total,
+            affected,
+            capped: total > MAX_BULK_UPDATE,
+            maxLimit: MAX_BULK_UPDATE
+        });
+    } catch (err) {
+        console.error('Error in photo bulk preview:', err);
+        res.status(500).json({
+            success: false,
+            error: 'Error generating bulk preview'
+        });
+    }
+});
+
+// Apply bulk photo metadata update by upload date (admin)
+app.post('/api/photo-bulk-update', async (req, res) => {
+    try {
+        const { upload_date, regatta_name, location, date, limit } = req.body || {};
+
+        if (!upload_date || !/^\d{4}-\d{2}-\d{2}$/.test(upload_date)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid or missing upload_date. Expected format YYYY-MM-DD.'
+            });
+        }
+
+        const updates = [];
+        const params = [];
+        let paramIndex = 1;
+
+        if (regatta_name && regatta_name.trim() !== '') {
+            updates.push(`regatta_name = $${paramIndex++}`);
+            params.push(regatta_name.trim());
+        }
+        if (location && location.trim() !== '') {
+            updates.push(`location = $${paramIndex++}`);
+            params.push(location.trim());
+        }
+        if (date && date.trim() !== '') {
+            updates.push(`date = $${paramIndex++}`);
+            params.push(date.trim());
+        }
+
+        if (updates.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'No fields provided to update. Provide at least one of regatta_name, location, or date.'
+            });
+        }
+
+        const MAX_BULK_UPDATE = 100;
+        let rawLimit;
+        if (typeof limit === 'number') {
+            rawLimit = limit;
+        } else if (typeof limit === 'string') {
+            rawLimit = parseInt(limit, 10);
+        }
+        if (!rawLimit || rawLimit <= 0 || Number.isNaN(rawLimit)) {
+            rawLimit = MAX_BULK_UPDATE;
+        }
+        const effectiveLimit = Math.min(rawLimit, MAX_BULK_UPDATE);
+
+        // upload_date parameter index
+        const uploadDateParamIndex = paramIndex;
+        params.push(upload_date);
+        paramIndex++;
+
+        // limit parameter index
+        const limitParamIndex = paramIndex;
+        params.push(effectiveLimit);
+
+        const query = `
+            UPDATE photo_metadata
+            SET ${updates.join(', ')}
+            WHERE id IN (
+                SELECT id
+                FROM photo_metadata
+                WHERE upload_timestamp::date = $${uploadDateParamIndex}
+                ORDER BY upload_timestamp ASC, id ASC
+                LIMIT $${limitParamIndex}
+            )
+            RETURNING id
+        `;
+
+        const result = await pool.query(query, params);
+
+        res.json({
+            success: true,
+            updatedCount: result.rowCount,
+            maxLimit: MAX_BULK_UPDATE
+        });
+    } catch (err) {
+        console.error('Error in photo bulk update:', err);
+        res.status(500).json({
+            success: false,
+            error: 'Error applying bulk update'
+        });
+    }
+});
+
 // Add endpoint to get total storage size
 app.get('/api/storage-size', async (req, res) => {
     try {

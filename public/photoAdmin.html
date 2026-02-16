@@ -351,6 +351,51 @@
                 <button class="action-button" onclick="loadStats()">🔄 Refresh Stats</button>
             </div>
 
+            <!-- Bulk update by upload date -->
+            <div class="admin-section" style="margin-top: 30px;">
+                <h2>🛠 Bulk change based on upload date</h2>
+                <p>Select an upload date, preview how many photos match, then apply metadata changes to those photos (capped at 100).</p>
+
+                <div style="display: flex; flex-direction: column; gap: 10px; align-items: center;">
+                    <label style="width: 100%; max-width: 400px; text-align: left;">
+                        Upload date
+                        <input type="date" id="bulkUploadDate"
+                            style="width: 100%; padding: 10px; border: 1px solid #dee2e6; border-radius: 5px;" />
+                    </label>
+
+                    <button class="action-button" onclick="previewBulkUpdateByUploadDate()">🔍 Find photos</button>
+
+                    <div id="bulkPreviewResult" class="validation-results"
+                        style="display: none; width: 100%; max-width: 600px; text-align: left;"></div>
+
+                    <div id="bulkUpdateForm" style="display: none; width: 100%; max-width: 600px;">
+                        <h3>Metadata to apply</h3>
+                        <p style="font-size: 0.9em; color: #666;">Any field you leave blank will be left unchanged.</p>
+
+                        <label style="display: block; margin-bottom: 8px;">
+                            Regatta name
+                            <input type="text" id="bulkRegattaName"
+                                style="width: 100%; padding: 8px; border: 1px solid #dee2e6; border-radius: 5px;" />
+                        </label>
+
+                        <label style="display: block; margin-bottom: 8px;">
+                            Location
+                            <input type="text" id="bulkLocation"
+                                style="width: 100%; padding: 8px; border: 1px solid #dee2e6; border-radius: 5px;" />
+                        </label>
+
+                        <label style="display: block; margin-bottom: 8px;">
+                            Race date
+                            <input type="date" id="bulkRaceDate"
+                                style="width: 100%; padding: 8px; border: 1px solid #dee2e6; border-radius: 5px;" />
+                        </label>
+
+                        <button class="action-button success-button" onclick="applyBulkUpdateByUploadDate()">✅ Apply
+                            bulk update</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Delete by Filename Section -->
             <div class="admin-section" style="margin-top: 30px;">
                 <h2>🗑️ Delete Photo by Filename</h2>
@@ -393,6 +438,8 @@
     </div>
 
     <script>
+        const MAX_BULK_UPDATE = 100;
+
         async function loadStats() {
             // Set loading state for all stats
             const statElements = ['dbCount', 'recentUpload', 'totalSize', 's3Count', 'uploadsCount', 'orphanedCount'];
@@ -708,6 +755,160 @@
             } catch (err) {
                 console.error('Error cleaning orphaned entries:', err);
                 showStatus('Error cleaning orphaned entries', 'error');
+            }
+        }
+
+        async function previewBulkUpdateByUploadDate() {
+            const dateInput = document.getElementById('bulkUploadDate');
+            const uploadDate = (dateInput?.value || '').trim();
+
+            const previewDiv = document.getElementById('bulkPreviewResult');
+            const formDiv = document.getElementById('bulkUpdateForm');
+
+            if (!uploadDate) {
+                showStatus('Please select an upload date for bulk update.', 'error');
+                if (previewDiv) {
+                    previewDiv.style.display = 'none';
+                }
+                if (formDiv) {
+                    formDiv.style.display = 'none';
+                }
+                return;
+            }
+
+            try {
+                if (previewDiv) {
+                    previewDiv.style.display = 'block';
+                    previewDiv.innerHTML = '<div class="validation-item warning"><div>Loading preview...</div></div>';
+                }
+
+                const response = await fetch(`/api/photo-bulk-preview?upload_date=${encodeURIComponent(uploadDate)}`);
+                const data = await response.json();
+
+                if (!response.ok || data.success === false) {
+                    throw new Error(data.error || 'Failed to preview bulk update');
+                }
+
+                const total = data.total || 0;
+                const affected = data.affected || 0;
+                const capped = !!data.capped;
+
+                if (total === 0) {
+                    if (previewDiv) {
+                        previewDiv.innerHTML = '<div class="validation-item warning"><div>No photos found for that upload date.</div></div>';
+                    }
+                    if (formDiv) {
+                        formDiv.style.display = 'none';
+                    }
+                    window.currentBulkUpdateCriteria = null;
+                    showStatus('No photos found for that upload date.', 'warning');
+                    return;
+                }
+
+                let message = `Found ${total} photo${total !== 1 ? 's' : ''} uploaded on ${uploadDate}.<br>`;
+                message += `Up to ${affected} photo${affected !== 1 ? 's' : ''} will be eligible for bulk update.`;
+                if (capped) {
+                    message += `<br><strong>Note:</strong> Results are capped at ${MAX_BULK_UPDATE} photos for safety.`;
+                }
+
+                if (previewDiv) {
+                    previewDiv.innerHTML = `
+                    <div class="validation-item success">
+                        <div class="validation-details">${message}</div>
+                    </div>
+                `;
+                }
+
+                if (formDiv) {
+                    formDiv.style.display = 'block';
+                }
+
+                window.currentBulkUpdateCriteria = {
+                    uploadDate,
+                    total,
+                    affected
+                };
+
+                showStatus(`Bulk update preview ready for ${affected} photo${affected !== 1 ? 's' : ''}.`, 'success');
+            } catch (err) {
+                console.error('Error previewing bulk update:', err);
+                if (previewDiv) {
+                    previewDiv.innerHTML = '<div class="validation-item error"><div>Error loading bulk preview.</div></div>';
+                }
+                if (formDiv) {
+                    formDiv.style.display = 'none';
+                }
+                window.currentBulkUpdateCriteria = null;
+                showStatus(`Error previewing bulk update: ${err.message}`, 'error');
+            }
+        }
+
+        async function applyBulkUpdateByUploadDate() {
+            const criteria = window.currentBulkUpdateCriteria;
+            if (!criteria || !criteria.uploadDate) {
+                showStatus('Please run a bulk preview first.', 'error');
+                return;
+            }
+
+            const regattaInput = document.getElementById('bulkRegattaName');
+            const locationInput = document.getElementById('bulkLocation');
+            const raceDateInput = document.getElementById('bulkRaceDate');
+
+            const regattaName = (regattaInput?.value || '').trim();
+            const location = (locationInput?.value || '').trim();
+            const raceDate = (raceDateInput?.value || '').trim();
+
+            if (!regattaName && !location && !raceDate) {
+                showStatus('Please enter at least one field to update (regatta name, location, or race date).', 'error');
+                return;
+            }
+
+            const confirmMessage =
+                `This will update up to ${criteria.affected} photo${criteria.affected !== 1 ? 's' : ''} ` +
+                `uploaded on ${criteria.uploadDate}.\n\n` +
+                `Regatta: ${regattaName || '(no change)'}\n` +
+                `Location: ${location || '(no change)'}\n` +
+                `Race date: ${raceDate || '(no change)'}\n\n` +
+                `Do you want to apply these changes?`;
+
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+
+            try {
+                showStatus('Applying bulk update...', 'info');
+
+                const body = {
+                    upload_date: criteria.uploadDate,
+                    limit: MAX_BULK_UPDATE
+                };
+                if (regattaName) body.regatta_name = regattaName;
+                if (location) body.location = location;
+                if (raceDate) body.date = raceDate;
+
+                const response = await fetch('/api/photo-bulk-update', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                const data = await response.json();
+                if (!response.ok || data.success === false) {
+                    throw new Error(data.error || 'Bulk update failed');
+                }
+
+                const updated = data.updatedCount ?? data.updated_count ?? 0;
+
+                showStatus(`Bulk update applied to ${updated} photo${updated !== 1 ? 's' : ''}.`, 'success');
+
+                // Refresh preview & stats
+                await previewBulkUpdateByUploadDate();
+                loadStats();
+            } catch (err) {
+                console.error('Error applying bulk update:', err);
+                showStatus(`Error applying bulk update: ${err.message}`, 'error');
             }
         }
 
