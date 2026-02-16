@@ -401,7 +401,7 @@
                 <h2>🔁 Rescan photos by upload date</h2>
                 <p>
                     Select an upload date to rescan the original photos for additional sail numbers.
-                    Existing sail numbers are kept; only newly found numbers are added (capped at 100 originals).
+                    Existing sail numbers are kept; only newly found numbers are added.
                 </p>
 
                 <div style="display: flex; flex-direction: column; gap: 10px; align-items: center;">
@@ -467,7 +467,6 @@
 
     <script>
         const MAX_BULK_UPDATE = 100;
-        const MAX_RESCAN_LIMIT = 100;
 
         async function loadStats() {
             // Set loading state for all stats
@@ -946,11 +945,16 @@
             const uploadDate = (dateInput?.value || '').trim();
 
             const previewDiv = document.getElementById('rescanPreviewResult');
+            const listDiv = document.getElementById('rescanList');
 
             if (!uploadDate) {
                 showStatus('Please select an upload date for rescan.', 'error');
                 if (previewDiv) {
                     previewDiv.style.display = 'none';
+                }
+                if (listDiv) {
+                    listDiv.style.display = 'none';
+                    listDiv.innerHTML = '';
                 }
                 window.currentRescanCriteria = null;
                 return;
@@ -970,23 +974,20 @@
                 }
 
                 const totalOriginals = data.totalOriginals || 0;
-                const affectedOriginals = data.affectedOriginals || 0;
-                const capped = !!data.capped;
-
                 if (totalOriginals === 0) {
                     if (previewDiv) {
                         previewDiv.innerHTML = '<div class="validation-item warning"><div>No original photos found for that upload date.</div></div>';
+                    }
+                    if (listDiv) {
+                        listDiv.style.display = 'none';
+                        listDiv.innerHTML = '';
                     }
                     window.currentRescanCriteria = null;
                     showStatus('No original photos found for that upload date.', 'warning');
                     return;
                 }
 
-                let message = `Found ${totalOriginals} original photo${totalOriginals !== 1 ? 's' : ''} uploaded on ${uploadDate}.<br>`;
-                message += `Up to ${affectedOriginals} original photo${affectedOriginals !== 1 ? 's' : ''} will be rescanned for additional sail numbers.`;
-                if (capped) {
-                    message += `<br><strong>Note:</strong> Rescan is capped at ${MAX_RESCAN_LIMIT} originals for safety.`;
-                }
+                const message = `Found ${totalOriginals} original photo${totalOriginals !== 1 ? 's' : ''} uploaded on ${uploadDate}.`;
 
                 if (previewDiv) {
                     previewDiv.innerHTML = `
@@ -996,21 +997,101 @@
                 `;
                 }
 
+                // Load full list of originals for this date so the user can pick which ones to rescan
+                if (listDiv) {
+                    listDiv.style.display = 'block';
+                    listDiv.innerHTML = '<div class="validation-item warning"><div>Loading photo list...</div></div>';
+                }
+
+                const listResponse = await fetch(`/api/photo-rescan-list?upload_date=${encodeURIComponent(uploadDate)}`);
+                const listData = await listResponse.json();
+
+                if (!listResponse.ok || listData.success === false) {
+                    throw new Error(listData.error || 'Failed to load rescan list');
+                }
+
+                const originals = listData.originals || [];
+
+                if (!originals.length) {
+                    if (listDiv) {
+                        listDiv.innerHTML = '<div class="validation-item warning"><div>No original photos found for that upload date.</div></div>';
+                    }
+                } else if (listDiv) {
+                    const itemsHtml = originals.map((orig, index) => {
+                        const uploaded = orig.upload_timestamp ? new Date(orig.upload_timestamp).toLocaleString() : 'Unknown';
+                        const sailCount = typeof orig.sail_count === 'number' ? orig.sail_count : (parseInt(orig.sail_count || '0', 10) || 0);
+                        const loc = orig.location || 'N/A';
+                        const regatta = orig.regatta_name || 'N/A';
+                        const filename = orig.filename || '(no filename)';
+                        const urlLink = orig.url
+                            ? `<a href="${orig.url}" target="_blank" style="font-size:0.9em;">👁️ View</a>`
+                            : '';
+
+                        return `
+                            <div class="validation-item success">
+                                <label style="display:flex; align-items:flex-start; gap:10px; width:100%; cursor:pointer;">
+                                    <input 
+                                        type="checkbox" 
+                                        class="rescan-checkbox" 
+                                        data-checksum="${orig.file_checksum || ''}" 
+                                        checked
+                                        style="margin-top:4px;"
+                                    />
+                                    <div style="flex:1;">
+                                        <div style="font-weight:bold; margin-bottom:4px;">
+                                            📸 ${filename}
+                                        </div>
+                                        <div class="validation-details">
+                                            <div>Sail numbers already stored: ${sailCount}</div>
+                                            <div>Location: ${loc} | Regatta: ${regatta}</div>
+                                            <div>Uploaded: ${uploaded}</div>
+                                        </div>
+                                        <div style="margin-top:4px;">${urlLink}</div>
+                                    </div>
+                                </label>
+                            </div>
+                        `;
+                    }).join('');
+
+                    listDiv.innerHTML = `
+                        <h3>Original photos for ${uploadDate}</h3>
+                        <div style="margin-bottom:8px;">
+                            <label style="cursor:pointer;">
+                                <input type="checkbox" id="rescanSelectAll" onclick="toggleRescanSelectAll(this)" checked />
+                                Select all / none
+                            </label>
+                        </div>
+                        <div class="validation-list">
+                            ${itemsHtml}
+                        </div>
+                    `;
+                }
+
                 window.currentRescanCriteria = {
                     uploadDate,
-                    totalOriginals,
-                    affectedOriginals
+                    totalOriginals
                 };
 
-                showStatus(`Rescan preview ready for ${affectedOriginals} original photo${affectedOriginals !== 1 ? 's' : ''}.`, 'success');
+                showStatus(`Rescan preview ready for ${totalOriginals} original photo${totalOriginals !== 1 ? 's' : ''}.`, 'success');
             } catch (err) {
                 console.error('Error previewing rescan:', err);
                 if (previewDiv) {
                     previewDiv.innerHTML = '<div class="validation-item error"><div>Error loading rescan preview.</div></div>';
                 }
+                if (listDiv) {
+                    listDiv.style.display = 'none';
+                    listDiv.innerHTML = '';
+                }
                 window.currentRescanCriteria = null;
                 showStatus(`Error previewing rescan: ${err.message}`, 'error');
             }
+        }
+
+        function toggleRescanSelectAll(masterCheckbox) {
+            const checkboxes = Array.from(document.querySelectorAll('.rescan-checkbox'));
+            checkboxes.forEach(cb => {
+                cb.checked = masterCheckbox.checked;
+            });
         }
 
         async function applyRescanByUploadDate() {
@@ -1020,8 +1101,19 @@
                 return;
             }
 
+            const checkboxes = Array.from(document.querySelectorAll('.rescan-checkbox'));
+            const selectedChecksums = checkboxes
+                .filter(cb => cb.checked)
+                .map(cb => cb.getAttribute('data-checksum'))
+                .filter(v => v && v.trim().length > 0);
+
+            if (selectedChecksums.length === 0) {
+                showStatus('Please select at least one photo to rescan.', 'error');
+                return;
+            }
+
             const confirmMessage =
-                `This will rescan up to ${criteria.affectedOriginals} original photo${criteria.affectedOriginals !== 1 ? 's' : ''} ` +
+                `This will rescan ${selectedChecksums.length} selected original photo${selectedChecksums.length !== 1 ? 's' : ''} ` +
                 `uploaded on ${criteria.uploadDate} for additional sail numbers.\n\n` +
                 `Existing sail numbers will be kept; only newly found numbers will be added.\n\n` +
                 `Do you want to run this rescan?`;
@@ -1035,7 +1127,7 @@
 
                 const body = {
                     upload_date: criteria.uploadDate,
-                    limit: MAX_RESCAN_LIMIT
+                    selected_checksums: selectedChecksums
                 };
 
                 const response = await fetch('/api/photo-rescan', {

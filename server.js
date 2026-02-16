@@ -1905,8 +1905,6 @@ app.get('/api/photo-rescan-preview', async (req, res) => {
             });
         }
 
-        const MAX_RESCAN_LIMIT = 100;
-
         const result = await pool.query(
             `
             SELECT COUNT(DISTINCT file_checksum) AS total_originals
@@ -1918,14 +1916,10 @@ app.get('/api/photo-rescan-preview', async (req, res) => {
         );
 
         const totalOriginals = parseInt(result.rows[0].total_originals, 10) || 0;
-        const affectedOriginals = Math.min(totalOriginals, MAX_RESCAN_LIMIT);
 
         res.json({
             success: true,
-            totalOriginals,
-            affectedOriginals,
-            capped: totalOriginals > MAX_RESCAN_LIMIT,
-            maxLimit: MAX_RESCAN_LIMIT
+            totalOriginals
         });
     } catch (err) {
         console.error('Error in photo rescan preview:', err);
@@ -1948,8 +1942,6 @@ app.get('/api/photo-rescan-list', async (req, res) => {
             });
         }
 
-        const MAX_RESCAN_LIMIT = 100;
-
         const result = await pool.query(
             `
             SELECT 
@@ -1964,9 +1956,8 @@ app.get('/api/photo-rescan-list', async (req, res) => {
               AND file_checksum IS NOT NULL
             GROUP BY file_checksum
             ORDER BY MIN(upload_timestamp) ASC
-            LIMIT $2
             `,
-            [upload_date, MAX_RESCAN_LIMIT]
+            [upload_date]
         );
 
         const rows = result.rows || [];
@@ -1998,8 +1989,7 @@ app.get('/api/photo-rescan-list', async (req, res) => {
 
         res.json({
             success: true,
-            originals: originalsWithUrls,
-            maxLimit: MAX_RESCAN_LIMIT
+            originals: originalsWithUrls
         });
     } catch (err) {
         console.error('Error in photo rescan list:', err);
@@ -2022,18 +2012,6 @@ app.post('/api/photo-rescan', async (req, res) => {
             });
         }
 
-        const MAX_RESCAN_LIMIT = 100;
-        let rawLimit;
-        if (typeof limit === 'number') {
-            rawLimit = limit;
-        } else if (typeof limit === 'string') {
-            rawLimit = parseInt(limit, 10);
-        }
-        if (!rawLimit || rawLimit <= 0 || Number.isNaN(rawLimit)) {
-            rawLimit = MAX_RESCAN_LIMIT;
-        }
-        let effectiveLimit = Math.min(rawLimit, MAX_RESCAN_LIMIT);
-
         // Normalize selected_checksums if provided
         let checksumList = Array.isArray(selected_checksums)
             ? selected_checksums
@@ -2041,17 +2019,10 @@ app.post('/api/photo-rescan', async (req, res) => {
                   .filter((c) => c.length > 0)
             : [];
 
-        if (checksumList.length > 0 && checksumList.length < effectiveLimit) {
-            // Limit by explicit selection size if it's smaller
-            effectiveLimit = checksumList.length;
-        }
-
         let originalsResult;
 
         if (checksumList.length > 0) {
-            // Rescan only explicitly selected originals (still capped)
-            checksumList = checksumList.slice(0, MAX_RESCAN_LIMIT);
-
+            // Rescan only explicitly selected originals
             originalsResult = await pool.query(
                 `
                 SELECT 
@@ -2077,12 +2048,11 @@ app.post('/api/photo-rescan', async (req, res) => {
                   AND file_checksum = ANY($2::text[])
                 GROUP BY file_checksum
                 ORDER BY MIN(upload_timestamp) ASC
-                LIMIT $3
                 `,
-                [upload_date, checksumList, effectiveLimit]
+                [upload_date, checksumList]
             );
         } else {
-            // Original behavior: rescan by upload date up to the limit
+            // Original behavior: rescan by upload date (no artificial cap)
             originalsResult = await pool.query(
                 `
                 SELECT 
@@ -2108,9 +2078,8 @@ app.post('/api/photo-rescan', async (req, res) => {
                   AND file_checksum IS NOT NULL
                 GROUP BY file_checksum
                 ORDER BY MIN(upload_timestamp) ASC
-                LIMIT $2
                 `,
-                [upload_date, effectiveLimit]
+                [upload_date]
             );
         }
 
@@ -2272,8 +2241,7 @@ app.post('/api/photo-rescan', async (req, res) => {
         res.json({
             success: true,
             analyzedOriginals,
-            newSailNumbers,
-            maxLimit: MAX_RESCAN_LIMIT
+            newSailNumbers
         });
     } catch (err) {
         console.error('Error in photo rescan:', err);
