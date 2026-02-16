@@ -155,19 +155,83 @@ async function deleteFromS3(key) {
     }
 }
 
-// Helper function to list objects in S3
+// Helper function to list objects in S3 (handles pagination, not just first 1000)
 async function listS3Objects(prefix = '') {
     try {
         console.log(`Listing S3 objects with prefix: ${prefix}`);
-        const command = new ListObjectsV2Command({
-            Bucket: BUCKET_NAME,
-            Prefix: prefix
-        });
-        const response = await s3Client.send(command);
-        console.log(`Found ${response.Contents?.length || 0} objects in S3`);
-        return response.Contents || [];
+
+        const allObjects = [];
+        let continuationToken = undefined;
+        let page = 0;
+
+        do {
+            const command = new ListObjectsV2Command({
+                Bucket: BUCKET_NAME,
+                Prefix: prefix,
+                ContinuationToken: continuationToken
+            });
+
+            const response = await s3Client.send(command);
+            const contents = response.Contents || [];
+            page += 1;
+
+            console.log(
+                `S3 list page ${page}: fetched ${contents.length} object(s)${
+                    response.IsTruncated ? ' (more pages available)' : ''
+                }`
+            );
+
+            allObjects.push(...contents);
+
+            if (response.IsTruncated && response.NextContinuationToken) {
+                continuationToken = response.NextContinuationToken;
+            } else {
+                continuationToken = undefined;
+            }
+        } while (continuationToken);
+
+        console.log(`Found total ${allObjects.length} objects in S3 for prefix "${prefix}"`);
+        return allObjects;
     } catch (err) {
         console.error('Error listing S3 objects:', err);
+        throw err;
+    }
+}
+
+// Helper to convert S3 stream to Buffer
+function streamToBuffer(stream) {
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        stream.on('data', (chunk) => chunks.push(chunk));
+        stream.on('error', (err) => reject(err));
+        stream.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+}
+
+// Helper to download an object from S3 into a buffer (for rescans, etc.)
+async function downloadS3ObjectToBuffer(key) {
+    try {
+        console.log(`Downloading from S3 for rescan: ${key}`);
+        const command = new GetObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: key
+        });
+
+        const response = await s3Client.send(command);
+        const bodyStream = response.Body;
+
+        if (!bodyStream) {
+            throw new Error('Empty S3 response body');
+        }
+
+        const buffer = await streamToBuffer(bodyStream);
+        const contentType = response.ContentType || 'application/octet-stream';
+
+        console.log(`Downloaded ${buffer.length} bytes from S3 for key: ${key}`);
+
+        return { buffer, contentType };
+    } catch (err) {
+        console.error('Error downloading S3 object:', err);
         throw err;
     }
 }
@@ -1825,6 +1889,397 @@ app.post('/api/photo-bulk-update', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Error applying bulk update'
+        });
+    }
+});
+
+// Preview rescan by upload date (distinct original photos by file_checksum)
+app.get('/api/photo-rescan-preview', async (req, res) => {
+    try {
+        const { upload_date } = req.query;
+
+        if (!upload_date || !/^\d{4}-\d{2}-\d{2}$/.test(upload_date)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid or missing upload_date. Expected format YYYY-MM-DD.'
+            });
+        }
+
+        const MAX_RESCAN_LIMIT = 100;
+
+        const result = await pool.query(
+            `
+            SELECT COUNT(DISTINCT file_checksum) AS total_originals
+            FROM photo_metadata
+            WHERE upload_timestamp::date = $1
+              AND file_checksum IS NOT NULL
+            `,
+            [upload_date]
+        );
+
+        const totalOriginals = parseInt(result.rows[0].total_originals, 10) || 0;
+        const affectedOriginals = Math.min(totalOriginals, MAX_RESCAN_LIMIT);
+
+        res.json({
+            success: true,
+            totalOriginals,
+            affectedOriginals,
+            capped: totalOriginals > MAX_RESCAN_LIMIT,
+            maxLimit: MAX_RESCAN_LIMIT
+        });
+    } catch (err) {
+        console.error('Error in photo rescan preview:', err);
+        res.status(500).json({
+            success: false,
+            error: 'Error generating rescan preview'
+        });
+    }
+});
+
+// List originals eligible for rescan by upload date
+app.get('/api/photo-rescan-list', async (req, res) => {
+    try {
+        const { upload_date } = req.query;
+
+        if (!upload_date || !/^\d{4}-\d{2}-\d{2}$/.test(upload_date)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid or missing upload_date. Expected format YYYY-MM-DD.'
+            });
+        }
+
+        const MAX_RESCAN_LIMIT = 100;
+
+        const result = await pool.query(
+            `
+            SELECT 
+                file_checksum,
+                MIN(filename) AS filename,
+                COUNT(DISTINCT sail_number) FILTER (WHERE sail_number IS NOT NULL AND sail_number <> 'NOSAIL') AS sail_count,
+                MIN(upload_timestamp) AS upload_timestamp,
+                MIN(location) AS location,
+                MIN(regatta_name) AS regatta_name
+            FROM photo_metadata
+            WHERE upload_timestamp::date = $1
+              AND file_checksum IS NOT NULL
+            GROUP BY file_checksum
+            ORDER BY MIN(upload_timestamp) ASC
+            LIMIT $2
+            `,
+            [upload_date, MAX_RESCAN_LIMIT]
+        );
+
+        const rows = result.rows || [];
+
+        // Attach a signed URL for a representative processed image for each original
+        const originalsWithUrls = await Promise.all(
+            rows.map(async (row) => {
+                const s3Key = row.filename ? `processed/${row.filename}` : null;
+                let url = null;
+                if (s3Key) {
+                    try {
+                        url = await getS3SignedUrl(s3Key);
+                    } catch (err) {
+                        console.error(`Error generating signed URL for rescan list item ${row.filename}:`, err);
+                    }
+                }
+
+                return {
+                    file_checksum: row.file_checksum,
+                    filename: row.filename,
+                    sail_count: parseInt(row.sail_count, 10) || 0,
+                    upload_timestamp: row.upload_timestamp,
+                    location: row.location,
+                    regatta_name: row.regatta_name,
+                    url
+                };
+            })
+        );
+
+        res.json({
+            success: true,
+            originals: originalsWithUrls,
+            maxLimit: MAX_RESCAN_LIMIT
+        });
+    } catch (err) {
+        console.error('Error in photo rescan list:', err);
+        res.status(500).json({
+            success: false,
+            error: 'Error loading rescan list'
+        });
+    }
+});
+
+// Apply rescan by upload date or explicit selection: keep existing sail numbers, add only newly found ones
+app.post('/api/photo-rescan', async (req, res) => {
+    try {
+        const { upload_date, limit, selected_checksums } = req.body || {};
+
+        if (!upload_date || !/^\d{4}-\d{2}-\d{2}$/.test(upload_date)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid or missing upload_date. Expected format YYYY-MM-DD.'
+            });
+        }
+
+        const MAX_RESCAN_LIMIT = 100;
+        let rawLimit;
+        if (typeof limit === 'number') {
+            rawLimit = limit;
+        } else if (typeof limit === 'string') {
+            rawLimit = parseInt(limit, 10);
+        }
+        if (!rawLimit || rawLimit <= 0 || Number.isNaN(rawLimit)) {
+            rawLimit = MAX_RESCAN_LIMIT;
+        }
+        let effectiveLimit = Math.min(rawLimit, MAX_RESCAN_LIMIT);
+
+        // Normalize selected_checksums if provided
+        let checksumList = Array.isArray(selected_checksums)
+            ? selected_checksums
+                  .map((c) => (typeof c === 'string' ? c.trim() : ''))
+                  .filter((c) => c.length > 0)
+            : [];
+
+        if (checksumList.length > 0 && checksumList.length < effectiveLimit) {
+            // Limit by explicit selection size if it's smaller
+            effectiveLimit = checksumList.length;
+        }
+
+        let originalsResult;
+
+        if (checksumList.length > 0) {
+            // Rescan only explicitly selected originals (still capped)
+            checksumList = checksumList.slice(0, MAX_RESCAN_LIMIT);
+
+            originalsResult = await pool.query(
+                `
+                SELECT 
+                    file_checksum,
+                    MIN(filename) AS filename,
+                    MIN(date) AS date,
+                    MIN(regatta_name) AS regatta_name,
+                    MIN(photographer_name) AS photographer_name,
+                    MIN(photographer_website) AS photographer_website,
+                    MIN(location) AS location,
+                    MIN(photo_timestamp) AS photo_timestamp,
+                    MIN(gps_latitude) AS gps_latitude,
+                    MIN(gps_longitude) AS gps_longitude,
+                    MIN(gps_altitude) AS gps_altitude,
+                    MIN(device_fingerprint) AS device_fingerprint,
+                    MIN(device_type) AS device_type,
+                    MIN(user_agent) AS user_agent,
+                    MIN(screen_resolution) AS screen_resolution,
+                    MIN(timezone) AS timezone,
+                    MIN(upload_timestamp) AS upload_timestamp
+                FROM photo_metadata
+                WHERE upload_timestamp::date = $1
+                  AND file_checksum = ANY($2::text[])
+                GROUP BY file_checksum
+                ORDER BY MIN(upload_timestamp) ASC
+                LIMIT $3
+                `,
+                [upload_date, checksumList, effectiveLimit]
+            );
+        } else {
+            // Original behavior: rescan by upload date up to the limit
+            originalsResult = await pool.query(
+                `
+                SELECT 
+                    file_checksum,
+                    MIN(filename) AS filename,
+                    MIN(date) AS date,
+                    MIN(regatta_name) AS regatta_name,
+                    MIN(photographer_name) AS photographer_name,
+                    MIN(photographer_website) AS photographer_website,
+                    MIN(location) AS location,
+                    MIN(photo_timestamp) AS photo_timestamp,
+                    MIN(gps_latitude) AS gps_latitude,
+                    MIN(gps_longitude) AS gps_longitude,
+                    MIN(gps_altitude) AS gps_altitude,
+                    MIN(device_fingerprint) AS device_fingerprint,
+                    MIN(device_type) AS device_type,
+                    MIN(user_agent) AS user_agent,
+                    MIN(screen_resolution) AS screen_resolution,
+                    MIN(timezone) AS timezone,
+                    MIN(upload_timestamp) AS upload_timestamp
+                FROM photo_metadata
+                WHERE upload_timestamp::date = $1
+                  AND file_checksum IS NOT NULL
+                GROUP BY file_checksum
+                ORDER BY MIN(upload_timestamp) ASC
+                LIMIT $2
+                `,
+                [upload_date, effectiveLimit]
+            );
+        }
+
+        if (originalsResult.rows.length === 0) {
+            return res.json({
+                success: true,
+                analyzedOriginals: 0,
+                newSailNumbers: 0,
+                maxLimit: MAX_RESCAN_LIMIT
+            });
+        }
+
+        let analyzedOriginals = 0;
+        let newSailNumbers = 0;
+
+        for (const original of originalsResult.rows) {
+            analyzedOriginals++;
+
+            const {
+                file_checksum,
+                filename,
+                date,
+                regatta_name,
+                photographer_name,
+                photographer_website,
+                location,
+                photo_timestamp,
+                gps_latitude,
+                gps_longitude,
+                gps_altitude,
+                device_fingerprint,
+                device_type,
+                user_agent,
+                screen_resolution,
+                timezone,
+                upload_timestamp
+            } = original;
+
+            if (!file_checksum || !filename) {
+                continue;
+            }
+
+            try {
+                // Get existing sail numbers for this original image
+                const existingResult = await pool.query(
+                    `
+                    SELECT DISTINCT sail_number
+                    FROM photo_metadata
+                    WHERE file_checksum = $1
+                      AND sail_number IS NOT NULL
+                      AND sail_number <> 'NOSAIL'
+                    `,
+                    [file_checksum]
+                );
+
+                const existingNumbers = new Set(
+                    existingResult.rows
+                        .map((r) => r.sail_number)
+                        .filter((n) => n && n !== 'NOSAIL')
+                );
+
+                // Download one of the processed images (they all come from the same original)
+                const processedKey = `processed/${filename}`;
+                const { buffer: imageBuffer, contentType } = await downloadS3ObjectToBuffer(processedKey);
+
+                // Re-run Azure OCR on this image
+                const detectedNumbers = await analyzeImageWithAzure(imageBuffer);
+
+                if (!detectedNumbers || detectedNumbers.length === 0) {
+                    continue;
+                }
+
+                // Only keep sail numbers that are not already stored
+                const newNumbers = detectedNumbers.filter(
+                    (sailData) => sailData && sailData.number && !existingNumbers.has(String(sailData.number))
+                );
+
+                if (newNumbers.length === 0) {
+                    continue;
+                }
+
+                // Derive original filename from processed filename: NUMBER_SAILORNAME_originalFilename
+                let originalFilename = filename;
+                const parts = filename.split('_');
+                if (parts.length >= 3) {
+                    originalFilename = parts.slice(2).join('_');
+                }
+
+                for (const sailData of newNumbers) {
+                    try {
+                        const sailNumber = String(sailData.number);
+
+                        // Double-check against existing numbers in case of race conditions
+                        if (existingNumbers.has(sailNumber)) {
+                            continue;
+                        }
+
+                        const sailorInfo = await lookupSailorInDatabase(sailNumber);
+                        const sailorName = sailorInfo ? sanitizeForFilename(sailorInfo.sailorName) : 'NONAME';
+                        const newFilename = `${sailNumber}_${sailorName}_${originalFilename}`;
+                        const newS3Key = `processed/${newFilename}`;
+
+                        // Upload a new processed image entry (same pixels, new logical photo for that sail)
+                        await uploadToS3(imageBuffer, newS3Key, contentType || 'image/jpeg');
+
+                        // Store metadata row for this new sail number
+                        await pool.query(
+                            `
+                            INSERT INTO photo_metadata (
+                                filename, sail_number, date, regatta_name,
+                                photographer_name, photographer_website,
+                                location, additional_tags, file_checksum, photo_timestamp,
+                                gps_latitude, gps_longitude, gps_altitude,
+                                device_fingerprint, device_type, user_agent,
+                                screen_resolution, timezone, upload_timestamp
+                            ) VALUES (
+                                $1, $2, $3, $4,
+                                $5, $6,
+                                $7, $8, $9, $10,
+                                $11, $12, $13,
+                                $14, $15, $16,
+                                $17, $18, $19
+                            )
+                            `,
+                            [
+                                newFilename,
+                                sailNumber,
+                                date || null,
+                                regatta_name || null,
+                                photographer_name || null,
+                                photographer_website || null,
+                                location || null,
+                                [], // additional_tags
+                                file_checksum,
+                                photo_timestamp || null,
+                                gps_latitude || null,
+                                gps_longitude || null,
+                                gps_altitude || null,
+                                device_fingerprint || null,
+                                device_type || null,
+                                user_agent || null,
+                                screen_resolution || null,
+                                timezone || null,
+                                upload_timestamp || new Date().toISOString()
+                            ]
+                        );
+
+                        existingNumbers.add(sailNumber);
+                        newSailNumbers++;
+                    } catch (singleErr) {
+                        console.error('Error storing new sail number during rescan:', singleErr);
+                    }
+                }
+            } catch (originalErr) {
+                console.error('Error during rescan for original image:', originalErr);
+            }
+        }
+
+        res.json({
+            success: true,
+            analyzedOriginals,
+            newSailNumbers,
+            maxLimit: MAX_RESCAN_LIMIT
+        });
+    } catch (err) {
+        console.error('Error in photo rescan:', err);
+        res.status(500).json({
+            success: false,
+            error: 'Error applying rescan'
         });
     }
 });
