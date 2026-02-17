@@ -980,6 +980,13 @@
             }
         }
 
+        function getAllSailNumbers(photo) {
+            const arr = photo.sail_numbers || [];
+            const fromArr = (Array.isArray(arr) ? arr : []).map(e => e && (e.number || e)).filter(Boolean);
+            const combined = [photo.sail_number, ...fromArr].filter(Boolean).map(String);
+            return [...new Set(combined)];
+        }
+
         function displaySearchResults(photos) {
             const resultsContainer = document.getElementById('results');
             resultsContainer.innerHTML = '';
@@ -1031,9 +1038,12 @@
                 card.className = 'photo-card';
                 card.onclick = () => openModal(photo, index, uniquePhotos);
 
+                const allSailNums = getAllSailNumbers(photo);
+                const sailDisplay = allSailNums.length ? allSailNums.join(', ') : (photo.sail_number || '—');
+
                 const img = document.createElement('img');
                 img.src = photo.url;
-                img.alt = `Sail ${photo.sail_number}`;
+                img.alt = `Sail ${sailDisplay}`;
                 img.loading = 'lazy';
                 img.onerror = () => {
                     img.src = 'https://via.placeholder.com/300x200?text=Image+Not+Available';
@@ -1043,7 +1053,7 @@
                 const info = document.createElement('div');
                 info.className = 'photo-info';
                 info.innerHTML = `
-                    <p><strong>Sail:</strong> ${photo.sail_number}</p>
+                    <p><strong>${allSailNums.length > 1 ? 'Sail numbers:' : 'Sail:'}</strong> ${sailDisplay}</p>
                     <p><strong>Date:</strong> ${new Date(photo.date).toLocaleDateString()}</p>
                     <p><strong>Regatta:</strong> ${photo.regatta_name || 'Not specified'}</p>
                 `;
@@ -1084,7 +1094,8 @@
             const nextButton = document.getElementById('nextButton');
 
             modalImg.src = photo.url;
-            modalImg.alt = `Sail number ${photo.sail_number}`;
+            const modalSailDisplay = getAllSailNumbers(photo).join(', ') || photo.sail_number || '';
+            modalImg.alt = `Sail ${modalSailDisplay || 'photo'}`;
 
             // Update navigation buttons
             if (currentPhotosArray.length > 0) {
@@ -1099,9 +1110,11 @@
             basicMetadataContent.innerHTML = '';
 
             // Populate basic metadata (always visible)
+            const allSailNums = getAllSailNumbers(photo);
+            const sailDisplay = allSailNums.length ? allSailNums.join(', ') : (photo.sail_number || '—');
             const basicFields = [
                 { key: 'regatta_name', label: 'Regatta Name' },
-                { key: 'sail_number', label: 'Sail Number' },
+                { key: '_sail_numbers', label: allSailNums.length > 1 ? 'Sail Numbers' : 'Sail Number', value: sailDisplay },
                 { key: 'location', label: 'Location' },
                 { key: 'photographer_name', label: 'Photographer' },
                 {
@@ -1117,10 +1130,10 @@
             ];
 
             basicFields.forEach(field => {
-                const value = photo[field.key];
+                const value = field.value !== undefined ? field.value : photo[field.key];
                 const formattedValue = field.formatter ? field.formatter(value) : value;
 
-                if (formattedValue && formattedValue !== 'null' && formattedValue !== 'undefined' && formattedValue !== '') {
+                if (formattedValue != null && formattedValue !== '' && formattedValue !== 'null' && formattedValue !== 'undefined') {
                     const basicItem = document.createElement('div');
                     const isMobile = window.innerWidth <= 768;
                     basicItem.style.cssText = isMobile ? 'margin-bottom: 6px; font-size: 13px; line-height: 1.4;' : 'margin-bottom: 8px; font-size: 16px;';
@@ -1232,7 +1245,7 @@
                             try {
                                 await navigator.share({
                                     files: [file],
-                                    title: `Sail ${currentModalPhoto.sail_number || ''} - Sailing Photo`,
+                                    title: `Sail ${getAllSailNumbers(currentModalPhoto).join(', ') || currentModalPhoto.sail_number || ''} - Sailing Photo`,
                                     text: `Sailing photo from ${currentModalPhoto.location || 'regatta'}`
                                 });
                                 return;
@@ -1318,11 +1331,11 @@
 
                 const photoUrl = currentModalPhoto.url;
                 const filename = currentModalPhoto.filename || 'sailing-photo';
-                const sailNumber = currentModalPhoto.sail_number || 'Unknown';
+                const sailDisplay = getAllSailNumbers(currentModalPhoto).join(', ') || currentModalPhoto.sail_number || 'Unknown';
 
                 // Create share data
                 const shareData = {
-                    title: `Sailing Photo - Sail #${sailNumber}`,
+                    title: `Sailing Photo - Sail ${sailDisplay}`,
                     text: `Check out this sailing photo from ${currentModalPhoto.location || 'our regatta'}`,
                     url: photoUrl
                 };
