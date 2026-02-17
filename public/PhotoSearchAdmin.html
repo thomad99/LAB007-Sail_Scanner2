@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Photo Search Admin - LoveSailing</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <style>
+        html, body { margin: 0; padding: 0; min-height: 100vh; background: #020053; font-family: Arial, sans-serif; color: #333; }
+        .admin-header { background: #f0f0f0; padding: 15px 20px; border-bottom: 3px solid #0066cc; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .admin-header h1 { margin: 0; color: #0066cc; font-size: 20px; }
+        .admin-header a { color: #0066cc; text-decoration: none; font-weight: bold; }
+        .admin-header a:hover { text-decoration: underline; }
+        .main { max-width: 1000px; margin: 0 auto; padding: 20px; }
+        .search-section { background: rgba(255,255,255,0.95); border: 3px solid #0066cc; border-radius: 15px; padding: 20px; margin-bottom: 20px; }
+        .search-section h2 { margin: 0 0 15px 0; color: #0066cc; text-align: center; }
+        .search-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .search-row label { display: block; margin-bottom: 6px; font-weight: bold; color: #333; font-size: 14px; }
+        .search-input { width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
+        .search-input:focus { border-color: #0066cc; outline: none; }
+        .search-buttons { display: flex; gap: 15px; justify-content: center; margin-top: 20px; }
+        .search-button, .clear-button { padding: 12px 24px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; border: none; }
+        .search-button { background: #0066cc; color: white; }
+        .search-button:hover { background: #0052a3; }
+        .clear-button { background: #6c757d; color: white; }
+        .clear-button:hover { background: #5a6268; }
+        .results-section { background: rgba(255,255,255,0.95); border-radius: 15px; padding: 20px; }
+        .photo-count { text-align: center; color: #666; font-size: 16px; margin-bottom: 15px; padding: 10px; background: rgba(0,102,204,0.1); border-radius: 8px; }
+        .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
+        .photo-card { border: 2px solid #ddd; border-radius: 12px; overflow: hidden; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .photo-card img { width: 100%; height: 140px; object-fit: cover; display: block; }
+        .photo-info { padding: 12px; font-size: 14px; }
+        .photo-info p { margin: 6px 0; }
+        .photo-info strong { color: #0066cc; }
+        .sail-numbers-list { font-size: 13px; color: #555; margin: 8px 0; }
+        .add-sail-form { margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee; }
+        .add-sail-form input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; box-sizing: border-box; margin-bottom: 8px; }
+        .add-sail-form input::placeholder { color: #999; }
+        .add-sail-form button { background: #28a745; color: white; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+        .add-sail-form button:hover { background: #218838; }
+        .add-sail-form button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .edit-status { font-size: 12px; margin-top: 6px; }
+        .edit-status.success { color: #28a745; }
+        .edit-status.error { color: #dc3545; }
+        .view-btn { display: block; width: 100%; background: #0066cc; color: white; padding: 10px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold; margin-top: 8px; }
+        .view-btn:hover { background: #0052a3; }
+        .loading, .no-results { text-align: center; padding: 40px 20px; font-size: 18px; }
+        .loading { color: #0066cc; }
+        .no-results { color: #666; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.9); z-index: 2000; align-items: center; justify-content: center; }
+        .modal.show { display: flex; }
+        .modal-content { background: white; max-width: 95vw; max-height: 90vh; border-radius: 15px; overflow: hidden; position: relative; }
+        .modal img { max-width: 100%; max-height: 70vh; display: block; }
+        .modal-close { position: absolute; top: 15px; right: 15px; background: rgba(0,0,0,0.6); color: white; border: none; width: 40px; height: 40px; border-radius: 50%; font-size: 24px; cursor: pointer; }
+        .modal-info { padding: 15px; font-size: 14px; }
+    </style>
+</head>
+
+<body>
+    <div class="admin-header">
+        <h1>Photo Search Admin</h1>
+        <a href="photoAdmin.html">← Back to Photo Administration</a>
+    </div>
+
+    <div class="main">
+        <div class="search-section">
+            <h2>Search Photos</h2>
+            <div id="photoCount" class="photo-count">Loading...</div>
+            <div class="search-form-grid">
+                <div class="search-row">
+                    <label for="sailNumber">Sail Number</label>
+                    <input type="text" id="sailNumber" class="search-input" autocomplete="off">
+                </div>
+                <div class="search-row">
+                    <label for="date">Date</label>
+                    <input type="date" id="date" class="search-input">
+                </div>
+                <div class="search-row">
+                    <label for="regattaName">Regatta Name</label>
+                    <input type="text" id="regattaName" class="search-input" autocomplete="off" list="regattaNameList">
+                    <datalist id="regattaNameList"></datalist>
+                </div>
+                <div class="search-row">
+                    <label for="yachtClub">Yacht Club</label>
+                    <input type="text" id="yachtClub" class="search-input" list="yachtClubList" autocomplete="off">
+                    <datalist id="yachtClubList">
+                        <option value="Alamitos Bay Yacht Club"><option value="Chicago Yacht Club"><option value="New York Yacht Club">
+                        <option value="San Diego Yacht Club"><option value="St. Francis Yacht Club">
+                    </datalist>
+                </div>
+                <div class="search-row">
+                    <label for="photographerName">Photographer</label>
+                    <input type="text" id="photographerName" class="search-input" autocomplete="off">
+                </div>
+                <div class="search-row">
+                    <label for="location">Location</label>
+                    <input type="text" id="location" class="search-input" autocomplete="off" list="locationList">
+                    <datalist id="locationList"></datalist>
+                </div>
+            </div>
+            <div class="search-buttons">
+                <button class="search-button" id="searchBtn">Search</button>
+                <button class="clear-button" onclick="clearSearch()">Clear</button>
+            </div>
+        </div>
+
+        <div class="results-section">
+            <div id="results"></div>
+        </div>
+    </div>
+
+    <div id="imageModal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+            <img id="modalImage" src="" alt="Photo">
+            <div class="modal-info" id="modalInfo"></div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const r = await fetch('/api/photo-count');
+                const d = await r.json();
+                document.getElementById('photoCount').innerHTML = `Total photos: ${d.total || 0}`;
+            } catch (e) {
+                document.getElementById('photoCount').innerHTML = 'Error loading count';
+            }
+            loadPhotoFilters();
+            document.getElementById('searchBtn').addEventListener('click', searchPhotos);
+        });
+
+        async function loadPhotoFilters() {
+            try {
+                const r = await fetch('/api/photo-regattas');
+                const d = await r.json();
+                const dl = document.getElementById('regattaNameList');
+                if (dl && d.regattas) { dl.innerHTML = d.regattas.map(n => `<option value="${n}">`).join(''); }
+            } catch (e) {}
+            try {
+                const r = await fetch('/api/photo-locations');
+                const d = await r.json();
+                const dl = document.getElementById('locationList');
+                if (dl && d.locations) { dl.innerHTML = d.locations.map(l => `<option value="${l}">`).join(''); }
+            } catch (e) {}
+        }
+
+        function clearSearch() {
+            document.getElementById('sailNumber').value = '';
+            document.getElementById('date').value = '';
+            document.getElementById('regattaName').value = '';
+            document.getElementById('yachtClub').value = '';
+            document.getElementById('photographerName').value = '';
+            document.getElementById('location').value = '';
+        }
+
+        async function searchPhotos() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="loading">Searching...</div>';
+
+            const params = new URLSearchParams({
+                sail_number: document.getElementById('sailNumber').value,
+                date: document.getElementById('date').value,
+                regatta_name: document.getElementById('regattaName').value,
+                yacht_club: document.getElementById('yachtClub').value,
+                photographer_name: document.getElementById('photographerName').value,
+                location: document.getElementById('location').value
+            });
+
+            try {
+                const response = await fetch(`/api/search-photos?${params}`);
+                const photos = await response.json();
+
+                if (photos.length === 0) {
+                    resultsDiv.innerHTML = '<div class="no-results">No photos found matching your criteria.</div>';
+                    return;
+                }
+
+                const unique = photos.reduce((acc, p) => {
+                    if (!acc.find(x => x.filename === p.filename)) acc.push(p);
+                    return acc;
+                }, []);
+
+                const countEl = document.createElement('div');
+                countEl.className = 'photo-count';
+                countEl.innerHTML = `Found ${unique.length} photo${unique.length !== 1 ? 's' : ''}`;
+                resultsDiv.innerHTML = '';
+                resultsDiv.appendChild(countEl);
+
+                const grid = document.createElement('div');
+                grid.className = 'photo-grid';
+
+                unique.forEach(photo => {
+                    const card = document.createElement('div');
+                    card.className = 'photo-card';
+
+                    const sailArr = photo.sail_numbers || [];
+                    const allNumbers = [photo.sail_number, ...sailArr.map(e => e && (e.number || e))].filter(Boolean);
+                    const uniqueNumbers = [...new Set(allNumbers)];
+
+                    card.innerHTML = `
+                        <img src="${photo.url || ''}" alt="Sail ${photo.sail_number || ''}" loading="lazy" onerror="this.src='https://via.placeholder.com/200x140?text=No+Image'">
+                        <div class="photo-info">
+                            <p><strong>Sail:</strong> ${photo.sail_number || '—'}</p>
+                            <p><strong>Date:</strong> ${photo.date ? new Date(photo.date).toLocaleDateString() : '—'}</p>
+                            <p><strong>Regatta:</strong> ${photo.regatta_name || '—'}</p>
+                            ${uniqueNumbers.length > 1 ? `<p class="sail-numbers-list"><strong>All sail numbers:</strong> ${uniqueNumbers.join(', ')}</p>` : ''}
+                            <button class="view-btn" data-photo-id="${photo.id}">View</button>
+                            <div class="add-sail-form">
+                                <input type="text" placeholder="Add sail numbers (comma-separated)" class="add-sail-input" data-photo-id="${photo.id}">
+                                <button type="button" class="add-sail-btn" data-photo-id="${photo.id}">Add sail numbers</button>
+                                <div class="edit-status" data-status-id="${photo.id}"></div>
+                            </div>
+                        </div>
+                    `;
+
+                    const img = card.querySelector('img');
+                    img.onclick = () => openModal(photo);
+
+                    card.querySelector('.view-btn').onclick = (e) => { e.stopPropagation(); openModal(photo); };
+
+                    card.querySelector('.add-sail-btn').onclick = async (e) => {
+                        e.stopPropagation();
+                        const input = card.querySelector('.add-sail-input');
+                        const status = card.querySelector('[data-status-id]');
+                        const btn = card.querySelector('.add-sail-btn');
+                        const raw = (input.value || '').trim();
+                        if (!raw) {
+                            status.textContent = 'Enter at least one sail number.';
+                            status.className = 'edit-status error';
+                            return;
+                        }
+                        const numbers = raw.split(/[,\s]+/).map(n => n.trim()).filter(n => n);
+                        if (numbers.length === 0) {
+                            status.textContent = 'Enter at least one sail number.';
+                            status.className = 'edit-status error';
+                            return;
+                        }
+                        btn.disabled = true;
+                        status.textContent = 'Saving...';
+                        status.className = 'edit-status';
+                        try {
+                            const r = await fetch(`/api/photos/${photo.id}/sail-numbers`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ additionalSailNumbers: numbers })
+                            });
+                            const d = await r.json().catch(() => ({}));
+                            if (r.ok && d.success) {
+                                status.textContent = d.message || 'Saved.';
+                                status.className = 'edit-status success';
+                                input.value = '';
+                                const updated = d.sail_numbers || [];
+                                const newAll = [photo.sail_number, ...updated.map(e => e && (e.number || e))].filter(Boolean);
+                                const sailList = card.querySelector('.sail-numbers-list');
+                                if (sailList) sailList.innerHTML = `<strong>All sail numbers:</strong> ${[...new Set(newAll)].join(', ')}`;
+                                photo.sail_numbers = updated;
+                            } else {
+                                status.textContent = d.error || 'Failed to save.';
+                                status.className = 'edit-status error';
+                            }
+                        } catch (err) {
+                            status.textContent = 'Network error.';
+                            status.className = 'edit-status error';
+                        }
+                        btn.disabled = false;
+                    };
+
+                    grid.appendChild(card);
+                });
+
+                resultsDiv.appendChild(grid);
+            } catch (err) {
+                console.error(err);
+                resultsDiv.innerHTML = '<div class="no-results" style="color:red;">Error searching photos.</div>';
+            }
+        }
+
+        function openModal(photo) {
+            document.getElementById('modalImage').src = photo.url || '';
+            document.getElementById('modalInfo').innerHTML = `
+                <p><strong>Sail:</strong> ${photo.sail_number || '—'}</p>
+                <p><strong>Date:</strong> ${photo.date ? new Date(photo.date).toLocaleDateString() : '—'}</p>
+                <p><strong>Regatta:</strong> ${photo.regatta_name || '—'}</p>
+                <p><strong>Location:</strong> ${photo.location || '—'}</p>
+                <p><strong>Filename:</strong> ${photo.filename || '—'}</p>
+            `;
+            document.getElementById('imageModal').classList.add('show');
+        }
+
+        function closeModal() {
+            document.getElementById('imageModal').classList.remove('show');
+        }
+
+        document.getElementById('imageModal').addEventListener('click', (e) => {
+            if (e.target.id === 'imageModal') closeModal();
+        });
+    </script>
+</body>
+
+</html>

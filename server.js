@@ -1615,7 +1615,13 @@ app.get('/api/search-photos', async (req, res) => {
         let paramCount = 1;
 
         if (sail_number) {
-            query += ` AND sail_number = $${paramCount}`;
+            query += ` AND (
+                sail_number = $${paramCount}
+                OR EXISTS (
+                    SELECT 1 FROM jsonb_array_elements(COALESCE(sail_numbers, '[]'::jsonb)) AS elem
+                    WHERE elem->>'number' = $${paramCount}
+                )
+            )`;
             params.push(sail_number);
             paramCount++;
         }
@@ -1699,6 +1705,67 @@ app.get('/api/search-photos', async (req, res) => {
     } catch (err) {
         console.error('Error searching photos:', err);
         res.status(500).json({ error: err.message });
+    }
+});
+
+// Add sail numbers to a photo (admin)
+app.patch('/api/photos/:id/sail-numbers', async (req, res) => {
+    try {
+        const photoId = parseInt(req.params.id, 10);
+        if (isNaN(photoId)) {
+            return res.status(400).json({ success: false, error: 'Invalid photo ID' });
+        }
+        const { additionalSailNumbers } = req.body || {};
+        if (!Array.isArray(additionalSailNumbers) || additionalSailNumbers.length === 0) {
+            return res.status(400).json({ success: false, error: 'additionalSailNumbers array is required' });
+        }
+        const numbers = additionalSailNumbers
+            .map(n => String(n).trim())
+            .filter(n => n.length > 0);
+        if (numbers.length === 0) {
+            return res.status(400).json({ success: false, error: 'At least one sail number is required' });
+        }
+
+        const current = await pool.query(
+            'SELECT sail_number, sail_numbers FROM photo_metadata WHERE id = $1',
+            [photoId]
+        );
+        if (current.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Photo not found' });
+        }
+
+        const existingArr = Array.isArray(current.rows[0].sail_numbers) ? current.rows[0].sail_numbers : [];
+        const toObj = (e) => {
+            if (!e) return null;
+            const n = (typeof e === 'object' && e.number != null) ? e.number : e;
+            return n != null ? { number: String(n), confidence: (e.confidence != null ? e.confidence : 1) } : null;
+        };
+        const existingNumbers = new Set(existingArr.map(e => {
+            const n = e && (typeof e === 'object' ? e.number : e);
+            return n != null ? String(n) : null;
+        }).filter(Boolean));
+        const merged = existingArr.map(toObj).filter(Boolean);
+        for (const num of numbers) {
+            const s = String(num);
+            if (!existingNumbers.has(s)) {
+                merged.push({ number: s, confidence: 1 });
+                existingNumbers.add(s);
+            }
+        }
+
+        await pool.query(
+            `UPDATE photo_metadata SET sail_numbers = $1 WHERE id = $2`,
+            [JSON.stringify(merged), photoId]
+        );
+
+        res.json({
+            success: true,
+            sail_numbers: merged,
+            message: `Added ${numbers.length} sail number(s)`
+        });
+    } catch (err) {
+        console.error('Error adding sail numbers:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
