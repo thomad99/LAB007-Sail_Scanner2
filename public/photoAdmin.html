@@ -5,6 +5,16 @@
     <title>LAB007 - Photo Administration</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <meta property="og:title" content="Photo Administration - Love Sailing">
+    <meta property="og:description" content="Photo administration and database housekeeping.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://lovesailing.ai/photoAdmin.html">
+    <meta property="og:image" content="https://lovesailing.ai/Images/LOVE%20SAILING%20LOGO.JPEG">
+    <meta property="og:image:alt" content="Love Sailing Logo">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Photo Administration - Love Sailing">
+    <meta name="twitter:description" content="Photo administration and database housekeeping.">
+    <meta name="twitter:image" content="https://lovesailing.ai/Images/LOVE%20SAILING%20LOGO.JPEG">
     <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
     <link rel="apple-touch-icon" href="/favicon.ico">
     <style>
@@ -340,8 +350,15 @@
 
             <div id="statusMessage" class="status-message"></div>
 
-            <div style="margin-top: 30px;">
+            <div class="admin-section" style="margin-top: 30px;">
+                <h2>🔍 Photo Search Admin</h2>
+                <p>Search photos and edit sail numbers.</p>
                 <a href="PhotoSearchAdmin.html" class="action-button" style="text-decoration: none; display: inline-block;">🔍 Photo Search Admin</a>
+            </div>
+
+            <div class="admin-section" style="margin-top: 30px;">
+                <h2>Database Housekeeping</h2>
+                <p>Test, debug, validate, clean, and export database entries.</p>
                 <button class="action-button" onclick="testAPI()">🧪 Test API Connection</button>
                 <button class="action-button" onclick="debugDatabase()">🔍 Debug Database</button>
                 <button class="action-button" onclick="validateFiles()">Validate Database Files</button>

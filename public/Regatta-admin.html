@@ -6,6 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Regatta Admin - Love Sailing</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <meta property="og:title" content="Regatta Admin - Love Sailing">
+    <meta property="og:description" content="Regatta administration dashboard.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://lovesailing.ai/Regatta-admin.html">
+    <meta property="og:image" content="https://lovesailing.ai/Images/LOVE%20SAILING%20LOGO.JPEG">
+    <meta property="og:image:alt" content="Love Sailing Logo">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Regatta Admin - Love Sailing">
+    <meta name="twitter:description" content="Regatta administration dashboard.">
+    <meta name="twitter:image" content="https://lovesailing.ai/Images/LOVE%20SAILING%20LOGO.JPEG">
     <style>
         body {
             margin: 0;
@@ -637,6 +647,12 @@
             <div class="scrape-status" id="scrapeStatus"></div>
         </div>
 
+        <div class="scrape-section" id="scheduledScrapeStatusSection" style="margin-top: 20px;">
+            <h2>Scheduled Scrape Status</h2>
+            <p>Weekly scrape runs every Sunday at 02:00 UTC for all 3 sources.</p>
+            <div id="scheduledScrapeStatusContainer" class="loading">Loading...</div>
+        </div>
+
         <div id="statsContainer" class="loading">Loading statistics...</div>
 
         <div id="regattaTableContainer" style="display: none;">
@@ -1042,12 +1058,51 @@
         }
 
 
+        async function loadScrapeStatus() {
+            const container = document.getElementById('scheduledScrapeStatusContainer');
+            if (!container) return;
+            try {
+                const response = await fetch('/api/regatta-scrape-status');
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Failed to load');
+                let html = '';
+                if (data.scheduleEnabled) {
+                    html += `<p style="color: #00ff88; margin-bottom: 15px;"><strong>Schedule:</strong> ${data.scheduleDescription}`;
+                    if (data.nextScheduledRun) {
+                        const next = new Date(data.nextScheduledRun);
+                        html += ` &nbsp;|&nbsp; <strong>Next run:</strong> ${next.toLocaleString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
+                    }
+                    html += '</p>';
+                } else {
+                    html += '<p style="color: #ffaa00; margin-bottom: 15px;">Schedule disabled (SCRAPER_SERVICE_URL not set). Manual scrapes only.</p>';
+                }
+                html += '<div style="display: grid; gap: 15px;">';
+                (data.sources || []).forEach(s => {
+                    const lastStr = s.lastScrape ? new Date(s.lastScrape).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never';
+                    const nextStr = s.nextScrape ? new Date(s.nextScrape).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+                    const newRec = s.newRecordsLastScrape != null ? s.newRecordsLastScrape : '—';
+                    html += `<div class="scrape-item">
+                        <h4>${s.displayName}</h4>
+                        <div class="details">
+                            <div class="detail"><strong>Last scrape:</strong> ${lastStr}</div>
+                            <div class="detail"><strong>Next scrape:</strong> ${nextStr}</div>
+                            <div class="detail"><strong>New records (last):</strong> ${newRec}</div>
+                        </div>
+                    </div>`;
+                });
+                html += '</div>';
+                container.innerHTML = html;
+            } catch (err) {
+                container.innerHTML = `<p style="color: #ff6666;">Error loading: ${err.message}</p>`;
+            }
+        }
+
         async function loadAll() {
             const button = document.getElementById('refreshButton');
             button.disabled = true;
             button.textContent = 'Loading...';
 
-            await Promise.all([loadStats(), loadRegattas()]);
+            await Promise.all([loadStats(), loadRegattas(), loadScrapeStatus()]);
 
             button.disabled = false;
             button.textContent = 'Refresh All';

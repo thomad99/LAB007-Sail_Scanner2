@@ -24,6 +24,7 @@ const nodemailer = require('nodemailer');
 const cheerio = require('cheerio');
 const axios = require('axios');
 const OpenAI = require('openai').default;
+const cron = require('node-cron');
 
 // Load Puppeteer only if ENABLE_PUPPETEER environment variable is set to 'true'
 // Main server should NOT have this set - only the dedicated scraper service should
@@ -4362,6 +4363,95 @@ app.get('/Images/favicon.ico', (req, res) => {
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     res.sendFile(faviconPath);
+});
+
+// Weekly scheduled scrape - runs every Sunday at 2:00 AM UTC
+function setupScheduledScrape() {
+    const scraperUrl = process.env.SCRAPER_SERVICE_URL;
+    if (!scraperUrl) {
+        console.log('[Scheduled Scrape] SCRAPER_SERVICE_URL not set - weekly scrape disabled');
+        return;
+    }
+    // Cron: minute hour day-of-month month day-of-week (0 = Sunday)
+    cron.schedule('0 2 * * 0', async () => {
+        console.log('[Scheduled Scrape] Running weekly scrape (all sources)...');
+        try {
+            const response = await axios.post(`${scraperUrl}/api/scrape-regattas`, { source: 'all' }, {
+                timeout: 300000,
+                headers: { 'Content-Type': 'application/json' }
+            });
+            console.log('[Scheduled Scrape] Complete:', response.data);
+        } catch (err) {
+            console.error('[Scheduled Scrape] Error:', err.message);
+        }
+    });
+    console.log('[Scheduled Scrape] Weekly scrape enabled (Sundays 02:00 UTC)');
+}
+setupScheduledScrape();
+
+// Regatta scrape status - last scrape, next scrape, new records per source
+app.get('/api/regatta-scrape-status', async (req, res) => {
+    try {
+        const scraperUrl = process.env.SCRAPER_SERVICE_URL;
+        const sources = [
+            { id: 'regattanetwork', name: 'Regatta Network' },
+            { id: 'clubspot', name: 'Clubspot' },
+            { id: 'hssailing', name: 'High School Sailing' }
+        ];
+
+        let result;
+        try {
+            result = await pool.query(`
+                SELECT DISTINCT ON (source) source, scrape_time as last_scrape, regattas_found, regattas_added
+                FROM scrape_log
+                ORDER BY source, scrape_time DESC
+            `);
+        } catch (tableErr) {
+            if (tableErr.code === '42P01') {
+                result = { rows: [] };
+            } else {
+                throw tableErr;
+            }
+        }
+        const bySource = {};
+        result.rows.forEach(r => { bySource[r.source] = r; });
+
+        const scheduleEnabled = !!scraperUrl;
+        const now = new Date();
+        let nextScheduledRun = null;
+        if (scheduleEnabled) {
+            const nextSun = new Date(now);
+            nextSun.setUTCDate(now.getUTCDate() + ((7 - now.getUTCDay() + 7) % 7));
+            nextSun.setUTCHours(2, 0, 0, 0);
+            if (nextSun <= now) nextSun.setUTCDate(nextSun.getUTCDate() + 7);
+            nextScheduledRun = nextSun.toISOString();
+        }
+
+        const sourcesWithStatus = sources.map(s => {
+            const row = bySource[s.id];
+            const lastScrape = row ? new Date(row.last_scrape) : null;
+            const nextScrape = scheduleEnabled && nextScheduledRun ? nextScheduledRun : null;
+            return {
+                source: s.id,
+                displayName: s.name,
+                lastScrape: lastScrape ? lastScrape.toISOString() : null,
+                nextScrape,
+                newRecordsLastScrape: row ? (row.regattas_added || 0) : null,
+                totalFoundLastScrape: row ? (row.regattas_found || 0) : null
+            };
+        });
+
+        res.json({
+            success: true,
+            scheduleEnabled,
+            scheduleDescription: 'Every Sunday at 02:00 UTC',
+            nextScheduledRun,
+            sources: sourcesWithStatus
+        });
+    } catch (err) {
+        console.error('Error getting scrape status:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // Regatta scraping endpoint - forwards to dedicated scraper service
