@@ -985,6 +985,47 @@
             outline: none;
         }
 
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 26px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            border-radius: 26px;
+            transition: 0.3s;
+        }
+        .toggle-slider::before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            border-radius: 50%;
+            transition: 0.3s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        .toggle-switch input:checked + .toggle-slider {
+            background-color: #0066cc;
+        }
+        .toggle-switch input:checked + .toggle-slider::before {
+            transform: translateX(22px);
+        }
+
         .autocomplete {
             position: relative;
             display: inline-block;
@@ -1440,6 +1481,14 @@
                                 <label for="additionalTags">Additional Tags:</label>
                                 <input type="text" id="additionalTags" class="metadata-input"
                                     placeholder="Enter tags (comma separated)">
+                            </div>
+                            <div style="grid-column: 1 / -1; display: flex; align-items: center; gap: 10px;">
+                                <label for="storeUnmatchSails" style="cursor: pointer; font-weight: 600;">Store Unmatch Sails:</label>
+                                <label class="toggle-switch" style="cursor: pointer;">
+                                    <input type="checkbox" id="storeUnmatchSails" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                                <span style="color: #666; font-size: 0.9em;">When ON, photos with no sail number match are still saved with metadata so they can be found later.</span>
                             </div>
                         </div>
                     </div>
@@ -1994,6 +2043,8 @@
                 formData.append('screen_resolution', deviceFingerprint.screenResolution);
                 formData.append('timezone', deviceFingerprint.timezone);
                 formData.append('upload_timestamp', deviceFingerprint.generatedAt);
+                const storeUnmatch = document.getElementById('storeUnmatchSails');
+                formData.append('store_unmatch_sails', (storeUnmatch && storeUnmatch.checked) ? 'true' : 'false');
 
                 const response = await fetch('/api/scan', {
                     method: 'POST',

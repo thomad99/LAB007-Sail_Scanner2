@@ -881,6 +881,7 @@ async function ensureDirectories() {
 // Update the scan endpoint to include metadata
 app.post('/api/scan', upload.single('image'), async (req, res) => {
     let processedFiles = [];
+    const storeUnmatchSails = req.body.store_unmatch_sails !== 'false' && req.body.store_unmatch_sails !== false;
     const metadata = {
         date: req.body.date || new Date().toISOString().split('T')[0],
         regatta_name: req.body.regatta_name,
@@ -1014,8 +1015,8 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             console.error('Error during Azure processing:', azureErr);
         }
 
-        // If no files were processed, create a NOSAIL version
-        if (processedFiles.length === 0) {
+        // If no files were processed and Store Unmatch Sails is ON, create a NOSAIL version
+        if (processedFiles.length === 0 && storeUnmatchSails) {
             const newFilename = `NOSAIL_NONAME_${originalFilename}`;
             const s3Key = `processed/${newFilename}`;
 
@@ -1049,10 +1050,11 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
         }
 
         for (const file of processedFiles) {
-            // Only store metadata for photos with actual sail numbers (not NOSAIL)
-            if (file.sailNumber && file.sailNumber !== 'NOSAIL') {
+            const isNosail = !file.sailNumber || file.sailNumber === 'NOSAIL';
+            const shouldStore = !isNosail || storeUnmatchSails;
+            if (shouldStore) {
                 try {
-                    console.log(`Attempting to insert metadata for file: ${file.newFilename} (Sail #${file.sailNumber})`);
+                    console.log(`Attempting to insert metadata for file: ${file.newFilename} (Sail #${file.sailNumber || 'NOSAIL'})`);
                     const result = await pool.query(
                         `INSERT INTO photo_metadata (
                             filename, sail_number, date, regatta_name, 
@@ -1062,7 +1064,7 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
                         [
                             file.newFilename,
-                            file.sailNumber,
+                            file.sailNumber || 'NOSAIL',
                             metadata.date || null,
                             metadata.regatta_name || null,
                             metadata.photographer_name || null,
@@ -1089,7 +1091,7 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                     // Don't throw here, but mark that insertion failed
                 }
             } else {
-                console.log(`Skipping database metadata storage for NOSAIL file: ${file.newFilename} (uploaded to S3 for backup only)`);
+                console.log(`Skipping database metadata storage for NOSAIL file: ${file.newFilename} (Store Unmatch Sails is OFF)`);
             }
         }
 
@@ -3682,6 +3684,19 @@ async function runClubsInRegion(region) {
     return r.rows;
 }
 
+/** Format date for display - always includes year (e.g. "15 Jan 2024"). */
+function formatDateWithYear(val) {
+    if (val == null) return null;
+    const d = val instanceof Date ? val : new Date(String(val));
+    if (isNaN(d.getTime())) return String(val);
+    const pad = n => String(n).padStart(2, '0');
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const day = d.getUTCDate?.() ?? d.getDate();
+    const month = d.getUTCMonth?.() ?? d.getMonth();
+    const year = d.getUTCFullYear?.() ?? d.getFullYear();
+    return `${pad(day)} ${months[month]} ${year}`;
+}
+
 /** Regatta summary: dates, sailor count, top 5 sailors per class (by best position). */
 async function runRegattaSummary(regattaName) {
     if (!regattaName || !String(regattaName).trim()) return null;
@@ -3693,7 +3708,9 @@ async function runRegattaSummary(regattaName) {
     const rows = r.rows;
     if (!rows.length) return null;
 
-    const dates = [...new Set(rows.map(x => x.regatta_date ? String(x.regatta_date).slice(0, 10) : null).filter(Boolean))].sort();
+    const rawDates = [...new Set(rows.map(x => x.regatta_date).filter(Boolean))];
+    rawDates.sort((a, b) => new Date(a) - new Date(b));
+    const dates = rawDates.map(d => formatDateWithYear(d));
     const sailors = new Set();
     rows.forEach(x => { if (x.skipper && String(x.skipper).trim()) sailors.add(String(x.skipper).trim()); });
 
@@ -3850,7 +3867,7 @@ app.post('/api/chat', async (req, res) => {
             const raceHistory = rows.map(r => ({
                 position: r.position,
                 regatta_name: r.regatta_name,
-                regatta_date: r.regatta_date ? String(r.regatta_date).slice(0, 10) : null
+                regatta_date: formatDateWithYear(r.regatta_date)
             }));
             reply = rows.length
                 ? `I found the following information:\n\n**Total number of regattas:** ${totalRegattas}\n**Top position:** ${topPosition != null ? topPosition : '—'}\n\nSee the table below for each regatta and result.`
