@@ -1134,6 +1134,43 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
     }
 });
 
+// LiveView: fast sail-number scan from camera frame (no storage)
+app.post('/api/liveview-scan', upload.single('image'), async (req, res) => {
+    if (!req.file || !req.file.buffer) {
+        return res.status(400).json({ error: 'No image provided', sailNumbers: [] });
+    }
+    try {
+        const result = await processWithRetry(
+            () => computerVisionClient.readInStream(req.file.buffer, { language: 'en' }),
+            'Azure Vision API call (liveview)'
+        );
+        const operationId = result.operationLocation.split('/').pop();
+        let operationResult;
+        let attempts = 0;
+        const maxAttempts = 30;
+        const delayMs = 1000;
+        do {
+            attempts++;
+            operationResult = await processWithRetry(
+                () => computerVisionClient.getReadResult(operationId),
+                'Azure Results Polling (liveview)'
+            );
+            if (operationResult.status === 'running' || operationResult.status === 'notStarted') {
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+        } while ((operationResult.status === 'running' || operationResult.status === 'notStarted') && attempts < maxAttempts);
+
+        if (operationResult.status !== 'succeeded') {
+            return res.json({ sailNumbers: [], error: 'Azure processing did not complete' });
+        }
+        const sailNumbers = extractSailNumbers(operationResult.analyzeResult);
+        res.json({ sailNumbers });
+    } catch (err) {
+        console.error('LiveView scan error:', err);
+        res.status(500).json({ error: err.message, sailNumbers: [] });
+    }
+});
+
 // Helper function to group nearby lines
 function groupNearbyLines(lines) {
     const groups = [];

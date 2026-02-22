@@ -1483,61 +1483,42 @@
                                     placeholder="Enter tags (comma separated)">
                             </div>
                             <div style="grid-column: 1 / -1; display: flex; align-items: center; gap: 10px;">
-                                <label for="storeUnmatchSails" style="cursor: pointer; font-weight: 600;">Store Unmatch Sails:</label>
+                                <label for="storeUnmatchSails" style="cursor: pointer; font-weight: 600;">Store Unmatched Sails:</label>
                                 <label class="toggle-switch" style="cursor: pointer;">
                                     <input type="checkbox" id="storeUnmatchSails" checked>
                                     <span class="toggle-slider"></span>
                                 </label>
-                                <span style="color: #666; font-size: 0.9em;">When ON, photos with no sail number match are still saved with metadata so they can be found later.</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Progress indicator -->
+                <!-- Progress indicator: dashboard only + collapsible details -->
                 <div id="batchProgress" class="batch-progress" style="display: none;">
-                    <div class="progress-header">
-                        <div class="progress-title">
-                            <div class="sail-logo-container">
-                                <div class="sail-logo">⛵</div>
+                    <div class="upload-dashboard"
+                        style="padding: 20px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #0066cc;">
+                        <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: center;">
+                            <div>
+                                <div class="stat-label" style="font-size: 12px; color: #666;">Photos Processed</div>
+                                <div class="progress-count" style="font-size: 22px; font-weight: bold; color: #0066cc;">0 of 0</div>
                             </div>
-                            Love Sailing AI Analyzing
-                        </div>
-                        <div class="progress-count">0/0 files complete</div>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill"></div>
-                    </div>
-
-                    <!-- Live Summary Section -->
-                    <div class="live-summary"
-                        style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #0066cc;">
-                        <h4 style="margin: 0 0 10px 0; color: #0066cc; font-size: 16px;">📊 Live Analysis Summary</h4>
-                        <div class="summary-stats"
-                            style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px;">
-                            <div class="stat-item"
-                                style="text-align: center; padding: 8px; background: white; border-radius: 5px; border: 1px solid #dee2e6;">
-                                <div class="stat-number" id="sailNumbersFound"
-                                    style="font-size: 20px; font-weight: bold; color: #28a745;">0</div>
-                                <div class="stat-label" style="font-size: 12px; color: #666; margin-top: 2px;">Sail
-                                    Numbers Found</div>
-                            </div>
-                            <div class="stat-item"
-                                style="text-align: center; padding: 8px; background: white; border-radius: 5px; border: 1px solid #dee2e6;">
-                                <div class="stat-number" id="noSailNumbersFound"
-                                    style="font-size: 20px; font-weight: bold; color: #dc3545;">0</div>
-                                <div class="stat-label" style="font-size: 12px; color: #666; margin-top: 2px;">No Sail
-                                    Numbers</div>
-                            </div>
-                            <div class="stat-item"
-                                style="text-align: center; padding: 8px; background: white; border-radius: 5px; border: 1px solid #dee2e6;">
-                                <div class="stat-number" id="duplicatesFound"
-                                    style="font-size: 20px; font-weight: bold; color: #ffc107;">0</div>
-                                <div class="stat-label" style="font-size: 12px; color: #666; margin-top: 2px;">
-                                    Duplicates</div>
+                            <div>
+                                <div class="stat-label" style="font-size: 12px; color: #666;">Sail Numbers Found</div>
+                                <div class="stat-number" id="sailNumbersFound" style="font-size: 22px; font-weight: bold; color: #28a745;">0</div>
                             </div>
                         </div>
                     </div>
+                    <div class="upload-details-collapse" style="margin-top: 12px;">
+                        <button type="button" id="uploadDetailsToggle" class="details-toggle-btn"
+                            style="width: 100%; padding: 12px 16px; text-align: left; background: #e9ecef; border: 1px solid #dee2e6; border-radius: 6px; cursor: pointer; font-weight: 600; display: flex; align-items: center; justify-content: space-between;">
+                            <span>More details</span>
+                            <span id="uploadDetailsChevron" style="transition: transform 0.2s;">▼</span>
+                        </button>
+                        <div id="uploadDetailsContent" style="display: none; max-height: 40vh; overflow-y: auto; margin-top: 8px; padding: 12px; background: #fff; border: 1px solid #dee2e6; border-radius: 6px;">
+                            <div id="uploadDetailsList"></div>
+                        </div>
+                    </div>
+                    <div id="resultCardsHidden" style="display: none;"></div>
                 </div>
             </div>
 
@@ -1919,10 +1900,12 @@
 
 
 
-                    // Create result cards for all files first
+                    // Create result cards (hidden) for processing state
+                    const hiddenContainer = document.getElementById('resultCardsHidden');
+                    document.getElementById('uploadDetailsList').innerHTML = '';
                     files.forEach(file => {
                         const resultCard = createResultCard(file);
-                        resultsContainer.appendChild(resultCard);
+                        if (hiddenContainer) hiddenContainer.appendChild(resultCard);
                     });
 
                     // Process files sequentially with rate limiting
@@ -1975,20 +1958,45 @@
 
         function updateBatchProgress() {
             const progressCount = batchProgress.querySelector('.progress-count');
-            const progressFill = batchProgress.querySelector('.progress-fill');
-            const percentage = (completedFiles / totalFiles) * 100;
-
-            console.log(`Updating progress: ${completedFiles}/${totalFiles} (${percentage.toFixed(1)}%)`);
-            console.log('Progress indicator visible:', batchProgress.style.display !== 'none');
-
-            progressCount.textContent = `${completedFiles}/${totalFiles} files complete`;
-            progressFill.style.width = `${percentage}%`;
+            if (progressCount) progressCount.textContent = `${completedFiles} of ${totalFiles}`;
         }
 
+        function addUploadDetailRow(fileName, sailNumber, matchConfidence, photoTakenDate) {
+            const list = document.getElementById('uploadDetailsList');
+            if (!list) return;
+            const row = document.createElement('div');
+            row.style.cssText = 'padding: 10px 0; border-bottom: 1px solid #eee; font-size: 14px;';
+            row.innerHTML = `
+                <div><strong>Sail Number:</strong> ${escapeHtml(sailNumber || '—')}</div>
+                <div><strong>Match Confidence:</strong> ${escapeHtml(matchConfidence != null ? matchConfidence + '%' : '—')}</div>
+                <div><strong>File Name:</strong> ${escapeHtml(fileName || '—')}</div>
+                <div><strong>Photo Taken Date:</strong> ${escapeHtml(photoTakenDate || '—')}</div>
+            `;
+            list.appendChild(row);
+        }
+        function escapeHtml(s) {
+            if (s == null) return '—';
+            const d = document.createElement('div');
+            d.textContent = String(s);
+            return d.innerHTML;
+        }
+
+        (function initDetailsToggle() {
+            const btn = document.getElementById('uploadDetailsToggle');
+            const content = document.getElementById('uploadDetailsContent');
+            const chevron = document.getElementById('uploadDetailsChevron');
+            if (btn && content) {
+                btn.addEventListener('click', function () {
+                    const isOpen = content.style.display !== 'none';
+                    content.style.display = isOpen ? 'none' : 'block';
+                    if (chevron) chevron.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
+                });
+            }
+        })();
+
         function updateLiveSummary() {
-            document.getElementById('sailNumbersFound').textContent = sailNumbersFound;
-            document.getElementById('noSailNumbersFound').textContent = noSailNumbersFound;
-            document.getElementById('duplicatesFound').textContent = duplicatesFound;
+            const el = document.getElementById('sailNumbersFound');
+            if (el) el.textContent = sailNumbersFound;
         }
 
         function resetLiveSummary() {
@@ -2169,6 +2177,13 @@
                 `;
                 resultCard.className = 'result-card complete';
 
+                // Add simplified row to collapsible details
+                const primarySail = highConfidenceSailNumbers.length > 0 ? highConfidenceSailNumbers[0] : (sailNumbers.length > 0 ? sailNumbers[0] : null);
+                const sailNum = primarySail ? String(primarySail.number) : (dataProcessedFiles.length && dataProcessedFiles[0].sailNumber ? dataProcessedFiles[0].sailNumber : '—');
+                const conf = primarySail ? (primarySail.confidence * 100).toFixed(1) : null;
+                const photoDate = (data.exifData && data.exifData.photo_timestamp) ? new Date(data.exifData.photo_timestamp).toLocaleString() : (document.getElementById('date') && document.getElementById('date').value ? document.getElementById('date').value : '—');
+                addUploadDetailRow(file.name, sailNum, conf, photoDate);
+
                 // Add files to the global processedFiles array
                 if (data.processedFiles && data.processedFiles.length > 0) {
                     console.log(`Server returned ${data.processedFiles.length} processed files`);
@@ -2210,6 +2225,8 @@
                         </div>
                     </div>
                 `;
+
+                addUploadDetailRow(file.name, '—', null, document.getElementById('date') && document.getElementById('date').value ? document.getElementById('date').value : '—');
 
                 // Show results tab on desktop when error result is available
                 const resultsTab = document.getElementById('resultsTab');
