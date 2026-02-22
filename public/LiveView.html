@@ -17,45 +17,30 @@
     <meta name="twitter:image" content="https://lovesailing.ai/Images/LOVE%20SAILING%20LOGO.JPEG">
     <style>
         * { box-sizing: border-box; }
-        html, body { margin: 0; padding: 0; overflow-x: hidden; background: #0a0a12; color: #e0e0e0; font-family: system-ui, -apple-system, sans-serif; }
-        .header { width: 100%; padding: 12px 16px; background: #12121f; border-bottom: 1px solid #2a2a3e; }
+        html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0a0a12; color: #e0e0e0; font-family: system-ui, -apple-system, sans-serif; }
+        body { display: flex; flex-direction: column; }
+        .header { flex-shrink: 0; padding: 10px 16px; background: #12121f; border-bottom: 1px solid #2a2a3e; }
         .header a { color: #7eb8ff; text-decoration: none; }
         .header a:hover { text-decoration: underline; }
-        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+        .container { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 10px; }
         .view-wrapper {
             position: relative;
+            flex: 0 0 auto;
             width: 100%;
-            background: #000;
-            border-radius: 12px;
-            overflow: hidden;
+            max-height: 42vh;
             aspect-ratio: 4/3;
-            max-height: 70vh;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
         }
-        #video {
-            display: block;
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-        }
-        #overlay {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-        }
+        .view-wrapper .inner { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+        #video { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: contain; }
+        #overlay { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+        #overlay { pointer-events: none; }
         #captureCanvas { display: none; }
-        .controls {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 16px;
-            margin-top: 20px;
-            flex-wrap: wrap;
-        }
+        .controls { flex-shrink: 0; display: flex; justify-content: center; align-items: center; padding: 10px 0; }
         .toggle-btn {
-            padding: 14px 28px;
+            padding: 12px 24px;
             font-size: 16px;
             font-weight: 600;
             border: none;
@@ -64,24 +49,26 @@
             transition: background 0.2s, transform 0.1s;
         }
         .toggle-btn:active { transform: scale(0.98); }
-        .toggle-btn.off {
-            background: #2a2a3e;
-            color: #a0a0b0;
-        }
+        .toggle-btn.off { background: #2a2a3e; color: #a0a0b0; }
         .toggle-btn.off:hover { background: #35354a; }
-        .toggle-btn.on {
-            background: #0066cc;
-            color: #fff;
-        }
+        .toggle-btn.on { background: #0066cc; color: #fff; }
         .toggle-btn.on:hover { background: #0052a3; }
-        .status {
+        .feedback {
+            flex: 1 1 0;
+            min-height: 0;
+            width: 100%;
+            overflow: auto;
+            background: #12121f;
+            border: 1px solid #2a2a3e;
+            border-radius: 10px;
+            padding: 12px 14px;
             font-size: 14px;
-            color: #888;
+            line-height: 1.6;
         }
-        .status.scanning { color: #7eb8ff; }
-        .status.error { color: #e07070; }
-        .hint { margin-top: 12px; font-size: 13px; color: #666; text-align: center; }
-        .error-msg { margin-top: 12px; padding: 12px; background: rgba(200,80,80,0.15); border-radius: 8px; color: #e07070; font-size: 14px; display: none; }
+        .feedback-line { color: #888; }
+        .feedback-line.active { color: #7eb8ff; }
+        .feedback-line.done { color: #a0a0b0; }
+        .feedback-line.error { color: #e07070; }
     </style>
 </head>
 <body>
@@ -89,19 +76,23 @@
         <a href="/">← Love Sailing</a>
     </div>
     <div class="container">
-        <h1>LiveView</h1>
-        <p>Point your camera at a sail. Turn <strong>Detection ON</strong> to scan for sail numbers every 2 seconds; matches appear as an overlay.</p>
         <div class="view-wrapper">
-            <video id="video" autoplay playsinline muted></video>
-            <canvas id="overlay"></canvas>
-            <canvas id="captureCanvas"></canvas>
+            <div class="inner">
+                <video id="video" autoplay playsinline muted></video>
+                <canvas id="overlay"></canvas>
+            </div>
         </div>
+        <canvas id="captureCanvas"></canvas>
         <div class="controls">
             <button type="button" id="detectionBtn" class="toggle-btn off" aria-pressed="false">Detection OFF</button>
-            <span id="status" class="status"></span>
         </div>
-        <p id="hint" class="hint">Detection is OFF. Click the button to start scanning for sail numbers.</p>
-        <div id="errorMsg" class="error-msg"></div>
+        <div id="feedback" class="feedback">
+            <div id="log1" class="feedback-line">—</div>
+            <div id="log2" class="feedback-line">—</div>
+            <div id="log3" class="feedback-line">—</div>
+            <div id="log4" class="feedback-line">—</div>
+            <div id="log5" class="feedback-line">—</div>
+        </div>
     </div>
     <script>
 (function () {
@@ -109,54 +100,69 @@
     const overlay = document.getElementById('overlay');
     const captureCanvas = document.getElementById('captureCanvas');
     const detectionBtn = document.getElementById('detectionBtn');
-    const statusEl = document.getElementById('status');
-    const hintEl = document.getElementById('hint');
-    const errorMsgEl = document.getElementById('errorMsg');
+    const log1 = document.getElementById('log1');
+    const log2 = document.getElementById('log2');
+    const log3 = document.getElementById('log3');
+    const log4 = document.getElementById('log4');
+    const log5 = document.getElementById('log5');
 
     let stream = null;
     let detectionOn = false;
-    let scanInterval = null;
+    let scanInProgress = false;
     let lastSailNumbers = [];
 
-    function showError(msg) {
-        errorMsgEl.textContent = msg || '';
-        errorMsgEl.style.display = msg ? 'block' : 'none';
+    function setLog(lines) {
+        const all = [log1, log2, log3, log4, log5];
+        all.forEach(function (el, i) {
+            el.textContent = lines[i] != null ? lines[i] : '—';
+            el.className = 'feedback-line';
+        });
     }
 
-    function setStatus(text, className) {
-        statusEl.textContent = text || '';
-        statusEl.className = 'status' + (className ? ' ' + className : '');
+    function setLogState(activeIndex, errorIndex) {
+        const all = [log1, log2, log3, log4, log5];
+        all.forEach(function (el, i) {
+            if (i === errorIndex) el.classList.add('error');
+            else if (i < activeIndex) el.classList.add('done');
+            else if (i === activeIndex) el.classList.add('active');
+        });
     }
 
     function resizeOverlay() {
-        if (!video.clientWidth || !video.clientHeight) return;
-        overlay.width = video.clientWidth;
-        overlay.height = video.clientHeight;
+        var inner = video.closest('.inner');
+        if (!inner || !video.videoWidth) return;
+        var cw = inner.clientWidth;
+        var ch = inner.clientHeight;
+        overlay.width = cw;
+        overlay.height = ch;
+        overlay.style.width = cw + 'px';
+        overlay.style.height = ch + 'px';
         drawOverlay();
     }
 
     function boxFromBounding(b) {
         if (!b || b.length < 8) return null;
-        const minX = Math.min(b[0], b[2], b[4], b[6]);
-        const minY = Math.min(b[1], b[3], b[5], b[7]);
-        const maxX = Math.max(b[0], b[2], b[4], b[6]);
-        const maxY = Math.max(b[1], b[3], b[5], b[7]);
+        var minX = Math.min(b[0], b[2], b[4], b[6]);
+        var minY = Math.min(b[1], b[3], b[5], b[7]);
+        var maxX = Math.max(b[0], b[2], b[4], b[6]);
+        var maxY = Math.max(b[1], b[3], b[5], b[7]);
         return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
     }
 
     function drawOverlay() {
-        const ctx = overlay.getContext('2d');
+        var ctx = overlay.getContext('2d');
         ctx.clearRect(0, 0, overlay.width, overlay.height);
         if (!lastSailNumbers.length || !video.videoWidth) return;
-        const scaleX = overlay.width / video.videoWidth;
-        const scaleY = overlay.height / video.videoHeight;
-        for (const s of lastSailNumbers) {
-            const box = boxFromBounding(s.boundingBox);
+        var scaleX = overlay.width / video.videoWidth;
+        var scaleY = overlay.height / video.videoHeight;
+        for (var i = 0; i < lastSailNumbers.length; i++) {
+            var s = lastSailNumbers[i];
+            var box = boxFromBounding(s.boundingBox);
             if (!box) continue;
-            const x = box.x * scaleX;
-            const y = box.y * scaleY;
-            const w = box.width * scaleX;
-            const h = box.height * scaleY;
+            var x = box.x * scaleX;
+            var y = box.y * scaleY;
+            var w = box.width * scaleX;
+            var h = box.height * scaleY;
             ctx.strokeStyle = 'rgba(0, 200, 255, 0.9)';
             ctx.lineWidth = 3;
             ctx.strokeRect(x, y, w, h);
@@ -166,42 +172,56 @@
             ctx.fillStyle = '#00d4ff';
             ctx.strokeStyle = '#000';
             ctx.lineWidth = 2;
-            const text = String(s.number);
-            const tx = x + 4;
-            const ty = y + h - 4;
-            ctx.strokeText(text, tx, ty);
-            ctx.fillText(text, tx, ty);
+            var text = String(s.number);
+            ctx.strokeText(text, x + 4, y + h - 4);
+            ctx.fillText(text, x + 4, y + h - 4);
         }
     }
 
     function doScan() {
-        if (!stream || !video.videoWidth || !detectionOn) return;
-        const w = video.videoWidth;
-        const h = video.videoHeight;
+        if (!stream || !video.videoWidth || !detectionOn || scanInProgress) return;
+        scanInProgress = true;
+        var w = video.videoWidth;
+        var h = video.videoHeight;
         captureCanvas.width = w;
         captureCanvas.height = h;
-        const ctx = captureCanvas.getContext('2d');
+        var ctx = captureCanvas.getContext('2d');
         ctx.drawImage(video, 0, 0, w, h);
-        setStatus('Scanning…', 'scanning');
+
+        setLog(['Capture taken', 'Uploading to Azure AI', 'Waiting for response', 'Response back', '—']);
+        setLogState(0, -1);
+
         captureCanvas.toBlob(function (blob) {
-            if (!blob || !detectionOn) return;
-            const fd = new FormData();
+            if (!blob || !detectionOn) { scanInProgress = false; return; }
+            setLogState(1, -1);
+            var fd = new FormData();
             fd.append('image', blob, 'frame.jpg');
             fetch('/api/liveview-scan', { method: 'POST', body: fd })
-                .then(function (r) { return r.json(); })
+                .then(function (r) {
+                    if (!detectionOn) { scanInProgress = false; return r.json(); }
+                    setLogState(2, -1);
+                    return r.json();
+                })
                 .then(function (data) {
-                    if (!detectionOn) return;
-                    const list = data.sailNumbers || [];
+                    if (!detectionOn) { scanInProgress = false; return; }
+                    setLogState(3, -1);
+                    var list = data.sailNumbers || [];
                     lastSailNumbers = list;
                     resizeOverlay();
-                    if (list.length) setStatus('Found ' + list.length + ' sail number(s)', '');
-                    else setStatus('', '');
-                    showError('');
+                    var resultText = list.length
+                        ? 'Result: ' + list.length + ' sail number(s) found — ' + list.map(function (s) { return s.number; }).join(', ')
+                        : 'Result: No sail numbers detected';
+                    setLog(['Capture taken', 'Uploading to Azure AI', 'Waiting for response', 'Response back', resultText]);
+                    setLogState(4, -1);
+                    scanInProgress = false;
+                    if (detectionOn) setTimeout(doScan, 0);
                 })
                 .catch(function (err) {
-                    if (!detectionOn) return;
-                    setStatus('', 'error');
-                    showError('Scan failed: ' + (err.message || 'Network error'));
+                    var msg = 'Scan failed: ' + (err.message || 'Network error');
+                    setLog(['Capture taken', 'Uploading to Azure AI', 'Waiting for response', 'Response back', msg]);
+                    setLogState(4, 4);
+                    scanInProgress = false;
+                    if (detectionOn) setTimeout(doScan, 0);
                 });
         }, 'image/jpeg', 0.9);
     }
@@ -217,28 +237,23 @@
         detectionBtn.classList.remove('off');
         detectionBtn.classList.add('on');
         detectionBtn.setAttribute('aria-pressed', 'true');
-        hintEl.textContent = 'Scanning every 2 seconds. Point the camera at a sail.';
         lastSailNumbers = [];
+        setLog(['—', '—', '—', '—', '—']);
+        setLogState(-1, -1);
         resizeOverlay();
         doScan();
-        scanInterval = setInterval(doScan, 2000);
     }
 
     function stopDetection() {
         detectionOn = false;
-        if (scanInterval) {
-            clearInterval(scanInterval);
-            scanInterval = null;
-        }
         detectionBtn.textContent = 'Detection OFF';
         detectionBtn.classList.add('off');
         detectionBtn.classList.remove('on');
         detectionBtn.setAttribute('aria-pressed', 'false');
-        setStatus('');
-        hintEl.textContent = 'Detection is OFF. Click the button to start scanning for sail numbers.';
         lastSailNumbers = [];
+        setLog(['—', '—', '—', '—', '—']);
+        setLogState(-1, -1);
         resizeOverlay();
-        showError('');
     }
 
     detectionBtn.addEventListener('click', function () {
@@ -258,7 +273,8 @@
             };
         })
         .catch(function (err) {
-            showError('Camera access failed: ' + (err.message || 'Permission denied'));
+            setLog(['Camera error', err.message || 'Permission denied', '—', '—', '—']);
+            setLogState(0, 0);
         });
 })();
     </script>
