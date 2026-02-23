@@ -27,7 +27,8 @@
             position: relative;
             flex: 0 0 auto;
             width: 100%;
-            max-height: 42vh;
+            height: 75vh;
+            max-height: 75vh;
             aspect-ratio: 4/3;
             background: #000;
             border-radius: 10px;
@@ -110,9 +111,11 @@
     const log4 = document.getElementById('log4');
     const log5 = document.getElementById('log5');
 
+    const THROTTLE_MS = 10000;
     let stream = null;
     let detectionOn = false;
     let scanInProgress = false;
+    let lastCaptureStartTime = 0;
     let lastSailNumbers = [];
 
     function setLog(lines) {
@@ -182,9 +185,17 @@
         }
     }
 
+    function scheduleNextScan() {
+        if (!detectionOn) return;
+        var elapsed = Date.now() - lastCaptureStartTime;
+        var delay = Math.max(0, THROTTLE_MS - elapsed);
+        setTimeout(doScan, delay);
+    }
+
     function doScan() {
         if (!stream || !video.videoWidth || !detectionOn || scanInProgress) return;
         scanInProgress = true;
+        lastCaptureStartTime = Date.now();
         var w = video.videoWidth;
         var h = video.videoHeight;
         captureCanvas.width = w;
@@ -218,14 +229,14 @@
                     setLog(['Capture taken', 'Uploading to Azure AI', 'Waiting for response', 'Response back', resultText]);
                     setLogState(4, -1);
                     scanInProgress = false;
-                    if (detectionOn) setTimeout(doScan, 0);
+                    scheduleNextScan();
                 })
                 .catch(function (err) {
                     var msg = 'Scan failed: ' + (err.message || 'Network error');
                     setLog(['Capture taken', 'Uploading to Azure AI', 'Waiting for response', 'Response back', msg]);
                     setLogState(4, 4);
                     scanInProgress = false;
-                    if (detectionOn) setTimeout(doScan, 0);
+                    scheduleNextScan();
                 });
         }, 'image/jpeg', 0.9);
     }
