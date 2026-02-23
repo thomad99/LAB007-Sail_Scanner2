@@ -150,6 +150,13 @@
             cursor: pointer;
         }
 
+        /* Live View: only show on mobile */
+        @media (min-width: 769px) {
+            .nav-item-liveview {
+                display: none !important;
+            }
+        }
+
         /* Responsive styles */
         @media (max-width: 768px) {
             .navigation {
@@ -184,7 +191,7 @@
         <a href="SailScan.html" class="nav-item">
             <img src="/Images/Photos-icon.jpg?v=2" alt="Photo Database">
         </a>
-        <a href="LiveView.html" class="nav-item">
+        <a href="LiveView.html" class="nav-item nav-item-liveview">
             <img src="/Images/Photos-icon.jpg?v=2" alt="Live View">
         </a>
         <a href="Find-regatta.html" class="nav-item">

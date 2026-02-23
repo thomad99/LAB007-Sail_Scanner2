@@ -96,6 +96,10 @@
     </div>
     <script>
 (function () {
+    if (!window.matchMedia('(max-width: 768px)').matches) {
+        window.location.replace('/');
+        return;
+    }
     const video = document.getElementById('video');
     const overlay = document.getElementById('overlay');
     const captureCanvas = document.getElementById('captureCanvas');

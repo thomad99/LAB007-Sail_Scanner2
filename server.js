@@ -634,6 +634,16 @@ const computerVisionClient = new ComputerVisionClient(
     computerVisionEndpoint
 );
 
+// Azure Document Intelligence (for LiveView only - separate from Computer Vision / SailScan).
+// Create a Document Intelligence resource in Azure and set:
+//   AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT  e.g. https://YOUR_RESOURCE.cognitiveservices.azure.com
+//   AZURE_DOCUMENT_INTELLIGENCE_KEY       one of the resource keys
+const documentIntelligenceEndpoint = process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT || '';
+const documentIntelligenceKey = process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY || '';
+const DOC_INTEL_API_VERSION = '2024-11-30';
+// Standard text on sails to ignore when detecting sail number
+const SAIL_TEXT_TO_IGNORE = new Set(['c420', 'usa', 'nacra15', 'us']);
+
 // Add this helper function
 async function saveFile(buffer, filename, originalFilename) {
     console.log('Starting file save operations...');
@@ -1134,42 +1144,112 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
     }
 });
 
-// LiveView: fast sail-number scan from camera frame (no storage)
+// LiveView: uses Azure Document Intelligence (Read model), not Computer Vision
 app.post('/api/liveview-scan', upload.single('image'), async (req, res) => {
     if (!req.file || !req.file.buffer) {
         return res.status(400).json({ error: 'No image provided', sailNumbers: [] });
     }
+    if (!documentIntelligenceEndpoint || !documentIntelligenceKey) {
+        return res.status(503).json({
+            error: 'LiveView requires Azure Document Intelligence. Set AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT and AZURE_DOCUMENT_INTELLIGENCE_KEY.',
+            sailNumbers: []
+        });
+    }
     try {
-        const result = await processWithRetry(
-            () => computerVisionClient.readInStream(req.file.buffer, { language: 'en' }),
-            'Azure Vision API call (liveview)'
-        );
-        const operationId = result.operationLocation.split('/').pop();
-        let operationResult;
-        let attempts = 0;
-        const maxAttempts = 30;
-        const delayMs = 1000;
-        do {
-            attempts++;
-            operationResult = await processWithRetry(
-                () => computerVisionClient.getReadResult(operationId),
-                'Azure Results Polling (liveview)'
-            );
-            if (operationResult.status === 'running' || operationResult.status === 'notStarted') {
-                await new Promise(resolve => setTimeout(resolve, delayMs));
-            }
-        } while ((operationResult.status === 'running' || operationResult.status === 'notStarted') && attempts < maxAttempts);
-
-        if (operationResult.status !== 'succeeded') {
-            return res.json({ sailNumbers: [], error: 'Azure processing did not complete' });
-        }
-        const sailNumbers = extractSailNumbers(operationResult.analyzeResult);
+        const analyzeResult = await analyzeWithDocumentIntelligence(req.file.buffer, req.file.mimetype || 'image/jpeg');
+        const sailNumbers = extractSailNumbersFromDocumentIntelligence(analyzeResult);
         res.json({ sailNumbers });
     } catch (err) {
         console.error('LiveView scan error:', err);
         res.status(500).json({ error: err.message, sailNumbers: [] });
     }
 });
+
+// Call Azure Document Intelligence prebuilt-read: analyze then poll until done
+async function analyzeWithDocumentIntelligence(imageBuffer, contentType) {
+    const url = `${documentIntelligenceEndpoint.replace(/\/$/, '')}/documentintelligence/documentModels/prebuilt-read:analyze?api-version=${DOC_INTEL_API_VERSION}`;
+    const response = await axios({
+        method: 'POST',
+        url,
+        data: imageBuffer,
+        headers: {
+            'Content-Type': contentType || 'application/octet-stream',
+            'Ocp-Apim-Subscription-Key': documentIntelligenceKey
+        },
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+        validateStatus: (status) => status === 202
+    });
+    const operationLocation = response.headers['operation-location'];
+    if (!operationLocation) {
+        throw new Error('Document Intelligence did not return Operation-Location');
+    }
+    let attempts = 0;
+    const maxAttempts = 60;
+    const delayMs = 1000;
+    while (attempts < maxAttempts) {
+        attempts++;
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        const pollResponse = await axios.get(operationLocation, {
+            headers: { 'Ocp-Apim-Subscription-Key': documentIntelligenceKey }
+        });
+        const body = pollResponse.data;
+        const status = body.status;
+        if (status === 'succeeded') {
+            return body.analyzeResult;
+        }
+        if (status === 'failed') {
+            throw new Error(body.error?.message || 'Document Intelligence analysis failed');
+        }
+    }
+    throw new Error('Document Intelligence analysis timed out');
+}
+
+// Convert Document Intelligence polygon to [x1,y1, x2,y2, x3,y3, x4,y4] for overlay
+function polygonToBoundingBox(polygon) {
+    if (!polygon || !Array.isArray(polygon)) return null;
+    if (polygon.length >= 4 && typeof polygon[0] === 'number') {
+        return polygon.length >= 8 ? polygon.slice(0, 8) : null;
+    }
+    const flat = [];
+    for (const p of polygon) {
+        const x = typeof p === 'object' && p !== null && 'x' in p ? p.x : p;
+        const y = typeof p === 'object' && p !== null && 'y' in p ? p.y : (Array.isArray(p) ? p[1] : undefined);
+        if (typeof x !== 'number' || typeof y !== 'number') return null;
+        flat.push(x, y);
+    }
+    if (flat.length >= 8) return flat.slice(0, 8);
+    if (flat.length === 6) return [flat[0], flat[1], flat[2], flat[3], flat[4], flat[5], flat[0], flat[1]];
+    return null;
+}
+
+// Extract sail numbers from Document Intelligence analyze result; ignore standard sail text (C420, USA, Nacra15, US)
+function extractSailNumbersFromDocumentIntelligence(analyzeResult) {
+    const candidates = [];
+    if (!analyzeResult || !analyzeResult.pages) return candidates;
+    for (const page of analyzeResult.pages) {
+        const lines = page.lines || [];
+        for (const line of lines) {
+            const content = (line.content || line.text || '').trim();
+            const normalized = content.toLowerCase().trim();
+            if (SAIL_TEXT_TO_IGNORE.has(normalized)) continue;
+            if (!/^\d{1,6}$/.test(content)) continue;
+            const polygon = line.polygon || line.boundingPolygon || line.boundingBox;
+            const boundingBox = polygon ? polygonToBoundingBox(Array.isArray(polygon) ? polygon : [polygon]) : null;
+            if (boundingBox) {
+                candidates.push({
+                    number: content,
+                    confidence: line.confidence ?? 0.9,
+                    boundingBox
+                });
+            }
+        }
+    }
+    // Prefer valid sail numbers (2–6 digits, range 10–999999), then any digit line; sort by confidence
+    const valid = candidates.filter((c) => isValidSailNumber(c.number));
+    const rest = candidates.filter((c) => !isValidSailNumber(c.number));
+    return [...valid.sort((a, b) => (b.confidence || 0) - (a.confidence || 0)), ...rest.sort((a, b) => (b.confidence || 0) - (a.confidence || 0))];
+}
 
 // Helper function to group nearby lines
 function groupNearbyLines(lines) {
