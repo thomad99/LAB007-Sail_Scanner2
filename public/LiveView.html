@@ -88,11 +88,7 @@
             <button type="button" id="detectionBtn" class="toggle-btn off" aria-pressed="false">Detection OFF</button>
         </div>
         <div id="feedback" class="feedback">
-            <div id="log1" class="feedback-line">—</div>
-            <div id="log2" class="feedback-line">—</div>
-            <div id="log3" class="feedback-line">—</div>
-            <div id="log4" class="feedback-line">—</div>
-            <div id="log5" class="feedback-line">—</div>
+            <div id="feedbackText" class="feedback-line">—</div>
         </div>
     </div>
     <script>
@@ -105,11 +101,7 @@
     const overlay = document.getElementById('overlay');
     const captureCanvas = document.getElementById('captureCanvas');
     const detectionBtn = document.getElementById('detectionBtn');
-    const log1 = document.getElementById('log1');
-    const log2 = document.getElementById('log2');
-    const log3 = document.getElementById('log3');
-    const log4 = document.getElementById('log4');
-    const log5 = document.getElementById('log5');
+    const feedbackText = document.getElementById('feedbackText');
 
     const THROTTLE_MS = 10000;
     let stream = null;
@@ -118,21 +110,9 @@
     let lastCaptureStartTime = 0;
     let lastSailNumbers = [];
 
-    function setLog(lines) {
-        const all = [log1, log2, log3, log4, log5];
-        all.forEach(function (el, i) {
-            el.textContent = lines[i] != null ? lines[i] : '—';
-            el.className = 'feedback-line';
-        });
-    }
-
-    function setLogState(activeIndex, errorIndex) {
-        const all = [log1, log2, log3, log4, log5];
-        all.forEach(function (el, i) {
-            if (i === errorIndex) el.classList.add('error');
-            else if (i < activeIndex) el.classList.add('done');
-            else if (i === activeIndex) el.classList.add('active');
-        });
+    function setFeedback(text, isError) {
+        feedbackText.textContent = text;
+        feedbackText.className = 'feedback-line' + (isError ? ' error' : '');
     }
 
     function resizeOverlay() {
@@ -203,38 +183,29 @@
         var ctx = captureCanvas.getContext('2d');
         ctx.drawImage(video, 0, 0, w, h);
 
-        setLog(['Capture taken', 'Uploading to Azure AI', 'Waiting for response', 'Response back', '—']);
-        setLogState(0, -1);
+        setFeedback('Scanning..');
 
         captureCanvas.toBlob(function (blob) {
             if (!blob || !detectionOn) { scanInProgress = false; return; }
-            setLogState(1, -1);
             var fd = new FormData();
             fd.append('image', blob, 'frame.jpg');
             fetch('/api/liveview-scan', { method: 'POST', body: fd })
                 .then(function (r) {
                     if (!detectionOn) { scanInProgress = false; return r.json(); }
-                    setLogState(2, -1);
                     return r.json();
                 })
                 .then(function (data) {
                     if (!detectionOn) { scanInProgress = false; return; }
-                    setLogState(3, -1);
                     var list = data.sailNumbers || [];
                     lastSailNumbers = list;
                     resizeOverlay();
-                    var resultText = list.length
-                        ? 'Result: ' + list.length + ' sail number(s) found — ' + list.map(function (s) { return s.number; }).join(', ')
-                        : 'Result: No sail numbers detected';
-                    setLog(['Capture taken', 'Uploading to Azure AI', 'Waiting for response', 'Response back', resultText]);
-                    setLogState(4, -1);
+                    var yy = list.length ? list.length + ' — ' + list.map(function (s) { return s.number; }).join(', ') : '0';
+                    setFeedback('Sail Numbers Detected : ' + yy);
                     scanInProgress = false;
                     scheduleNextScan();
                 })
                 .catch(function (err) {
-                    var msg = 'Scan failed: ' + (err.message || 'Network error');
-                    setLog(['Capture taken', 'Uploading to Azure AI', 'Waiting for response', 'Response back', msg]);
-                    setLogState(4, 4);
+                    setFeedback('Scan failed: ' + (err.message || 'Network error'), true);
                     scanInProgress = false;
                     scheduleNextScan();
                 });
@@ -253,8 +224,7 @@
         detectionBtn.classList.add('on');
         detectionBtn.setAttribute('aria-pressed', 'true');
         lastSailNumbers = [];
-        setLog(['—', '—', '—', '—', '—']);
-        setLogState(-1, -1);
+        setFeedback('—');
         resizeOverlay();
         doScan();
     }
@@ -266,8 +236,7 @@
         detectionBtn.classList.remove('on');
         detectionBtn.setAttribute('aria-pressed', 'false');
         lastSailNumbers = [];
-        setLog(['—', '—', '—', '—', '—']);
-        setLogState(-1, -1);
+        setFeedback('—');
         resizeOverlay();
     }
 
@@ -288,8 +257,7 @@
             };
         })
         .catch(function (err) {
-            setLog(['Camera error', err.message || 'Permission denied', '—', '—', '—']);
-            setLogState(0, 0);
+            setFeedback('Camera error: ' + (err.message || 'Permission denied'), true);
         });
 })();
     </script>
