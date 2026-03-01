@@ -25,6 +25,9 @@ const cheerio = require('cheerio');
 const axios = require('axios');
 const OpenAI = require('openai').default;
 const cron = require('node-cron');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
 
 // Load Puppeteer only if ENABLE_PUPPETEER environment variable is set to 'true'
 // Main server should NOT have this set - only the dedicated scraper service should
@@ -248,6 +251,8 @@ const RATE_LIMIT_DELAY = 30000; // 30 seconds
 let lastAzureCallTime = 0;
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 const PROCESSED_DIR = path.join(__dirname, 'processed_images');
+const LIVEVIEW_FRAMES_DIR = path.join(__dirname, 'liveview_frames');
+const LIVEVIEW_VIDEOS_DIR = path.join(__dirname, 'liveview_videos');
 
 // Add these constants at the top
 const MAX_RETRIES = 3;
@@ -873,6 +878,28 @@ async function createPhotoMetadataTable() {
     }
 }
 
+async function createLiveviewResultsTable() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS liveview_results (
+                id SERIAL PRIMARY KEY,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                sail_numbers TEXT[] NOT NULL,
+                session_id TEXT
+            )
+        `);
+        const col = await pool.query(`
+            SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'liveview_results' AND column_name = 'session_id');
+        `);
+        if (!col.rows[0].exists) {
+            await pool.query(`ALTER TABLE liveview_results ADD COLUMN session_id TEXT`);
+        }
+        console.log('Liveview results table created or verified');
+    } catch (err) {
+        console.error('Error creating liveview_results table:', err);
+    }
+}
+
 // Add this function to create directories if they don't exist
 async function ensureDirectories() {
     try {
@@ -1162,6 +1189,192 @@ app.post('/api/liveview-scan', upload.single('image'), async (req, res) => {
     } catch (err) {
         console.error('LiveView scan error:', err);
         res.status(500).json({ error: err.message, sailNumbers: [] });
+    }
+});
+
+// Store LiveView scan results in Postgres (timestamp added server-side)
+app.post('/api/liveview-store-results', express.json(), async (req, res) => {
+    const sailNumbers = req.body.sailNumbers;
+    const sessionId = req.body.sessionId && String(req.body.sessionId).trim() ? String(req.body.sessionId).trim() : null;
+    if (!Array.isArray(sailNumbers)) {
+        return res.status(400).json({ error: 'sailNumbers array required' });
+    }
+    try {
+        await createLiveviewResultsTable();
+        await pool.query(
+            'INSERT INTO liveview_results (sail_numbers, session_id) VALUES ($1, $2)',
+            [sailNumbers.map(String), sessionId]
+        );
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('LiveView store results error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get last LiveView stored results for feedback display
+app.get('/api/liveview-results', async (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+    const sessionId = req.query.session_id && String(req.query.session_id).trim() ? String(req.query.session_id).trim() : null;
+    try {
+        await createLiveviewResultsTable();
+        if (sessionId) {
+            const result = await pool.query(
+                'SELECT id, created_at, sail_numbers FROM liveview_results WHERE session_id = $1 ORDER BY created_at DESC LIMIT $2',
+                [sessionId, limit]
+            );
+            return res.json({
+                results: result.rows.map((r) => ({
+                    id: r.id,
+                    created_at: r.created_at,
+                    sail_numbers: r.sail_numbers || []
+                }))
+            });
+        }
+        const result = await pool.query(
+            'SELECT id, created_at, sail_numbers FROM liveview_results ORDER BY created_at DESC LIMIT $1',
+            [limit]
+        );
+        res.json({
+            results: result.rows.map((r) => ({
+                id: r.id,
+                created_at: r.created_at,
+                sail_numbers: r.sail_numbers || []
+            }))
+        });
+    } catch (err) {
+        console.error('LiveView get results error:', err);
+        res.status(500).json({ error: err.message, results: [] });
+    }
+});
+
+// List LiveView capture sessions (grouped by session_id, newest first)
+app.get('/api/liveview-sessions', async (req, res) => {
+    try {
+        await createLiveviewResultsTable();
+        const result = await pool.query(`
+            SELECT session_id, MIN(created_at) AS started_at, COUNT(*) AS capture_count
+            FROM liveview_results
+            WHERE session_id IS NOT NULL AND session_id != ''
+            GROUP BY session_id
+            ORDER BY started_at DESC
+            LIMIT 200
+        `);
+        res.json({
+            sessions: result.rows.map((r) => ({
+                session_id: r.session_id,
+                started_at: r.started_at,
+                capture_count: parseInt(r.capture_count, 10)
+            }))
+        });
+    } catch (err) {
+        console.error('LiveView sessions error:', err);
+        res.status(500).json({ error: err.message, sessions: [] });
+    }
+});
+
+// Delete a LiveView capture session (all rows with that session_id)
+app.delete('/api/liveview-session', express.json(), async (req, res) => {
+    const sessionId = req.body && req.body.sessionId && String(req.body.sessionId).trim();
+    if (!sessionId) {
+        return res.status(400).json({ error: 'sessionId required' });
+    }
+    try {
+        const result = await pool.query('DELETE FROM liveview_results WHERE session_id = $1 RETURNING id', [sessionId]);
+        res.json({ ok: true, deleted: result.rowCount });
+    } catch (err) {
+        console.error('LiveView delete session error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Download LiveView session results as CSV
+app.get('/api/liveview-results-csv', async (req, res) => {
+    const sessionId = req.query.session_id && String(req.query.session_id).trim();
+    if (!sessionId) {
+        return res.status(400).send('session_id required');
+    }
+    try {
+        const result = await pool.query(
+            'SELECT id, created_at, sail_numbers FROM liveview_results WHERE session_id = $1 ORDER BY created_at DESC',
+            [sessionId]
+        );
+        const rows = result.rows || [];
+        const header = 'capture_id,created_at_utc,sail_numbers\n';
+        const csv = header + rows.map((r) => {
+            const id = r.id;
+            const at = r.created_at ? new Date(r.created_at).toISOString() : '';
+            const nums = (r.sail_numbers || []).map((n) => String(n).replace(/"/g, '""')).join(',');
+            return `${id},${at},"${nums}"`;
+        }).join('\n');
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="liveview-session-${sessionId}.csv"`);
+        res.send(csv);
+    } catch (err) {
+        console.error('LiveView CSV error:', err);
+        res.status(500).send(err.message);
+    }
+});
+
+// Save one frame for LiveView recording (low-res, ~10s interval); sessionId in body or query
+app.post('/api/liveview-frame', upload.single('image'), async (req, res) => {
+    const sessionId = (req.body && req.body.sessionId) || req.query.sessionId;
+    if (!sessionId || !/^[a-zA-Z0-9_-]+$/.test(sessionId)) {
+        return res.status(400).json({ error: 'Valid sessionId required' });
+    }
+    if (!req.file || !req.file.buffer) {
+        return res.status(400).json({ error: 'No image provided' });
+    }
+    try {
+        const dir = path.join(LIVEVIEW_FRAMES_DIR, sessionId);
+        await fsPromises.mkdir(dir, { recursive: true });
+        const files = await fsPromises.readdir(dir);
+        const nextNum = files.filter((f) => /^frame_\d+\.jpg$/i.test(f)).length + 1;
+        const name = `frame_${String(nextNum).padStart(4, '0')}.jpg`;
+        await fsPromises.writeFile(path.join(dir, name), req.file.buffer);
+        res.json({ ok: true, frame: name });
+    } catch (err) {
+        console.error('LiveView frame save error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Finalize LiveView recording: build video from frames (0.1 fps = 10s per frame), optional cleanup
+app.post('/api/liveview-recording-stop', express.json(), async (req, res) => {
+    const sessionId = req.body && req.body.sessionId;
+    if (!sessionId || !/^[a-zA-Z0-9_-]+$/.test(sessionId)) {
+        return res.status(400).json({ error: 'Valid sessionId required' });
+    }
+    const framesDir = path.join(LIVEVIEW_FRAMES_DIR, sessionId);
+    const outDir = LIVEVIEW_VIDEOS_DIR;
+    try {
+        await fsPromises.mkdir(outDir, { recursive: true });
+        const exists = await fsPromises.stat(framesDir).then(() => true).catch(() => false);
+        if (!exists) {
+            return res.json({ ok: true, videoUrl: null, message: 'No frames recorded' });
+        }
+        const files = (await fsPromises.readdir(framesDir))
+            .filter((f) => /^frame_\d+\.jpg$/i.test(f))
+            .sort();
+        if (files.length === 0) {
+            return res.json({ ok: true, videoUrl: null, message: 'No frames to encode' });
+        }
+        const outPath = path.join(outDir, `${sessionId}.mp4`);
+        // 0.1 fps = one frame every 10 seconds; 1024x800 or keep original
+        const inputPattern = path.join(framesDir, 'frame_%04d.jpg');
+        await execAsync(
+            `ffmpeg -y -framerate 0.1 -i "${inputPattern.replace(/\\/g, '/')}" -c:v libx264 -pix_fmt yuv420p "${outPath.replace(/\\/g, '/')}"`,
+            { timeout: 120000 }
+        );
+        const videoUrl = `/liveview_videos/${sessionId}.mp4`;
+        res.json({ ok: true, videoUrl });
+    } catch (err) {
+        if (err.message && err.message.includes('ffmpeg')) {
+            console.warn('LiveView recording-stop: ffmpeg not available or failed; frames saved in', framesDir);
+            return res.json({ ok: true, videoUrl: null, message: 'Frames saved; ffmpeg not available to create video' });
+        }
+        console.error('LiveView recording-stop error:', err);
+        res.status(500).json({ error: err.message });
     }
 });
 
@@ -4038,6 +4251,7 @@ app.use('/public/Images', express.static(path.join(__dirname, 'public', 'Images'
 app.use('/public/images', express.static(path.join(__dirname, 'public', 'Images')));
 // Then serve processed images from processed_images directory
 app.use('/processed-images', express.static(PROCESSED_DIR));
+app.use('/liveview_videos', express.static(LIVEVIEW_VIDEOS_DIR));
 
 // In-memory job storage (in production, use a proper database)
 const analysisJobs = new Map();

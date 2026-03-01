@@ -356,6 +356,22 @@
                 <a href="PhotoSearchAdmin.html" class="action-button" style="text-decoration: none; display: inline-block;">🔍 Photo Search Admin</a>
             </div>
 
+            <!-- LiveView capture data -->
+            <div class="admin-section" style="margin-top: 30px;">
+                <h2>📱 LiveView capture data</h2>
+                <p>View and download sail numbers captured from LiveView sessions (grouped by capture session start time).</p>
+                <button class="action-button" onclick="loadLiveviewSessions()">📋 Load capture sessions</button>
+                <div id="liveviewSessionsList" class="validation-results" style="display: none; margin-top: 15px; width: 100%; max-width: 800px; text-align: left;">
+                    <h3>Capture sessions (newest first)</h3>
+                    <div id="liveviewSessionsItems" class="validation-list"></div>
+                </div>
+                <div id="liveviewSessionDetail" class="validation-results" style="display: none; margin-top: 15px; width: 100%; max-width: 800px; text-align: left;">
+                    <h3 id="liveviewDetailTitle">Session captures</h3>
+                    <div id="liveviewDetailItems" class="validation-list" style="max-height: 400px; overflow-y: auto;"></div>
+                    <button class="action-button" style="margin-top: 10px;" onclick="closeLiveviewDetail()">Close</button>
+                </div>
+            </div>
+
             <div class="admin-section" style="margin-top: 30px;">
                 <h2>Database Housekeeping</h2>
                 <p>Test, debug, validate, clean, and export database entries.</p>
@@ -1675,6 +1691,103 @@
             populateCurrentDeviceInfo();
             console.log('Page initialization complete');
         });
+
+        // LiveView capture sessions
+        function formatLiveviewDate(d) {
+            if (!d) return '—';
+            const dt = new Date(d);
+            return dt.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'medium' });
+        }
+
+        async function loadLiveviewSessions() {
+            try {
+                const response = await fetch('/api/liveview-sessions');
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Failed to load sessions');
+                const sessions = data.sessions || [];
+                const container = document.getElementById('liveviewSessionsItems');
+                const listDiv = document.getElementById('liveviewSessionsList');
+                document.getElementById('liveviewSessionDetail').style.display = 'none';
+                if (sessions.length === 0) {
+                    container.innerHTML = '<div class="validation-item warning">No capture sessions found. Sessions are created when LiveView stores results with a session ID.</div>';
+                } else {
+                    container.innerHTML = sessions.map(function (s) {
+                        const started = formatLiveviewDate(s.started_at);
+                        const count = s.capture_count || 0;
+                        const sid = s.session_id || '';
+                        return '<div class="validation-item success" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">' +
+                            '<div><strong>Started:</strong> ' + started + ' &nbsp; <strong>Captures:</strong> ' + count + '</div>' +
+                            '<div style="display:flex; gap:8px;">' +
+                            '<button class="action-button liveview-view-btn" style="margin:0; padding:6px 12px; font-size:0.85em;" data-session-id="' + sid.replace(/"/g, '&quot;') + '" data-started="' + started.replace(/"/g, '&quot;') + '">View</button>' +
+                            '<a href="/api/liveview-results-csv?session_id=' + encodeURIComponent(sid) + '" class="action-button success-button" style="margin:0; padding:6px 12px; font-size:0.85em; text-decoration:none;" download>Download CSV</a>' +
+                            '<button class="action-button danger-button liveview-delete-btn" style="margin:0; padding:6px 12px; font-size:0.85em;" data-session-id="' + sid.replace(/"/g, '&quot;') + '">Delete</button>' +
+                            '</div></div>';
+                    }).join('');
+                    container.querySelectorAll('.liveview-view-btn').forEach(function (btn) {
+                        btn.addEventListener('click', function () {
+                            viewLiveviewSession(this.getAttribute('data-session-id'), this.getAttribute('data-started'));
+                        });
+                    });
+                    container.querySelectorAll('.liveview-delete-btn').forEach(function (btn) {
+                        btn.addEventListener('click', function () {
+                            deleteLiveviewSession(this.getAttribute('data-session-id'));
+                        });
+                    });
+                }
+                listDiv.style.display = 'block';
+                showStatus('Loaded ' + sessions.length + ' capture session(s)', 'success');
+            } catch (err) {
+                console.error('Error loading LiveView sessions:', err);
+                showStatus('Error loading sessions: ' + err.message, 'error');
+            }
+        }
+
+        async function viewLiveviewSession(sessionId, startedLabel) {
+            try {
+                const response = await fetch('/api/liveview-results?session_id=' + encodeURIComponent(sessionId) + '&limit=500');
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Failed to load session');
+                const results = data.results || [];
+                document.getElementById('liveviewDetailTitle').textContent = 'Session started: ' + startedLabel + ' (' + results.length + ' captures)';
+                const items = document.getElementById('liveviewDetailItems');
+                if (results.length === 0) {
+                    items.innerHTML = '<div class="validation-item warning">No captures in this session.</div>';
+                } else {
+                    items.innerHTML = results.map(function (r) {
+                        const at = formatLiveviewDate(r.created_at);
+                        const nums = (r.sail_numbers || []).join(', ') || '—';
+                        return '<div class="validation-item success"><div><strong>' + at + '</strong></div><div class="validation-details">Sail numbers: ' + nums + '</div></div>';
+                    }).join('');
+                }
+                document.getElementById('liveviewSessionDetail').style.display = 'block';
+                document.getElementById('liveviewSessionsList').style.display = 'block';
+            } catch (err) {
+                console.error('Error loading session detail:', err);
+                showStatus('Error loading session: ' + err.message, 'error');
+            }
+        }
+
+        function closeLiveviewDetail() {
+            document.getElementById('liveviewSessionDetail').style.display = 'none';
+        }
+
+        async function deleteLiveviewSession(sessionId) {
+            if (!confirm('Delete this entire capture session? This cannot be undone.')) return;
+            try {
+                const response = await fetch('/api/liveview-session', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sessionId: sessionId })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Delete failed');
+                showStatus('Session deleted (' + (data.deleted || 0) + ' capture(s) removed)', 'success');
+                loadLiveviewSessions();
+            } catch (err) {
+                console.error('Error deleting session:', err);
+                showStatus('Error deleting session: ' + err.message, 'error');
+            }
+        }
 
         // Share functionality functions
         async function shareAdminPanel() {

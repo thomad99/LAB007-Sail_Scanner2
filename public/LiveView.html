@@ -39,7 +39,7 @@
         #overlay { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
         #overlay { pointer-events: none; }
         #captureCanvas { display: none; }
-        .controls { flex-shrink: 0; display: flex; justify-content: center; align-items: center; padding: 10px 0; }
+        .controls { flex-shrink: 0; display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 0; }
         .toggle-btn {
             padding: 12px 24px;
             font-size: 16px;
@@ -54,22 +54,15 @@
         .toggle-btn.off:hover { background: #35354a; }
         .toggle-btn.on { background: #0066cc; color: #fff; }
         .toggle-btn.on:hover { background: #0052a3; }
-        .feedback {
-            flex: 1 1 0;
-            min-height: 0;
-            width: 100%;
-            overflow: auto;
-            background: #12121f;
-            border: 1px solid #2a2a3e;
-            border-radius: 10px;
-            padding: 12px 14px;
-            font-size: 14px;
-            line-height: 1.6;
-        }
+        .feedback { flex: 1 1 0; min-height: 0; width: 100%; overflow: hidden; display: flex; flex-direction: column; background: #12121f; border: 1px solid #2a2a3e; border-radius: 10px; padding: 12px 14px; font-size: 14px; line-height: 1.6; }
         .feedback-line { color: #888; }
         .feedback-line.active { color: #7eb8ff; }
         .feedback-line.done { color: #a0a0b0; }
         .feedback-line.error { color: #e07070; }
+        .feedback-status { margin-bottom: 8px; flex-shrink: 0; }
+        .feedback-history { flex: 1 1 0; min-height: 0; overflow-y: auto; font-size: 12px; color: #888; }
+        .feedback-history-title { color: #a0a0b0; margin-bottom: 4px; flex-shrink: 0; }
+        .feedback-history-item { margin-bottom: 4px; }
     </style>
 </head>
 <body>
@@ -86,9 +79,13 @@
         <canvas id="captureCanvas"></canvas>
         <div class="controls">
             <button type="button" id="detectionBtn" class="toggle-btn off" aria-pressed="false">Detection OFF</button>
+            <button type="button" id="storeNumbersBtn" class="toggle-btn on" aria-pressed="true">Store numbers ON</button>
+            <button type="button" id="storeCapturesBtn" class="toggle-btn off" aria-pressed="false">Store captures OFF</button>
         </div>
         <div id="feedback" class="feedback">
-            <div id="feedbackText" class="feedback-line">—</div>
+            <div id="feedbackStatus" class="feedback-status feedback-line">—</div>
+            <div class="feedback-history-title">Last stored</div>
+            <div id="feedbackHistory" class="feedback-history"></div>
         </div>
     </div>
     <script>
@@ -101,18 +98,49 @@
     const overlay = document.getElementById('overlay');
     const captureCanvas = document.getElementById('captureCanvas');
     const detectionBtn = document.getElementById('detectionBtn');
-    const feedbackText = document.getElementById('feedbackText');
+    const storeNumbersBtn = document.getElementById('storeNumbersBtn');
+    const storeCapturesBtn = document.getElementById('storeCapturesBtn');
+    const feedbackStatus = document.getElementById('feedbackStatus');
+    const feedbackHistory = document.getElementById('feedbackHistory');
 
     const THROTTLE_MS = 10000;
+    const RECORD_WIDTH = 1024;
+    const RECORD_HEIGHT = 800;
     let stream = null;
     let detectionOn = false;
     let scanInProgress = false;
     let lastCaptureStartTime = 0;
     let lastSailNumbers = [];
+    let storeNumbers = true;
+    let storeCaptures = false;
+    let sessionId = 'lv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+    let resultsSessionId = sessionId;
 
     function setFeedback(text, isError) {
-        feedbackText.textContent = text;
-        feedbackText.className = 'feedback-line' + (isError ? ' error' : '');
+        feedbackStatus.textContent = text;
+        feedbackStatus.className = 'feedback-status feedback-line' + (isError ? ' error' : '');
+    }
+
+    function formatStoredAt(d) {
+        var dt = new Date(d);
+        return dt.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+    }
+
+    function loadLastResults() {
+        fetch('/api/liveview-results?limit=30')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var list = data.results || [];
+                if (list.length === 0) {
+                    feedbackHistory.textContent = 'No stored results yet.';
+                    return;
+                }
+                feedbackHistory.innerHTML = list.map(function (r) {
+                    var nums = (r.sail_numbers || []).join(', ') || '—';
+                    return '<div class="feedback-history-item">' + formatStoredAt(r.created_at) + ' — ' + nums + '</div>';
+                }).join('');
+            })
+            .catch(function () { feedbackHistory.textContent = 'Could not load stored results.'; });
     }
 
     function resizeOverlay() {
@@ -187,6 +215,23 @@
 
         captureCanvas.toBlob(function (blob) {
             if (!blob || !detectionOn) { scanInProgress = false; return; }
+            if (storeCaptures) {
+                var rw = RECORD_WIDTH;
+                var rh = RECORD_HEIGHT;
+                var rCanvas = document.createElement('canvas');
+                rCanvas.width = rw;
+                rCanvas.height = rh;
+                var rCtx = rCanvas.getContext('2d');
+                rCtx.drawImage(captureCanvas, 0, 0, captureCanvas.width, captureCanvas.height, 0, 0, rw, rh);
+                rCanvas.toBlob(function (rBlob) {
+                    if (rBlob) {
+                        var rFd = new FormData();
+                        rFd.append('image', rBlob, 'frame.jpg');
+                        rFd.append('sessionId', sessionId);
+                        fetch('/api/liveview-frame', { method: 'POST', body: rFd }).catch(function () {});
+                    }
+                }, 'image/jpeg', 0.8);
+            }
             var fd = new FormData();
             fd.append('image', blob, 'frame.jpg');
             fetch('/api/liveview-scan', { method: 'POST', body: fd })
@@ -201,6 +246,13 @@
                     resizeOverlay();
                     var yy = list.length ? list.length + ' — ' + list.map(function (s) { return s.number; }).join(', ') : '0';
                     setFeedback('Sail Numbers Detected : ' + yy);
+                    if (storeNumbers) {
+                        fetch('/api/liveview-store-results', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ sailNumbers: list.map(function (s) { return s.number; }), sessionId: resultsSessionId })
+                        }).then(function () { loadLastResults(); }).catch(function () {});
+                    }
                     scanInProgress = false;
                     scheduleNextScan();
                 })
@@ -219,12 +271,14 @@
     function startDetection() {
         if (detectionOn) return;
         detectionOn = true;
+        resultsSessionId = 'lv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
         detectionBtn.textContent = 'Detection ON';
         detectionBtn.classList.remove('off');
         detectionBtn.classList.add('on');
         detectionBtn.setAttribute('aria-pressed', 'true');
         lastSailNumbers = [];
         setFeedback('—');
+        loadLastResults();
         resizeOverlay();
         doScan();
     }
@@ -237,8 +291,36 @@
         detectionBtn.setAttribute('aria-pressed', 'false');
         lastSailNumbers = [];
         setFeedback('—');
+        loadLastResults();
         resizeOverlay();
     }
+
+    storeNumbersBtn.addEventListener('click', function () {
+        storeNumbers = !storeNumbers;
+        storeNumbersBtn.textContent = storeNumbers ? 'Store numbers ON' : 'Store numbers OFF';
+        storeNumbersBtn.classList.toggle('on', storeNumbers);
+        storeNumbersBtn.classList.toggle('off', !storeNumbers);
+        storeNumbersBtn.setAttribute('aria-pressed', storeNumbers ? 'true' : 'false');
+    });
+
+    storeCapturesBtn.addEventListener('click', function () {
+        if (storeCaptures) {
+            fetch('/api/liveview-recording-stop', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId: sessionId })
+            }).then(function (r) { return r.json(); }).then(function (d) {
+                if (d.videoUrl) setFeedback('Recording saved: ' + d.videoUrl, false);
+            }).catch(function () {});
+        } else {
+            sessionId = 'lv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+        }
+        storeCaptures = !storeCaptures;
+        storeCapturesBtn.textContent = storeCaptures ? 'Store captures ON' : 'Store captures OFF';
+        storeCapturesBtn.classList.toggle('on', storeCaptures);
+        storeCapturesBtn.classList.toggle('off', !storeCaptures);
+        storeCapturesBtn.setAttribute('aria-pressed', storeCaptures ? 'true' : 'false');
+    });
 
     detectionBtn.addEventListener('click', function () {
         if (detectionOn) stopDetection();
@@ -259,6 +341,7 @@
         .catch(function (err) {
             setFeedback('Camera error: ' + (err.message || 'Permission denied'), true);
         });
+    loadLastResults();
 })();
     </script>
 </body>
