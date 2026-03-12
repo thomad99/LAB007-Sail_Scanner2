@@ -1,0 +1,41 @@
+﻿Based on the browser network inspection, here's what I found:
+
+## Parse Server API Configuration
+
+**Server URL:** https://theclubspot.com/parse/
+
+**Application ID:** myclubspot2017
+
+**Parse SDK:** Loaded from https://racing.theclubspot.com/parse-sdk-js
+
+## Key Findings:
+
+1. **Parse Initialization (from common.min.js):**
+   - Application ID: "myclubspot2017"
+   - Server URLs:
+     - Production: "https://theclubspot.com/parse"
+     - Test: "https://primarytest.theclubspot.com/parse"
+     - Local: "http://localhost:8080/parse"
+
+2. **API Endpoints Observed:**
+   - POST https://theclubspot.com/parse/classes/regattas
+   - POST https://theclubspot.com/parse/classes/clubs
+   - GET https://theclubspot.com/parse/health (returns {"status":"ok"})
+
+3. **API Security:**
+   - The API enforces security rules:
+     - "All regattas must be linked to a club" (error 141)
+     - "You can only change the support_admin via master key" (error 141)
+   - Public API access is limited without authentication
+   - The website likely uses Parse.Query with specific filters
+
+4. **Required Headers:**
+   - X-Parse-Application-Id: myclubspot2017
+   - Content-Type: application/json
+
+5. **Network Request Pattern:**
+   - The page makes POST requests to /parse/classes/regattas and /parse/classes/clubs
+   - Requests include query parameters (limit, where clauses, etc.)
+   - The Parse SDK handles authentication and query building
+
+This information has been documented for your reference.
