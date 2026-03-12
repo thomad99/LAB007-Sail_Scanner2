@@ -4804,40 +4804,47 @@ app.get('/api/regatta-scrape-status', async (req, res) => {
 
 // Regatta scraping endpoint - forwards to dedicated scraper service
 app.post('/api/scrape-regattas', async (req, res) => {
-    console.log('=== Regatta Scraping Request Received (forwarding to scraper service) ===');
+    const source = req.body && req.body.source ? req.body.source : 'all';
+    console.log(`=== Regatta Scraping Request: source="${source}" ===`);
 
-    try {
-        const scraperServiceUrl = process.env.SCRAPER_SERVICE_URL || 'http://localhost:3001';
-        console.log(`Forwarding to scraper service: ${scraperServiceUrl}`);
+    // ClubSpot runs locally via the Parse Server API (no external service needed)
+    if (source === 'clubspot') {
+        try {
+            const result = await scrapeClubspot();
+            return res.json(result);
+        } catch (error) {
+            return res.status(500).json({ error: error.message });
+        }
+    }
 
-        const response = await axios.post(`${scraperServiceUrl}/api/scrape-regattas`, req.body, {
-            timeout: 120000, // 2 minutes timeout for scraping
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-
-        console.log('Scraper service response:', response.data);
-        res.json(response.data);
-    } catch (error) {
-        console.error('=== Scraper Service Error ===', error);
-
-        if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
-            res.status(503).json({
-                error: 'Scraper service unavailable',
-                details: 'The dedicated scraper service is not available. Please ensure it is running.',
-                message: error.message
+    // For other sources, forward to the external scraper service if configured
+    const scraperServiceUrl = process.env.SCRAPER_SERVICE_URL;
+    if (scraperServiceUrl) {
+        try {
+            console.log(`Forwarding to scraper service: ${scraperServiceUrl}`);
+            const response = await axios.post(`${scraperServiceUrl}/api/scrape-regattas`, req.body, {
+                timeout: 120000,
+                headers: { 'Content-Type': 'application/json' }
             });
-        } else if (error.response) {
-            // Forward the error response from scraper service
-            res.status(error.response.status).json(error.response.data);
-        } else {
-            res.status(500).json({
-                error: 'Failed to connect to scraper service',
+            console.log('Scraper service response:', response.data);
+            return res.json(response.data);
+        } catch (error) {
+            console.error('Scraper service error:', error.message);
+            if (error.response) {
+                return res.status(error.response.status).json(error.response.data);
+            }
+            return res.status(503).json({
+                error: 'Scraper service unavailable',
                 details: error.message
             });
         }
     }
+
+    // No external service and not a locally-handled source
+    return res.status(503).json({
+        error: 'Scraper service not configured',
+        details: 'Set SCRAPER_SERVICE_URL to enable scraping for non-Clubspot sources.'
+    });
 });
 
 // Scrape Regatta Network
@@ -4990,288 +4997,159 @@ async function scrapeRegattaNetwork() {
     }
 }
 
-// Scrape Clubspot using headless browser
+// Scrape Clubspot via the Parse Server REST API (no headless browser needed)
 async function scrapeClubspot() {
-    // Check if Puppeteer is available
-    if (!puppeteer) {
-        console.error('Puppeteer is not available. Cannot scrape Clubspot with headless browser.');
-        await pool.query(`
-      INSERT INTO scrape_log (source, regattas_found, regattas_added)
-      VALUES ('clubspot', 0, 0)
-    `).catch(err => console.error('Error logging failed scrape:', err));
+    console.log('🌐 Starting Clubspot scrape via Parse Server API...');
 
-        return {
-            found: 0,
-            added: 0,
-            error: 'Puppeteer is not installed. Please run: npm install puppeteer'
-        };
-    }
+    const PARSE_API_URL = 'https://theclubspot.com/parse/classes/regattas';
+    const PARSE_APP_ID = 'myclubspot2017';
+    const BATCH_SIZE = 100;
 
-    let browser = null;
     try {
-        console.log('Launching headless browser for Clubspot...');
-        console.log('Puppeteer version check - attempting to launch browser...');
+        // Fetch from 30 days ago to catch events already in progress
+        const fromDate = new Date();
+        fromDate.setDate(fromDate.getDate() - 30);
 
-        // Launch headless browser
-        // Try to use system Chrome/Chromium if available, otherwise use bundled
-        const launchOptions = {
-            headless: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--disable-gpu',
-                '--disable-software-rasterizer',
-                '--disable-extensions'
-            ]
+        const where = {
+            archived: { $ne: true },
+            startDate: { $gte: { __type: 'Date', iso: fromDate.toISOString() } }
         };
 
-        // If Chromium wasn't downloaded, try to use system Chrome
-        try {
-            const executablePath = await puppeteer.executablePath();
-            if (!executablePath || !require('fs').existsSync(executablePath)) {
-                console.log('Bundled Chromium not found, trying system Chrome...');
-                // Try common Chrome locations
-                const possiblePaths = [
-                    '/usr/bin/google-chrome',
-                    '/usr/bin/chromium',
-                    '/usr/bin/chromium-browser',
-                    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-                ];
-                for (const path of possiblePaths) {
-                    if (require('fs').existsSync(path)) {
-                        launchOptions.executablePath = path;
-                        console.log(`Using system Chrome at: ${path}`);
-                        break;
-                    }
-                }
-            }
-        } catch (pathError) {
-            console.log('Could not determine Chromium path, using default...');
-        }
-
-        browser = await puppeteer.launch(launchOptions);
-
-        const page = await browser.newPage();
-
-        // Set viewport and user agent
-        await page.setViewport({ width: 1920, height: 1080 });
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-
-        console.log('Navigating to Clubspot...');
-        await page.goto('https://racing.theclubspot.com/', {
-            waitUntil: 'networkidle2',
-            timeout: 60000
+        const baseParams = new URLSearchParams({
+            order: 'startDate',
+            include: 'clubObject',
+            keys: 'name,startDate,endDate,city,state,country,clubObject,objectId',
+            where: JSON.stringify(where)
         });
 
-        // Wait for regatta cards/list to load
-        console.log('Waiting for regatta data to load...');
-        try {
-            // Wait for regatta cards or list items to appear
-            await page.waitForSelector('[class*="regatta"], [class*="event"], [class*="card"], .regatta-item, .event-item', {
+        // Get total count first
+        const countParams = new URLSearchParams(baseParams);
+        countParams.set('count', '1');
+        countParams.set('limit', '0');
+
+        const countResponse = await axios.get(`${PARSE_API_URL}?${countParams}`, {
+            headers: { 'X-Parse-Application-Id': PARSE_APP_ID },
+            timeout: 30000
+        });
+
+        const totalCount = countResponse.data.count || 0;
+        console.log(`📊 Total upcoming Clubspot regattas: ${totalCount}`);
+
+        // Paginate through all results
+        const allRegattas = [];
+        const totalPages = Math.ceil(totalCount / BATCH_SIZE);
+
+        for (let page = 0; page < totalPages; page++) {
+            const pageParams = new URLSearchParams(baseParams);
+            pageParams.set('limit', BATCH_SIZE.toString());
+            pageParams.set('skip', (page * BATCH_SIZE).toString());
+
+            console.log(`📄 Fetching page ${page + 1}/${totalPages}...`);
+
+            const response = await axios.get(`${PARSE_API_URL}?${pageParams}`, {
+                headers: { 'X-Parse-Application-Id': PARSE_APP_ID },
                 timeout: 30000
             });
-        } catch (waitError) {
-            console.log('Regatta selector not found, trying alternative selectors...');
-            // Wait a bit more for content to load
-            await page.waitForTimeout(5000);
+
+            const results = response.data.results || [];
+            allRegattas.push(...results);
+
+            if (page < totalPages - 1) {
+                await new Promise(r => setTimeout(r, 200));
+            }
         }
 
-        // Extract regatta data from the rendered page
-        console.log('Extracting regatta data...');
-        const regattas = await page.evaluate(() => {
-            const regattas = [];
+        console.log(`✅ Fetched ${allRegattas.length} regattas from Clubspot API`);
 
-            // Try multiple selectors to find regatta elements
-            const selectors = [
-                '[class*="regatta"]',
-                '[class*="event"]',
-                '[class*="card"]',
-                '.regatta-item',
-                '.event-item',
-                'a[href*="/regatta/"]',
-                '[data-regatta]'
-            ];
+        // Map Parse objects to DB schema
+        const extractedRegattas = allRegattas.map(r => {
+            const startDateIso = r.startDate && r.startDate.iso ? r.startDate.iso : r.startDate;
+            const regattaDate = startDateIso ? startDateIso.substring(0, 10) : null;
 
-            let elements = [];
-            for (const selector of selectors) {
-                const found = document.querySelectorAll(selector);
-                if (found.length > 0) {
-                    elements = Array.from(found);
-                    break;
+            let location = null;
+            if (r.city && r.state) {
+                location = `${r.city}, ${r.state}`;
+            } else if (r.city) {
+                location = r.city;
+            } else if (r.clubObject && r.clubObject.name) {
+                location = r.clubObject.name;
+            }
+
+            let eventWebsiteUrl = null;
+            if (r.clubObject && r.clubObject.subdomain && r.objectId) {
+                const subdomain = r.clubObject.subdomain.replace(/[^a-zA-Z0-9-]/g, '');
+                if (subdomain) {
+                    eventWebsiteUrl = `https://${subdomain}.theclubspot.com/regatta/${r.objectId}`;
                 }
             }
 
-            // If no specific regatta elements found, look for any clickable items with regatta links
-            if (elements.length === 0) {
-                elements = Array.from(document.querySelectorAll('a[href*="regatta"], a[href*="event"]'));
-            }
+            return {
+                regatta_date: regattaDate,
+                regatta_name: r.name || null,
+                location,
+                event_website_url: eventWebsiteUrl,
+                source_id: r.objectId
+            };
+        }).filter(r => r.regatta_date && r.regatta_name && r.regatta_name.length > 2);
 
-            elements.forEach((element, index) => {
-                try {
-                    // Get text content
-                    const text = element.textContent || element.innerText || '';
-                    const href = element.href || element.getAttribute('href') || '';
+        console.log(`📋 Valid regattas after filtering: ${extractedRegattas.length}`);
 
-                    // Try to find date in text or nearby elements
-                    let dateText = '';
-                    let nameText = '';
-                    let locationText = '';
-
-                    // Look for date patterns
-                    const dateMatch = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/) ||
-                        text.match(/(\d{4})-(\d{1,2})-(\d{1,2})/) ||
-                        text.match(/([A-Z][a-z]+)\s+(\d{1,2}),\s+(\d{4})/);
-
-                    // Look for name (usually first line or before date)
-                    const lines = text.split('\n').map(l => l.trim()).filter(l => l && l.length > 3);
-                    nameText = lines[0] || text.substring(0, 100).trim();
-
-                    // Look for location (often after name, contains city/state)
-                    if (lines.length > 1) {
-                        locationText = lines.slice(1).join(', ').substring(0, 200);
-                    }
-
-                    // Parse date
-                    let regattaDate = null;
-                    if (dateMatch) {
-                        if (dateMatch[0].includes('-')) {
-                            regattaDate = dateMatch[0];
-                        } else if (dateMatch[0].includes('/')) {
-                            const [, month, day, year] = dateMatch;
-                            regattaDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-                        } else {
-                            const months = {
-                                'January': '01', 'February': '02', 'March': '03', 'April': '04',
-                                'May': '05', 'June': '06', 'July': '07', 'August': '08',
-                                'September': '09', 'October': '10', 'November': '11', 'December': '12'
-                            };
-                            const month = months[dateMatch[1]];
-                            if (month) {
-                                regattaDate = `${dateMatch[3]}-${month}-${dateMatch[2].padStart(2, '0')}`;
-                            }
-                        }
-                    }
-
-                    // Build event URL
-                    let eventWebsiteUrl = null;
-                    if (href) {
-                        eventWebsiteUrl = href.startsWith('http') ? href : `https://racing.theclubspot.com${href}`;
-                    }
-
-                    // Only add if we have a date and name
-                    if (regattaDate && nameText && nameText.length > 3) {
-                        regattas.push({
-                            regatta_date: regattaDate,
-                            regatta_name: nameText,
-                            location: locationText || null,
-                            event_website_url: eventWebsiteUrl || null
-                        });
-                    }
-                } catch (err) {
-                    console.error('Error processing element:', err);
-                }
-            });
-
-            // Also try to intercept API calls if possible
-            // Look for any data attributes or script tags with regatta data
-            const scripts = document.querySelectorAll('script');
-            scripts.forEach(script => {
-                const content = script.textContent || script.innerHTML;
-                if (content.includes('regatta') && content.includes('startDate')) {
-                    try {
-                        // Try to extract JSON data
-                        const jsonMatch = content.match(/\{.*"name".*"startDate".*\}/s);
-                        if (jsonMatch) {
-                            // Additional processing if needed
-                        }
-                    } catch (e) {
-                        // Not JSON, continue
-                    }
-                }
-            });
-
-            return regattas;
-        });
-
-        console.log(`Found ${regattas.length} regattas from Clubspot (headless browser)`);
-
-        // Process and insert regattas
         let added = 0;
-        for (const regatta of regattas) {
+        for (const regatta of extractedRegattas) {
             try {
-                const sourceId = `${regatta.regatta_date}-${regatta.regatta_name.replace(/\s+/g, '-').toLowerCase().substring(0, 100)}`;
-
                 await pool.query(`
-          INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-          ON CONFLICT (regatta_name, regatta_date, source) 
-          DO UPDATE SET 
-            location = EXCLUDED.location,
-            event_website_url = EXCLUDED.event_website_url,
-            registrants_url = EXCLUDED.registrants_url,
-            registrant_count = COALESCE(EXCLUDED.registrant_count, regattas.registrant_count),
-            source_id = EXCLUDED.source_id,
-            last_updated = CURRENT_TIMESTAMP
-        `, [
+                    INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    ON CONFLICT (regatta_name, regatta_date, source)
+                    DO UPDATE SET
+                        location = EXCLUDED.location,
+                        event_website_url = EXCLUDED.event_website_url,
+                        registrants_url = EXCLUDED.registrants_url,
+                        registrant_count = COALESCE(EXCLUDED.registrant_count, regattas.registrant_count),
+                        source_id = EXCLUDED.source_id,
+                        last_updated = CURRENT_TIMESTAMP
+                `, [
                     regatta.regatta_date,
                     regatta.regatta_name,
                     regatta.location,
                     regatta.event_website_url,
-                    null, // registrants_url
-                    null, // registrant_count
+                    null,
+                    null,
                     'clubspot',
-                    sourceId
+                    regatta.source_id
                 ]);
                 added++;
             } catch (err) {
                 if (!err.message.includes('duplicate')) {
-                    console.error('Error inserting regatta:', err);
+                    console.error('Error inserting regatta:', err.message);
                 }
             }
         }
 
-        // Log scrape
         await pool.query(`
-      INSERT INTO scrape_log (source, regattas_found, regattas_added)
-      VALUES ('clubspot', $1, $2)
-    `, [regattas.length, added]);
+            INSERT INTO scrape_log (source, regattas_found, regattas_added)
+            VALUES ('clubspot', $1, $2)
+        `, [extractedRegattas.length, added]);
 
-        return { found: regattas.length, added };
+        console.log(`✅ Clubspot scrape complete: ${extractedRegattas.length} found, ${added} added/updated`);
+        return { found: extractedRegattas.length, added };
 
     } catch (error) {
-        console.error('Error scraping Clubspot with headless browser:', error);
-        console.error('Error details:', {
-            message: error.message,
-            stack: error.stack
-        });
+        console.error('Error scraping Clubspot via API:', error.message);
+        if (error.response) {
+            console.error('API response:', error.response.status, JSON.stringify(error.response.data));
+        }
 
-        // Log the failed scrape attempt
         try {
             await pool.query(`
-        INSERT INTO scrape_log (source, regattas_found, regattas_added)
-        VALUES ('clubspot', 0, 0)
-      `);
+                INSERT INTO scrape_log (source, regattas_found, regattas_added)
+                VALUES ('clubspot', 0, 0)
+            `);
         } catch (logError) {
-            console.error('Error logging failed scrape:', logError);
+            console.error('Error logging failed scrape:', logError.message);
         }
 
-        return {
-            found: 0,
-            added: 0,
-            error: `Headless browser scraping failed: ${error.message}`
-        };
-    } finally {
-        // Always close the browser
-        if (browser) {
-            try {
-                await browser.close();
-                console.log('Browser closed');
-            } catch (closeError) {
-                console.error('Error closing browser:', closeError);
-            }
-        }
+        return { found: 0, added: 0, error: error.message };
     }
 }
 
