@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tracker Dashboard - Love Sailing</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: #020053;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            min-height: 100vh;
+        }
+
+        /* ── Top bar ───────────────────────────────────────────────────────── */
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 20px;
+            background: rgba(0,0,0,0.35);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            flex-shrink: 0;
+        }
+
+        .topbar-logo {
+            height: 42px;
+        }
+
+        .topbar-title {
+            font-size: 1.1rem;
+            font-weight: bold;
+            letter-spacing: 2px;
+            color: #7ecfff;
+        }
+
+        .topbar-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .btn-sm {
+            padding: 7px 14px;
+            border-radius: 7px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.07);
+            color: #fff;
+            font-size: 0.8rem;
+            cursor: pointer;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+        .btn-sm:hover { background: rgba(255,255,255,0.15); border-color: #7ecfff; }
+        .btn-sm.primary { background: rgba(126,207,255,0.15); border-color: #7ecfff; color: #7ecfff; }
+        .btn-sm.danger  { background: rgba(231,76,60,0.15);  border-color: #e74c3c;  color: #e74c3c; }
+        .btn-sm.danger:hover { background: rgba(231,76,60,0.3); }
+
+        /* ── Layout ────────────────────────────────────────────────────────── */
+        .layout {
+            display: flex;
+            height: calc(100vh - 67px);
+        }
+
+        /* ── Sidebar ───────────────────────────────────────────────────────── */
+        .sidebar {
+            width: 320px;
+            min-width: 260px;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid rgba(255,255,255,0.08);
+            overflow: hidden;
+        }
+
+        .sidebar-header {
+            padding: 14px 16px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: rgba(255,255,255,0.4);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .track-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+        .track-list::-webkit-scrollbar { width: 5px; }
+        .track-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+
+        .track-item {
+            padding: 12px 14px;
+            border-radius: 10px;
+            cursor: pointer;
+            margin-bottom: 6px;
+            border: 1px solid transparent;
+            transition: all 0.15s;
+            position: relative;
+        }
+        .track-item:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); }
+        .track-item.selected { background: rgba(126,207,255,0.1); border-color: rgba(126,207,255,0.4); }
+
+        .track-item-name {
+            font-size: 0.95rem;
+            font-weight: bold;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding-right: 24px;
+        }
+
+        .track-item-meta {
+            font-size: 0.72rem;
+            color: rgba(255,255,255,0.4);
+            margin-top: 4px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .badge-active {
+            display: inline-block;
+            background: rgba(46,204,113,0.2);
+            color: #2ecc71;
+            border: 1px solid rgba(46,204,113,0.4);
+            border-radius: 4px;
+            font-size: 0.65rem;
+            padding: 1px 6px;
+            font-weight: bold;
+            vertical-align: middle;
+            margin-left: 6px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%,100% { opacity: 1; } 50% { opacity: 0.5; }
+        }
+
+        .delete-btn {
+            position: absolute;
+            top: 10px; right: 10px;
+            background: none;
+            border: none;
+            color: rgba(231,76,60,0.5);
+            cursor: pointer;
+            font-size: 0.9rem;
+            padding: 2px 5px;
+            border-radius: 4px;
+            transition: color 0.2s;
+        }
+        .delete-btn:hover { color: #e74c3c; background: rgba(231,76,60,0.1); }
+
+        .empty-state {
+            padding: 40px 16px;
+            text-align: center;
+            color: rgba(255,255,255,0.3);
+            font-size: 0.9rem;
+            line-height: 1.7;
+        }
+
+        /* ── Main panel ────────────────────────────────────────────────────── */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ── Map ───────────────────────────────────────────────────────────── */
+        #map {
+            flex: 1;
+            min-height: 0;
+        }
+
+        /* ── Stats strip ───────────────────────────────────────────────────── */
+        .stats-strip {
+            display: flex;
+            gap: 0;
+            background: rgba(0,0,0,0.45);
+            border-top: 1px solid rgba(255,255,255,0.08);
+            flex-shrink: 0;
+        }
+
+        .stat-cell {
+            flex: 1;
+            padding: 12px 8px;
+            text-align: center;
+            border-right: 1px solid rgba(255,255,255,0.06);
+        }
+        .stat-cell:last-child { border-right: none; }
+
+        .stat-label {
+            font-size: 0.62rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: rgba(255,255,255,0.35);
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-size: 1.15rem;
+            font-weight: bold;
+            color: #7ecfff;
+        }
+
+        .stat-unit {
+            font-size: 0.7rem;
+            color: rgba(255,255,255,0.35);
+        }
+
+        /* Map placeholder */
+        .map-placeholder {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: rgba(255,255,255,0.2);
+            gap: 12px;
+        }
+
+        .map-placeholder svg { opacity: 0.2; }
+
+        /* Loading spinner */
+        .spinner {
+            width: 22px; height: 22px;
+            border: 2px solid rgba(126,207,255,0.2);
+            border-top-color: #7ecfff;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Rename inline */
+        .rename-input {
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid rgba(126,207,255,0.5);
+            color: #fff;
+            font-size: 0.95rem;
+            font-weight: bold;
+            width: calc(100% - 30px);
+            outline: none;
+            padding: 0 2px;
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 640px) {
+            .layout { flex-direction: column; height: auto; }
+            .sidebar { width: 100%; height: 280px; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.08); }
+            #map { height: 300px; min-height: 300px; }
+            .stat-value { font-size: 0.95rem; }
+            .stats-strip { flex-wrap: wrap; }
+            .stat-cell { min-width: 50%; border-right: 1px solid rgba(255,255,255,0.06); }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="topbar">
+    <a href="/index.html"><img src="/Images/LOVE SAILING LOGO.JPEG" class="topbar-logo" alt="Love Sailing"></a>
+    <div class="topbar-title">TRACKER DASHBOARD</div>
+    <div class="topbar-actions">
+        <button class="btn-sm" onclick="loadTracks()">↻ Refresh</button>
+        <a href="/Tracker.html" class="btn-sm primary">+ New Track</a>
+    </div>
+</div>
+
+<div class="layout">
+
+    <!-- Sidebar: track list -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <span>All Tracks</span>
+            <span id="trackCount" style="color:rgba(255,255,255,0.25)">—</span>
+        </div>
+        <div class="track-list" id="trackList">
+            <div class="empty-state">Loading tracks…<br><br><div class="spinner" style="margin:auto"></div></div>
+        </div>
+    </div>
+
+    <!-- Main: map + stats -->
+    <div class="main">
+        <div id="mapWrapper" style="flex:1;display:flex;flex-direction:column;min-height:0;">
+            <div class="map-placeholder" id="mapPlaceholder">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                    <circle cx="12" cy="9" r="2.5"/>
+                </svg>
+                <div style="font-size:0.9rem">Select a track to view its route</div>
+            </div>
+            <div id="map" style="display:none;flex:1;"></div>
+        </div>
+
+        <!-- Stats strip -->
+        <div class="stats-strip">
+            <div class="stat-cell">
+                <div class="stat-label">Distance</div>
+                <div class="stat-value" id="statDist">—<span class="stat-unit"> nm</span></div>
+            </div>
+            <div class="stat-cell">
+                <div class="stat-label">Duration</div>
+                <div class="stat-value" id="statDuration">—</div>
+            </div>
+            <div class="stat-cell">
+                <div class="stat-label">Avg Speed</div>
+                <div class="stat-value" id="statAvg">—<span class="stat-unit"> kts</span></div>
+            </div>
+            <div class="stat-cell">
+                <div class="stat-label">Max Speed</div>
+                <div class="stat-value" id="statMax">—<span class="stat-unit"> kts</span></div>
+            </div>
+            <div class="stat-cell">
+                <div class="stat-label">Last Speed</div>
+                <div class="stat-value" id="statLast">—<span class="stat-unit"> kts</span></div>
+            </div>
+            <div class="stat-cell">
+                <div class="stat-label">Points</div>
+                <div class="stat-value" id="statPoints">—</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    let map = null;
+    let allTracks = [];
+    let selectedTrackId = null;
+    let liveRefreshTimer = null;
+    let currentPolyline = null;
+    let currentMarkers = [];
+
+    // ── Haversine (nm) ────────────────────────────────────────────────────────
+    function haversineNm(lat1, lon1, lat2, lon2) {
+        const R = 3440.065;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2)**2 +
+                  Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) *
+                  Math.sin(dLon/2)**2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    function formatDuration(ms) {
+        if (!ms || ms < 0) return '—';
+        const s = Math.floor(ms / 1000);
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+        if (h > 0) return `${h}h ${m}m`;
+        if (m > 0) return `${m}m ${sec}s`;
+        return `${sec}s`;
+    }
+
+    function msToKts(ms) {
+        return ms != null ? (ms * 1.94384).toFixed(1) : null;
+    }
+
+    // ── Load track list ───────────────────────────────────────────────────────
+    async function loadTracks() {
+        try {
+            const resp = await fetch('/api/tracks');
+            allTracks = await resp.json();
+            renderTrackList();
+
+            // Auto-refresh if any active tracks
+            const hasActive = allTracks.some(t => !t.ended_at);
+            clearInterval(liveRefreshTimer);
+            if (hasActive) {
+                liveRefreshTimer = setInterval(async () => {
+                    await loadTracks();
+                    if (selectedTrackId) {
+                        const still = allTracks.find(t => t.id === selectedTrackId);
+                        if (still && !still.ended_at) loadTrackPoints(selectedTrackId);
+                    }
+                }, 12000);
+            }
+        } catch (e) {
+            document.getElementById('trackList').innerHTML =
+                `<div class="empty-state">Failed to load tracks.<br>${e.message}</div>`;
+        }
+    }
+
+    function renderTrackList() {
+        const list = document.getElementById('trackList');
+        document.getElementById('trackCount').textContent = allTracks.length;
+
+        if (allTracks.length === 0) {
+            list.innerHTML = '<div class="empty-state">No tracks yet.<br>Start tracking on your mobile device.</div>';
+            return;
+        }
+
+        list.innerHTML = allTracks.map(t => {
+            const isActive = !t.ended_at;
+            const date = new Date(t.started_at).toLocaleDateString();
+            const time = new Date(t.started_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+            const pts = t.point_count || 0;
+            const selected = t.id === selectedTrackId ? 'selected' : '';
+            const name = t.name || `Track ${t.id}`;
+            return `
+            <div class="track-item ${selected}" onclick="selectTrack(${t.id})" id="track-item-${t.id}">
+                <div class="track-item-name">
+                    ${escHtml(name)}${isActive ? '<span class="badge-active">LIVE</span>' : ''}
+                </div>
+                <div class="track-item-meta">
+                    <span>📅 ${date} ${time}</span>
+                    <span>📍 ${pts} pts</span>
+                    ${isActive ? '<span style="color:#2ecc71">● Recording</span>' : ''}
+                </div>
+                <button class="delete-btn" onclick="deleteTrack(event, ${t.id})" title="Delete track">✕</button>
+            </div>`;
+        }).join('');
+    }
+
+    // ── Select a track ────────────────────────────────────────────────────────
+    async function selectTrack(id) {
+        selectedTrackId = id;
+        document.querySelectorAll('.track-item').forEach(el => el.classList.remove('selected'));
+        const item = document.getElementById(`track-item-${id}`);
+        if (item) item.classList.add('selected');
+        await loadTrackPoints(id);
+    }
+
+    async function loadTrackPoints(id) {
+        const track = allTracks.find(t => t.id === id);
+        showMap();
+        clearMapLayers();
+
+        try {
+            const resp = await fetch(`/api/tracks/${id}/points`);
+            const points = await resp.json();
+
+            if (points.length === 0) {
+                resetStats();
+                if (map) map.setView([20, 0], 2);
+                return;
+            }
+
+            // Compute distance and per-segment speeds
+            let totalNm = 0;
+            const latlngs = points.map(p => [p.lat, p.lng]);
+
+            for (let i = 1; i < points.length; i++) {
+                totalNm += haversineNm(points[i-1].lat, points[i-1].lng, points[i].lat, points[i].lng);
+            }
+
+            // Speeds — prefer GPS speed field, fall back to distance/time
+            const gpsSpeedsKts = points
+                .map(p => p.speed != null ? p.speed * 1.94384 : null)
+                .filter(s => s !== null && s < 100); // exclude bad readings
+
+            let maxKts = null, avgKts = null, lastKts = null;
+
+            if (gpsSpeedsKts.length > 0) {
+                maxKts = Math.max(...gpsSpeedsKts).toFixed(1);
+                avgKts = (gpsSpeedsKts.reduce((a,b) => a+b, 0) / gpsSpeedsKts.length).toFixed(1);
+                lastKts = gpsSpeedsKts[gpsSpeedsKts.length - 1].toFixed(1);
+            } else if (points.length >= 2) {
+                // Derive from elapsed time and distance
+                const elapsed = (new Date(points[points.length-1].recorded_at) - new Date(points[0].recorded_at)) / 3600000; // hours
+                avgKts = elapsed > 0 ? (totalNm / elapsed).toFixed(1) : null;
+                maxKts = avgKts;
+                lastKts = avgKts;
+            }
+
+            // Duration
+            const durMs = new Date(points[points.length-1].recorded_at) - new Date(points[0].recorded_at);
+
+            // Update stats strip
+            document.getElementById('statDist').innerHTML    = `${totalNm.toFixed(2)}<span class="stat-unit"> nm</span>`;
+            document.getElementById('statDuration').textContent = formatDuration(durMs);
+            document.getElementById('statAvg').innerHTML  = avgKts  ? `${avgKts}<span class="stat-unit"> kts</span>`  : '—';
+            document.getElementById('statMax').innerHTML  = maxKts  ? `${maxKts}<span class="stat-unit"> kts</span>`  : '—';
+            document.getElementById('statLast').innerHTML = lastKts ? `${lastKts}<span class="stat-unit"> kts</span>` : '—';
+            document.getElementById('statPoints').textContent = points.length;
+
+            // Draw route on map
+            if (!map) initMap();
+            currentPolyline = L.polyline(latlngs, {
+                color: '#7ecfff',
+                weight: 3,
+                opacity: 0.85
+            }).addTo(map);
+
+            // Start marker (green)
+            const startM = L.circleMarker(latlngs[0], {
+                radius: 7, fillColor: '#2ecc71', color: '#fff',
+                weight: 2, fillOpacity: 1
+            }).bindPopup(`<b>Start</b><br>${new Date(points[0].recorded_at).toLocaleString()}`).addTo(map);
+            currentMarkers.push(startM);
+
+            // End marker (red or live)
+            const isActive = !allTracks.find(t => t.id === id)?.ended_at;
+            const endColor = isActive ? '#f4a261' : '#e74c3c';
+            const endLabel = isActive ? 'Live position' : 'End';
+            const endM = L.circleMarker(latlngs[latlngs.length - 1], {
+                radius: 7, fillColor: endColor, color: '#fff',
+                weight: 2, fillOpacity: 1
+            }).bindPopup(`<b>${endLabel}</b><br>${new Date(points[points.length-1].recorded_at).toLocaleString()}`).addTo(map);
+            currentMarkers.push(endM);
+
+            // Intermediate waypoints (every 5th point)
+            points.forEach((p, i) => {
+                if (i === 0 || i === points.length - 1) return;
+                if (i % 5 !== 0) return;
+                const m = L.circleMarker([p.lat, p.lng], {
+                    radius: 3, fillColor: '#fff', color: 'rgba(126,207,255,0.6)',
+                    weight: 1, fillOpacity: 0.6
+                }).bindPopup(
+                    `<b>Point ${i+1}</b><br>${new Date(p.recorded_at).toLocaleTimeString()}<br>` +
+                    (p.speed != null ? `Speed: ${(p.speed * 1.94384).toFixed(1)} kts<br>` : '') +
+                    (p.accuracy != null ? `Accuracy: ±${Math.round(p.accuracy)}m` : '')
+                ).addTo(map);
+                currentMarkers.push(m);
+            });
+
+            map.fitBounds(currentPolyline.getBounds(), { padding: [30, 30] });
+
+        } catch (e) {
+            console.error('Error loading points:', e);
+        }
+    }
+
+    // ── Map helpers ───────────────────────────────────────────────────────────
+    function initMap() {
+        map = L.map('map', { zoomControl: true });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
+            maxZoom: 18
+        }).addTo(map);
+    }
+
+    function showMap() {
+        document.getElementById('mapPlaceholder').style.display = 'none';
+        const mapEl = document.getElementById('map');
+        mapEl.style.display = 'block';
+        mapEl.style.flex = '1';
+        if (!map) initMap();
+        setTimeout(() => map && map.invalidateSize(), 100);
+    }
+
+    function clearMapLayers() {
+        if (currentPolyline) { map.removeLayer(currentPolyline); currentPolyline = null; }
+        currentMarkers.forEach(m => map.removeLayer(m));
+        currentMarkers = [];
+    }
+
+    function resetStats() {
+        ['statDist','statDuration','statAvg','statMax','statLast','statPoints']
+            .forEach(id => document.getElementById(id).textContent = '—');
+    }
+
+    // ── Delete a track ────────────────────────────────────────────────────────
+    async function deleteTrack(event, id) {
+        event.stopPropagation();
+        if (!confirm('Delete this track and all its GPS points? This cannot be undone.')) return;
+        try {
+            await fetch(`/api/tracks/${id}`, { method: 'DELETE' });
+            if (selectedTrackId === id) {
+                selectedTrackId = null;
+                clearMapLayers();
+                resetStats();
+                document.getElementById('mapPlaceholder').style.display = 'flex';
+                document.getElementById('map').style.display = 'none';
+            }
+            await loadTracks();
+        } catch (e) {
+            alert('Delete failed: ' + e.message);
+        }
+    }
+
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    loadTracks();
+</script>
+</body>
+</html>

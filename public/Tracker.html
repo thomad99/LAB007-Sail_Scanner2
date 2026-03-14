@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Tracker - Love Sailing</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: #020053;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .logo {
+            margin-top: 20px;
+            max-width: 180px;
+            width: 40%;
+        }
+
+        .page-title {
+            font-size: 1.6rem;
+            font-weight: bold;
+            margin: 14px 0 4px;
+            letter-spacing: 2px;
+            color: #7ecfff;
+        }
+
+        .subtitle {
+            font-size: 0.85rem;
+            color: rgba(255,255,255,0.5);
+            margin-bottom: 18px;
+        }
+
+        .card {
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 14px;
+            padding: 20px;
+            width: 92%;
+            max-width: 480px;
+            margin-bottom: 16px;
+        }
+
+        .card-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: rgba(255,255,255,0.45);
+            margin-bottom: 12px;
+        }
+
+        /* Track name input */
+        .track-name-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .track-name-input {
+            flex: 1;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+            padding: 10px 14px;
+            outline: none;
+        }
+
+        .track-name-input::placeholder { color: rgba(255,255,255,0.35); }
+        .track-name-input:focus { border-color: #7ecfff; }
+
+        /* GPS status bar */
+        .gps-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            background: rgba(0,0,0,0.25);
+            font-size: 0.9rem;
+        }
+
+        .gps-dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: #888;
+            flex-shrink: 0;
+            transition: background 0.4s;
+        }
+        .gps-dot.acquiring { background: #f4a261; animation: pulse 1.2s infinite; }
+        .gps-dot.locked    { background: #2ecc71; }
+        .gps-dot.error     { background: #e74c3c; }
+
+        @keyframes pulse {
+            0%,100% { opacity: 1; } 50% { opacity: 0.3; }
+        }
+
+        /* Main control button */
+        .btn-track {
+            width: 100%;
+            padding: 18px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+            margin-top: 4px;
+        }
+
+        .btn-start {
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+            color: #fff;
+        }
+        .btn-start:hover { filter: brightness(1.12); transform: scale(1.01); }
+
+        .btn-stop {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            color: #fff;
+            animation: glow-red 2s infinite;
+        }
+        .btn-stop:hover { filter: brightness(1.12); }
+
+        @keyframes glow-red {
+            0%,100% { box-shadow: 0 0 0 0 rgba(231,76,60,0); }
+            50%      { box-shadow: 0 0 16px 4px rgba(231,76,60,0.5); }
+        }
+
+        /* Stats grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .stat-box {
+            background: rgba(0,0,0,0.25);
+            border-radius: 10px;
+            padding: 14px 12px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: rgba(255,255,255,0.45);
+            margin-bottom: 6px;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #7ecfff;
+        }
+
+        .stat-unit {
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.4);
+            margin-left: 2px;
+        }
+
+        /* Recording indicator */
+        .recording-badge {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: rgba(231,76,60,0.15);
+            border: 1px solid rgba(231,76,60,0.4);
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 0.85rem;
+            color: #e74c3c;
+            margin-bottom: 12px;
+        }
+        .recording-badge.active { display: flex; }
+        .rec-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #e74c3c;
+            animation: pulse 1s infinite;
+        }
+
+        /* Dashboard link */
+        .dashboard-link {
+            color: #7ecfff;
+            text-decoration: none;
+            font-size: 0.9rem;
+            padding: 10px 20px;
+            border: 1px solid rgba(126,207,255,0.3);
+            border-radius: 8px;
+            margin-bottom: 30px;
+            transition: all 0.2s;
+            display: inline-block;
+        }
+        .dashboard-link:hover {
+            background: rgba(126,207,255,0.1);
+            border-color: #7ecfff;
+        }
+
+        .back-link {
+            color: rgba(255,255,255,0.4);
+            text-decoration: none;
+            font-size: 0.8rem;
+            margin-bottom: 10px;
+            display: inline-block;
+        }
+        .back-link:hover { color: #fff; }
+
+        .btn-track:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .point-log {
+            max-height: 120px;
+            overflow-y: auto;
+            font-size: 0.72rem;
+            color: rgba(255,255,255,0.4);
+            font-family: monospace;
+            line-height: 1.6;
+        }
+        .point-log::-webkit-scrollbar { width: 4px; }
+        .point-log::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <a href="/index.html"><img src="/Images/LOVE SAILING LOGO.JPEG" class="logo" alt="Love Sailing"></a>
+    <div class="page-title">TRACKER</div>
+    <div class="subtitle">GPS Route Recording</div>
+
+    <!-- Track setup card -->
+    <div class="card">
+        <div class="card-title">Track Name</div>
+        <div class="track-name-row">
+            <input type="text" id="trackName" class="track-name-input"
+                   placeholder="e.g. Tuesday Race, Test Sail…" maxlength="80">
+        </div>
+    </div>
+
+    <!-- GPS status -->
+    <div class="card">
+        <div class="card-title">GPS Status</div>
+        <div class="gps-status">
+            <div class="gps-dot" id="gpsDot"></div>
+            <span id="gpsText">Waiting for GPS…</span>
+        </div>
+    </div>
+
+    <!-- Recording badge -->
+    <div class="recording-badge" id="recordingBadge">
+        <div class="rec-dot"></div>
+        <span id="recordingLabel">Recording — 0 points logged</span>
+    </div>
+
+    <!-- Control -->
+    <div class="card">
+        <button class="btn-track btn-start" id="trackBtn" disabled onclick="toggleTracking()">
+            START TRACKING
+        </button>
+    </div>
+
+    <!-- Live stats -->
+    <div class="card">
+        <div class="card-title">Live Stats</div>
+        <div class="stats-grid">
+            <div class="stat-box">
+                <div class="stat-label">Elapsed</div>
+                <div class="stat-value" id="statElapsed">0:00</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Points</div>
+                <div class="stat-value" id="statPoints">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Distance</div>
+                <div class="stat-value" id="statDist">0.00<span class="stat-unit">nm</span></div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Speed</div>
+                <div class="stat-value" id="statSpeed">—<span class="stat-unit">kts</span></div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Lat</div>
+                <div class="stat-value" style="font-size:1rem;" id="statLat">—</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Lng</div>
+                <div class="stat-value" style="font-size:1rem;" id="statLng">—</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Point log -->
+    <div class="card">
+        <div class="card-title">Point Log</div>
+        <div class="point-log" id="pointLog">No points yet.</div>
+    </div>
+
+    <a href="/Tracker-dashboard.html" class="dashboard-link">📊 View Tracking Dashboard</a>
+    <a href="/index.html" class="back-link">← Back to Home</a>
+
+    <script>
+        const INTERVAL_MS = 10000; // record every 10 seconds
+
+        let trackId = null;
+        let isTracking = false;
+        let watchId = null;
+        let intervalId = null;
+        let elapsedInterval = null;
+        let startTime = null;
+        let pointCount = 0;
+        let totalDistanceNm = 0;
+        let lastLat = null, lastLng = null;
+        let lastSpeedKts = null;
+        let pendingPoint = null; // most recent GPS fix
+
+        const btn = document.getElementById('trackBtn');
+        const gpsDot = document.getElementById('gpsDot');
+        const gpsText = document.getElementById('gpsText');
+        const recordingBadge = document.getElementById('recordingBadge');
+        const recordingLabel = document.getElementById('recordingLabel');
+
+        // ── GPS Watchdog ──────────────────────────────────────────────────────
+        function startGPSWatch() {
+            if (!navigator.geolocation) {
+                setGPSState('error', 'GPS not supported on this device');
+                return;
+            }
+            setGPSState('acquiring', 'Acquiring GPS fix…');
+            watchId = navigator.geolocation.watchPosition(
+                pos => {
+                    pendingPoint = pos;
+                    const { latitude, longitude, accuracy, speed } = pos.coords;
+                    const acc = accuracy ? `±${Math.round(accuracy)}m` : '';
+                    setGPSState('locked', `Fix: ${latitude.toFixed(5)}, ${longitude.toFixed(5)} ${acc}`);
+                    document.getElementById('statLat').textContent = latitude.toFixed(5);
+                    document.getElementById('statLng').textContent = longitude.toFixed(5);
+                    if (speed != null) {
+                        lastSpeedKts = (speed * 1.94384).toFixed(1);
+                        document.getElementById('statSpeed').innerHTML = `${lastSpeedKts}<span class="stat-unit">kts</span>`;
+                    }
+                    btn.disabled = false;
+                },
+                err => {
+                    setGPSState('error', `GPS error: ${err.message}`);
+                },
+                { enableHighAccuracy: true, timeout: 30000, maximumAge: 5000 }
+            );
+        }
+
+        function setGPSState(state, message) {
+            gpsDot.className = 'gps-dot ' + state;
+            gpsText.textContent = message;
+        }
+
+        // ── Haversine distance (returns nautical miles) ───────────────────────
+        function haversineNm(lat1, lon1, lat2, lon2) {
+            const R = 3440.065; // Earth radius in nm
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2)**2 +
+                      Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) *
+                      Math.sin(dLon/2)**2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        }
+
+        // ── Record one point ──────────────────────────────────────────────────
+        async function recordPoint() {
+            if (!pendingPoint || !trackId) return;
+            const { latitude, longitude, accuracy, altitude, speed, heading } = pendingPoint.coords;
+
+            // Accumulate distance
+            if (lastLat !== null) {
+                const d = haversineNm(lastLat, lastLng, latitude, longitude);
+                totalDistanceNm += d;
+                document.getElementById('statDist').innerHTML =
+                    `${totalDistanceNm.toFixed(2)}<span class="stat-unit">nm</span>`;
+            }
+            lastLat = latitude; lastLng = longitude;
+            pointCount++;
+
+            document.getElementById('statPoints').textContent = pointCount;
+            recordingLabel.textContent = `Recording — ${pointCount} point${pointCount !== 1 ? 's' : ''} logged`;
+
+            const logLine = `${new Date().toLocaleTimeString()} | ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+            const log = document.getElementById('pointLog');
+            if (log.textContent === 'No points yet.') log.textContent = '';
+            log.textContent += logLine + '\n';
+            log.scrollTop = log.scrollHeight;
+
+            try {
+                await fetch(`/api/tracks/${trackId}/points`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        lat: latitude, lng: longitude,
+                        accuracy: accuracy || null,
+                        altitude: altitude || null,
+                        speed: speed || null,
+                        heading: heading || null
+                    })
+                });
+            } catch (e) {
+                console.warn('Point upload failed (will retry next interval):', e.message);
+            }
+        }
+
+        // ── Elapsed timer ─────────────────────────────────────────────────────
+        function updateElapsed() {
+            const secs = Math.floor((Date.now() - startTime) / 1000);
+            const m = Math.floor(secs / 60);
+            const s = String(secs % 60).padStart(2, '0');
+            document.getElementById('statElapsed').textContent = `${m}:${s}`;
+        }
+
+        // ── Toggle tracking ───────────────────────────────────────────────────
+        async function toggleTracking() {
+            if (!isTracking) {
+                await startTracking();
+            } else {
+                await stopTracking();
+            }
+        }
+
+        async function startTracking() {
+            btn.disabled = true;
+            btn.textContent = 'Starting…';
+            try {
+                const name = document.getElementById('trackName').value.trim() ||
+                    `Track ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`;
+                const resp = await fetch('/api/tracks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, device_name: navigator.userAgent.substring(0, 80) })
+                });
+                const data = await resp.json();
+                trackId = data.id;
+
+                isTracking = true;
+                startTime = Date.now();
+                pointCount = 0;
+                totalDistanceNm = 0;
+                lastLat = null; lastLng = null;
+
+                document.getElementById('trackName').disabled = true;
+                recordingBadge.classList.add('active');
+                btn.classList.replace('btn-start', 'btn-stop');
+                btn.textContent = 'STOP TRACKING';
+                btn.disabled = false;
+
+                // Record immediately, then every 10s
+                await recordPoint();
+                intervalId = setInterval(recordPoint, INTERVAL_MS);
+                elapsedInterval = setInterval(updateElapsed, 1000);
+            } catch (e) {
+                btn.textContent = 'START TRACKING';
+                btn.disabled = false;
+                alert('Failed to start track: ' + e.message);
+            }
+        }
+
+        async function stopTracking() {
+            btn.disabled = true;
+            btn.textContent = 'Stopping…';
+            clearInterval(intervalId);
+            clearInterval(elapsedInterval);
+
+            // Record final point
+            await recordPoint();
+
+            try {
+                await fetch(`/api/tracks/${trackId}/stop`, { method: 'PATCH' });
+            } catch (e) { /* best effort */ }
+
+            isTracking = false;
+            recordingBadge.classList.remove('active');
+            btn.classList.replace('btn-stop', 'btn-start');
+            btn.textContent = 'START TRACKING';
+            btn.disabled = false;
+            document.getElementById('trackName').disabled = false;
+            document.getElementById('trackName').value = '';
+
+            // Reset session stats
+            trackId = null;
+            pointCount = 0;
+            totalDistanceNm = 0;
+            lastLat = null; lastLng = null;
+            document.getElementById('statPoints').textContent = '0';
+            document.getElementById('statDist').innerHTML = '0.00<span class="stat-unit">nm</span>';
+            document.getElementById('statElapsed').textContent = '0:00';
+            document.getElementById('pointLog').textContent = 'No points yet.';
+        }
+
+        // Start GPS watch on page load
+        startGPSWatch();
+    </script>
+</body>
+</html>

@@ -4807,14 +4807,16 @@ app.post('/api/scrape-regattas', async (req, res) => {
     const source = req.body && req.body.source ? req.body.source : 'all';
     console.log(`=== Regatta Scraping Request: source="${source}" ===`);
 
-    // ClubSpot runs locally via the Parse Server API (no external service needed)
+    // ClubSpot runs locally via the Parse Server API (no external service needed).
+    // Run in background and respond immediately to avoid HTTP timeouts with large datasets.
     if (source === 'clubspot') {
-        try {
-            const result = await scrapeClubspot();
-            return res.json(result);
-        } catch (error) {
-            return res.status(500).json({ error: error.message });
-        }
+        res.json({ status: 'started', message: 'Clubspot scrape started in background. Check scrape log for results.' });
+        scrapeClubspot().then(result => {
+            console.log('Background Clubspot scrape complete:', result);
+        }).catch(err => {
+            console.error('Background Clubspot scrape error:', err.message);
+        });
+        return;
     }
 
     // For other sources, forward to the external scraper service if configured
@@ -5094,37 +5096,37 @@ async function scrapeClubspot() {
 
         console.log(`📋 Valid regattas after filtering: ${extractedRegattas.length}`);
 
+        // Batch inserts: 50 rows per query to avoid per-row overhead with 1000+ regattas
         let added = 0;
-        for (const regatta of extractedRegattas) {
+        const INSERT_BATCH = 50;
+        const totalBatches = Math.ceil(extractedRegattas.length / INSERT_BATCH);
+        console.log(`💾 Inserting ${extractedRegattas.length} regattas in ${totalBatches} batches...`);
+
+        for (let i = 0; i < extractedRegattas.length; i += INSERT_BATCH) {
+            const batch = extractedRegattas.slice(i, i + INSERT_BATCH);
+            const values = [];
+            const placeholders = batch.map((r, idx) => {
+                const base = idx * 8;
+                values.push(r.regatta_date, r.regatta_name, r.location, r.event_website_url, null, null, 'clubspot', r.source_id);
+                return `($${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7},$${base+8})`;
+            });
             try {
-                await pool.query(`
+                const result = await pool.query(`
                     INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    VALUES ${placeholders.join(',')}
                     ON CONFLICT (regatta_name, regatta_date, source)
                     DO UPDATE SET
                         location = EXCLUDED.location,
                         event_website_url = EXCLUDED.event_website_url,
-                        registrants_url = EXCLUDED.registrants_url,
-                        registrant_count = COALESCE(EXCLUDED.registrant_count, regattas.registrant_count),
                         source_id = EXCLUDED.source_id,
                         last_updated = CURRENT_TIMESTAMP
-                `, [
-                    regatta.regatta_date,
-                    regatta.regatta_name,
-                    regatta.location,
-                    regatta.event_website_url,
-                    null,
-                    null,
-                    'clubspot',
-                    regatta.source_id
-                ]);
-                added++;
+                `, values);
+                added += result.rowCount || batch.length;
             } catch (err) {
-                if (!err.message.includes('duplicate')) {
-                    console.error('Error inserting regatta:', err.message);
-                }
+                console.error(`Batch insert error (rows ${i}–${i + batch.length}):`, err.message);
             }
         }
+        console.log(`💾 DB write complete: ${added} rows affected`);
 
         await pool.query(`
             INSERT INTO scrape_log (source, regattas_found, regattas_added)
@@ -5585,6 +5587,7 @@ async function initializeServer() {
         await createUserTables();
         await createRegattasTable();
         await ensureRegattaNetworkDataTable();
+        await createTrackerTables();
         await testS3Connection();
         console.log('✓ Server initialization complete');
     } catch (startupError) {
@@ -5592,6 +5595,142 @@ async function initializeServer() {
         console.error('Stack:', startupError.stack);
     }
 }
+
+// ─── GPS Tracker ─────────────────────────────────────────────────────────────
+
+async function createTrackerTables() {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS tracks (
+            id          SERIAL PRIMARY KEY,
+            name        TEXT,
+            device_name TEXT,
+            started_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+            ended_at    TIMESTAMP,
+            created_at  TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    `);
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS track_points (
+            id          SERIAL PRIMARY KEY,
+            track_id    INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+            lat         DOUBLE PRECISION NOT NULL,
+            lng         DOUBLE PRECISION NOT NULL,
+            accuracy    REAL,
+            altitude    REAL,
+            speed       REAL,
+            heading     REAL,
+            recorded_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_track_points_track_id ON track_points(track_id)`);
+    console.log('✓ Tracker tables ready');
+}
+
+// Start a new track
+app.post('/api/tracks', async (req, res) => {
+    try {
+        const { name, device_name } = req.body || {};
+        const result = await pool.query(
+            `INSERT INTO tracks (name, device_name) VALUES ($1, $2) RETURNING *`,
+            [name || null, device_name || null]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error('Error starting track:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Stop a track
+app.patch('/api/tracks/:id/stop', async (req, res) => {
+    try {
+        const result = await pool.query(
+            `UPDATE tracks SET ended_at = NOW() WHERE id = $1 AND ended_at IS NULL RETURNING *`,
+            [req.params.id]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Track not found or already stopped' });
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Add a GPS point to a track
+app.post('/api/tracks/:id/points', async (req, res) => {
+    try {
+        const { lat, lng, accuracy, altitude, speed, heading } = req.body;
+        if (!lat || !lng) return res.status(400).json({ error: 'lat and lng are required' });
+        const result = await pool.query(
+            `INSERT INTO track_points (track_id, lat, lng, accuracy, altitude, speed, heading)
+             VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+            [req.params.id, lat, lng, accuracy || null, altitude || null, speed || null, heading || null]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// List all tracks with point count and computed stats
+app.get('/api/tracks', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT
+                t.*,
+                COUNT(p.id)::int                                    AS point_count,
+                MIN(p.recorded_at)                                  AS first_point_at,
+                MAX(p.recorded_at)                                  AS last_point_at,
+                MAX(p.speed)                                        AS max_speed_ms,
+                AVG(NULLIF(p.speed, 0))                             AS avg_speed_ms
+            FROM tracks t
+            LEFT JOIN track_points p ON p.track_id = t.id
+            GROUP BY t.id
+            ORDER BY t.started_at DESC
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get all points for a track
+app.get('/api/tracks/:id/points', async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT * FROM track_points WHERE track_id = $1 ORDER BY recorded_at ASC`,
+            [req.params.id]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete a track (cascade deletes points)
+app.delete('/api/tracks/:id', async (req, res) => {
+    try {
+        await pool.query(`DELETE FROM tracks WHERE id = $1`, [req.params.id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Rename a track
+app.patch('/api/tracks/:id', async (req, res) => {
+    try {
+        const { name } = req.body;
+        const result = await pool.query(
+            `UPDATE tracks SET name = $1 WHERE id = $2 RETURNING *`,
+            [name, req.params.id]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Handle unhandled promise rejections to prevent crashes
 process.on('unhandledRejection', (reason, promise) => {
