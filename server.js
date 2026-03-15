@@ -5730,6 +5730,81 @@ app.patch('/api/tracks/:id', async (req, res) => {
     }
 });
 
+// Latest position for every currently-active track (live multi-device view)
+app.get('/api/tracks/live', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT
+                t.id, t.name, t.device_name, t.started_at,
+                p.lat, p.lng, p.accuracy, p.speed, p.heading,
+                p.recorded_at AS point_time,
+                (SELECT COUNT(*) FROM track_points WHERE track_id = t.id)::int AS point_count
+            FROM tracks t
+            LEFT JOIN LATERAL (
+                SELECT * FROM track_points
+                WHERE track_id = t.id
+                ORDER BY recorded_at DESC
+                LIMIT 1
+            ) p ON true
+            WHERE t.ended_at IS NULL
+            ORDER BY t.started_at DESC
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Group finished + active tracks into sessions (tracks starting within 1 hour of each other)
+app.get('/api/tracks/sessions', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT t.*, COUNT(p.id)::int AS point_count
+            FROM tracks t
+            LEFT JOIN track_points p ON p.track_id = t.id
+            GROUP BY t.id
+            ORDER BY t.started_at ASC
+        `);
+        const tracks = result.rows;
+
+        // Group by 1-hour window from earliest track in each session
+        const sessions = [];
+        const assigned = new Set();
+
+        for (const track of tracks) {
+            if (assigned.has(track.id)) continue;
+            const anchor = new Date(track.started_at);
+            const group = [track];
+            assigned.add(track.id);
+
+            for (const other of tracks) {
+                if (assigned.has(other.id)) continue;
+                const diffH = (new Date(other.started_at) - anchor) / 3600000;
+                if (diffH >= 0 && diffH <= 1) {
+                    group.push(other);
+                    assigned.add(other.id);
+                }
+            }
+
+            sessions.push({
+                id: sessions.length,
+                label: anchor.toLocaleDateString() + ' ' +
+                       anchor.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                started_at: track.started_at,
+                track_count: group.length,
+                total_points: group.reduce((s, t) => s + (t.point_count || 0), 0),
+                tracks: group
+            });
+        }
+
+        // Newest sessions first
+        sessions.sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
+        res.json(sessions);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Handle unhandled promise rejections to prevent crashes
