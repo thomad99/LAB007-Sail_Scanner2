@@ -65,6 +65,35 @@
             transform: scale(1.1);
         }
 
+        /* Icon card for pages without a custom image */
+        .nav-icon-card {
+            width: 200px;
+            height: 140px;
+            background: rgba(255,255,255,0.1);
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: transform 0.3s ease, background 0.3s ease;
+            font-size: 0.95rem;
+            font-weight: bold;
+            color: white;
+            letter-spacing: 0.5px;
+        }
+
+        .nav-icon-card:hover {
+            transform: scale(1.1);
+            background: rgba(255,255,255,0.18);
+        }
+
+        .nav-icon-card .icon {
+            font-size: 2.8rem;
+            line-height: 1;
+        }
+
         .tagline {
             margin-top: 50px;
             font-size: 1em;
@@ -198,7 +227,13 @@
             <img src="/Images/regattasearch_button.png" alt="Find Regatta">
         </a>
         <a href="Tracker.html" class="nav-item">
-            <img src="/Images/regattasearch_button.png" alt="Tracker" style="filter:hue-rotate(120deg);">
+            <img src="/Images/Tracker_button.png" alt="Tracker">
+        </a>
+        <a href="Tracker-dashboard.html" class="nav-item">
+            <div class="nav-icon-card">
+                <div class="icon">🗺️</div>
+                <span>Track Dashboard</span>
+            </div>
         </a>
         <a href="Shop.html" class="nav-item">
             <img src="/Images/Love%20Sailing%20Shop%20Shopping%20Basket%20Icon.jpg?v=3" alt="Love Sailing Shop">
