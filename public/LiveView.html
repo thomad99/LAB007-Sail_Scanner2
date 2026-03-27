@@ -39,21 +39,27 @@
         #overlay { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
         #overlay { pointer-events: none; }
         #captureCanvas { display: none; }
-        .controls { flex-shrink: 0; display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 0; }
+        .controls { flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 10px 0; }
         .toggle-btn {
-            padding: 12px 24px;
+            flex: 1;
+            padding: 14px 10px;
             font-size: 16px;
             font-weight: 600;
             border: none;
             border-radius: 8px;
             cursor: pointer;
             transition: background 0.2s, transform 0.1s;
+            white-space: nowrap;
         }
         .toggle-btn:active { transform: scale(0.98); }
         .toggle-btn.off { background: #2a2a3e; color: #a0a0b0; }
         .toggle-btn.off:hover { background: #35354a; }
         .toggle-btn.on { background: #0066cc; color: #fff; }
         .toggle-btn.on:hover { background: #0052a3; }
+        .toggle-btn.start { background: #1a7a3a; color: #fff; }
+        .toggle-btn.start:hover { background: #22963f; }
+        .toggle-btn.stop { background: #cc2200; color: #fff; }
+        .toggle-btn.stop:hover { background: #e02a00; }
         .feedback { flex: 1 1 0; min-height: 0; width: 100%; overflow: hidden; display: flex; flex-direction: column; background: #12121f; border: 1px solid #2a2a3e; border-radius: 10px; padding: 12px 14px; font-size: 14px; line-height: 1.6; }
         .feedback-line { color: #888; }
         .feedback-line.active { color: #7eb8ff; }
@@ -78,9 +84,8 @@
         </div>
         <canvas id="captureCanvas"></canvas>
         <div class="controls">
-            <button type="button" id="detectionBtn" class="toggle-btn off" aria-pressed="false">Detection OFF</button>
-            <button type="button" id="storeNumbersBtn" class="toggle-btn on" aria-pressed="true">Store numbers ON</button>
-            <button type="button" id="storeCapturesBtn" class="toggle-btn off" aria-pressed="false">Store captures OFF</button>
+            <button type="button" id="detectionBtn" class="toggle-btn start" aria-pressed="false">▶ Start</button>
+            <button type="button" id="storeCapturesBtn" class="toggle-btn off" aria-pressed="false">Save Captures OFF</button>
         </div>
         <div id="feedback" class="feedback">
             <div id="feedbackStatus" class="feedback-status feedback-line">—</div>
@@ -98,7 +103,6 @@
     const overlay = document.getElementById('overlay');
     const captureCanvas = document.getElementById('captureCanvas');
     const detectionBtn = document.getElementById('detectionBtn');
-    const storeNumbersBtn = document.getElementById('storeNumbersBtn');
     const storeCapturesBtn = document.getElementById('storeCapturesBtn');
     const feedbackStatus = document.getElementById('feedbackStatus');
     const feedbackHistory = document.getElementById('feedbackHistory');
@@ -111,7 +115,7 @@
     let scanInProgress = false;
     let lastCaptureStartTime = 0;
     let lastSailNumbers = [];
-    let storeNumbers = true;
+    const storeNumbers = true;
     let storeCaptures = false;
     let sessionId = 'lv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
     let resultsSessionId = sessionId;
@@ -246,7 +250,7 @@
                     resizeOverlay();
                     var yy = list.length ? list.length + ' — ' + list.map(function (s) { return s.number; }).join(', ') : '0';
                     setFeedback('Sail Numbers Detected : ' + yy);
-                    if (storeNumbers) {
+                    if (storeNumbers && list.length > 0) {
                         fetch('/api/liveview-store-results', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -272,9 +276,9 @@
         if (detectionOn) return;
         detectionOn = true;
         resultsSessionId = 'lv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
-        detectionBtn.textContent = 'Detection ON';
-        detectionBtn.classList.remove('off');
-        detectionBtn.classList.add('on');
+        detectionBtn.textContent = '■ Stop';
+        detectionBtn.classList.remove('start');
+        detectionBtn.classList.add('stop');
         detectionBtn.setAttribute('aria-pressed', 'true');
         lastSailNumbers = [];
         setFeedback('—');
@@ -285,23 +289,15 @@
 
     function stopDetection() {
         detectionOn = false;
-        detectionBtn.textContent = 'Detection OFF';
-        detectionBtn.classList.add('off');
-        detectionBtn.classList.remove('on');
+        detectionBtn.textContent = '▶ Start';
+        detectionBtn.classList.remove('stop');
+        detectionBtn.classList.add('start');
         detectionBtn.setAttribute('aria-pressed', 'false');
         lastSailNumbers = [];
         setFeedback('—');
         loadLastResults();
         resizeOverlay();
     }
-
-    storeNumbersBtn.addEventListener('click', function () {
-        storeNumbers = !storeNumbers;
-        storeNumbersBtn.textContent = storeNumbers ? 'Store numbers ON' : 'Store numbers OFF';
-        storeNumbersBtn.classList.toggle('on', storeNumbers);
-        storeNumbersBtn.classList.toggle('off', !storeNumbers);
-        storeNumbersBtn.setAttribute('aria-pressed', storeNumbers ? 'true' : 'false');
-    });
 
     storeCapturesBtn.addEventListener('click', function () {
         if (storeCaptures) {
@@ -316,7 +312,7 @@
             sessionId = 'lv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
         }
         storeCaptures = !storeCaptures;
-        storeCapturesBtn.textContent = storeCaptures ? 'Store captures ON' : 'Store captures OFF';
+        storeCapturesBtn.textContent = storeCaptures ? 'Save Captures ON' : 'Save Captures OFF';
         storeCapturesBtn.classList.toggle('on', storeCaptures);
         storeCapturesBtn.classList.toggle('off', !storeCaptures);
         storeCapturesBtn.setAttribute('aria-pressed', storeCaptures ? 'true' : 'false');
