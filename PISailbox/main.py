@@ -124,7 +124,15 @@ def _do_record_video(duration_s):
 def gps_thread_fn():
     log.info("GPS thread started")
 
-    gps_reader.start()           # blocks until serial opens
+    gps_reader.start()           # blocks until serial port opens successfully
+
+    # Serial is now open — safe to use AT commands
+    apn = device_config.get("sim_apn", "")
+    if apn:
+        log.info("Applying APN after serial open")
+        sim_manager.apply_apn(apn,
+                              user=device_config.get("sim_apn_user", ""),
+                              password=device_config.get("sim_apn_pass", ""))
 
     current_track_id = None
 
@@ -245,9 +253,9 @@ def sim_thread_fn():
 # ── Config change handler ─────────────────────────────────────────────────────
 
 def _on_config_change(new_cfg):
-    # Apply APN if changed
+    # Apply APN only if the serial port is already open
     new_apn = new_cfg.get("sim_apn", "")
-    if new_apn and sim_manager:
+    if new_apn and sim_manager and gps_reader and gps_reader.is_ready:
         sim_manager.apply_apn(new_apn,
                               user=new_cfg.get("sim_apn_user", ""),
                               password=new_cfg.get("sim_apn_pass", ""))
@@ -304,13 +312,7 @@ def main():
     upload_queue   = []
     camera_handler = CameraHandler(cfg.PHOTOS_DIR, cfg.VIDEOS_DIR, upload_queue)
     sim_manager    = SIMManager(gps_reader)
-
-    # Apply APN from config if set
-    apn = device_config.get("sim_apn", "")
-    if apn:
-        sim_manager.apply_apn(apn,
-                              user=device_config.get("sim_apn_user", ""),
-                              password=device_config.get("sim_apn_pass", ""))
+    # APN is applied inside gps_thread_fn after the serial port opens
 
     # Start worker threads
     threads = [

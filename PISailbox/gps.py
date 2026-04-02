@@ -59,8 +59,16 @@ class GPSReader:
         )
         log.info(f"Opened serial port {self.port}")
 
+    @property
+    def is_ready(self):
+        """True once the serial port has been successfully opened."""
+        return self.ser is not None and self.ser.is_open
+
     def _send_at(self, cmd, wait_s=1.5):
-        """Send AT command and return response string."""
+        """Send AT command and return response string. Returns '' if port not ready."""
+        if not self.is_ready:
+            log.debug(f"AT skipped (port not open): {cmd}")
+            return ""
         with self.lock:
             try:
                 self.ser.reset_input_buffer()
@@ -75,18 +83,30 @@ class GPSReader:
     # ── Initialise GNSS engine ────────────────────────────────────────────────
 
     def _init_gps(self):
-        # Check modem is alive
-        resp = self._send_at("AT")
-        if AT_OK not in resp:
-            log.error("Modem not responding to AT")
-            return False
-
-        # Power on GNSS
-        self._send_at("AT+CGNSPWR=1")
+        # Wait for modem to settle after port open
         time.sleep(2)
 
-        # Set NMEA output rate (optional but helps lock faster)
-        self._send_at("AT+CGNSSEQ=\"RMC\"")
+        # Try AT up to 5 times — modem may need a moment after boot
+        for attempt in range(5):
+            resp = self._send_at("AT", wait_s=1.5)
+            if AT_OK in resp:
+                break
+            log.warning(f"AT attempt {attempt+1}/5: no OK (got: {repr(resp[:40])})")
+            time.sleep(2)
+        else:
+            log.error("Modem not responding to AT after 5 attempts")
+            log.error("Tip: run  sudo systemctl stop ModemManager  and retry")
+            return False
+
+        # Echo off (cleaner responses)
+        self._send_at("ATE0", wait_s=0.5)
+
+        # Power on GNSS
+        self._send_at("AT+CGNSPWR=1", wait_s=1.0)
+        time.sleep(3)  # give GNSS engine time to start
+
+        # Set NMEA output rate
+        self._send_at("AT+CGNSSEQ=\"RMC\"", wait_s=0.5)
 
         log.info("GNSS engine powered on")
         return True
@@ -145,6 +165,15 @@ class GPSReader:
             self.current_fix = fix
         return fix
 
+    def _close(self):
+        """Close serial port if open."""
+        try:
+            if self.ser and self.ser.is_open:
+                self.ser.close()
+        except Exception:
+            pass
+        self.ser = None
+
     def start(self, retry_interval=5):
         """Open serial port, init GNSS, keep retrying on failure."""
         self._running = True
@@ -156,9 +185,11 @@ class GPSReader:
                     return True
                 else:
                     log.warning("GPS init failed, retrying…")
+                    self._close()          # release port between attempts
                     time.sleep(retry_interval)
             except serial.SerialException as e:
                 log.error(f"Serial open failed: {e} — retrying in {retry_interval}s")
+                self._close()
                 time.sleep(retry_interval)
         return False
 
