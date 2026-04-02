@@ -432,10 +432,6 @@
                                         onclick="loadGpsTracks()">↻ Refresh</button>
                             </div>
                         </div>
-                        <p style="font-size:0.75rem;color:rgba(255,255,255,0.3);margin-top:6px;">
-                            Commands are delivered to the Pi on its next config poll (~${config.gps_poll_seconds||10}s).
-                            Enable <strong>Auto-track on boot</strong> in Config to start automatically.
-                        </p>
                         <div id="cmdFeedback" style="font-size:0.82rem;color:#2ecc71;margin-top:6px;min-height:18px;"></div>
                     </div>
 
@@ -499,14 +495,6 @@
                         <div class="save-bar">
                             <button class="btn success" onclick="saveSimConfig()">💾 Save APN &amp; Push to Device</button>
                             <span class="save-msg" id="simSaveMsg"></span>
-                        </div>
-                        <div style="margin-top:14px;padding:12px;background:rgba(0,0,0,0.25);border-radius:8px;font-size:0.73rem;color:rgba(255,255,255,0.35);line-height:1.7;">
-                            <strong style="color:rgba(255,255,255,0.5);">Common UK APNs:</strong><br>
-                            Three: <code>3internet</code> &nbsp;·&nbsp;
-                            Vodafone: <code>internet</code> &nbsp;·&nbsp;
-                            EE: <code>everywhere</code> &nbsp;·&nbsp;
-                            O2: <code>mobile.o2.co.uk</code> &nbsp;·&nbsp;
-                            Hologram IoT: <code>hologram</code>
                         </div>
                     </div>
 
@@ -574,10 +562,6 @@
                             </button>
                         </div>
                         <div id="camCmdFeedback" style="font-size:0.82rem;color:#2ecc71;margin-top:8px;min-height:18px;"></div>
-                        <p style="font-size:0.73rem;color:rgba(255,255,255,0.3);margin-top:6px;">
-                            Commands are delivered to the Pi on its next config poll (~${config.gps_poll_seconds||10}s).
-                            Video is stored locally on the Pi's SD card only.
-                        </p>
                     </div>
 
                     <div class="card">
@@ -591,7 +575,7 @@
 
             </div>`;
 
-        if (currentTab === 'photos') loadPhotos();
+        if (currentTab === 'photos') { loadPhotos(); initVideoButtons(); }
         if (currentTab === 'sim')    loadSimStatus();
         if (currentTab === 'gps')    loadGpsTracks();
     }
@@ -605,7 +589,7 @@
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
         const panel = document.getElementById('tab-' + tab);
         if (panel) panel.classList.add('active');
-        if (tab === 'photos') loadPhotos();
+        if (tab === 'photos') { loadPhotos(); initVideoButtons(); }
         if (tab === 'sim')    loadSimStatus();
         if (tab === 'gps')    loadGpsTracks();
     }
@@ -867,8 +851,10 @@
                 setTimeout(() => { if(fb) fb.textContent = ''; }, 6000);
             }
             // Optimistically update button states immediately
-            if (data.ok && cmd === 'start_track') setTrackingButtons(true);
-            if (data.ok && cmd === 'stop_track')  setTrackingButtons(false);
+            if (data.ok && cmd === 'start_track')  setTrackingButtons(true);
+            if (data.ok && cmd === 'stop_track')   setTrackingButtons(false);
+            if (data.ok && cmd === 'start_video')  setVideoButtons(true);
+            if (data.ok && cmd === 'stop_video')   setVideoButtons(false);
         } catch(e) {
             if (fb) { fb.textContent = '❌ ' + e.message; setTimeout(() => { if(fb) fb.textContent=''; }, 4000); }
         }
@@ -958,6 +944,41 @@
         } catch(e) {
             if (listEl) listEl.innerHTML = `<div style="color:#e74c3c;font-size:0.85rem;">Error: ${e.message}</div>`;
         }
+    }
+
+    function setVideoButtons(isRecording) {
+        const btnStart = document.getElementById('btnStartVideo');
+        const btnStop  = document.getElementById('btnStopVideo');
+        if (!btnStart || !btnStop) return;
+
+        if (isRecording) {
+            // Recording — Start dimmed, Stop active with pulse
+            btnStart.style.opacity       = '0.35';
+            btnStart.style.cursor        = 'default';
+            btnStart.style.pointerEvents = 'none';
+            btnStart.textContent         = '⏺ Start Video';
+
+            btnStop.style.opacity        = '1';
+            btnStop.style.cursor         = 'pointer';
+            btnStop.style.pointerEvents  = 'auto';
+            btnStop.innerHTML            = '⏹ Stop Video <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#e74c3c;animation:pulse 1.2s infinite;margin-left:5px;vertical-align:middle;"></span>';
+        } else {
+            // Not recording — Stop dimmed, Start active
+            btnStart.style.opacity       = '1';
+            btnStart.style.cursor        = 'pointer';
+            btnStart.style.pointerEvents = 'auto';
+            btnStart.textContent         = '⏺ Start Video';
+
+            btnStop.style.opacity        = '0.35';
+            btnStop.style.cursor         = 'default';
+            btnStop.style.pointerEvents  = 'none';
+            btnStop.textContent          = '⏹ Stop Video';
+        }
+    }
+
+    // Initialise video buttons to "not recording" when the Photos tab renders
+    function initVideoButtons() {
+        setVideoButtons(false);
     }
 
     function setTrackingButtons(isTracking) {
