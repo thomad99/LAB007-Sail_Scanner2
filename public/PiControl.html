@@ -433,7 +433,11 @@
                     </div>
 
                     <div class="card">
-                        <div class="card-title">Tracks from this Device <span id="gpsTrackCount" style="color:rgba(255,255,255,0.3)"></span></div>
+                        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                            <span>Tracks from this Device <span id="gpsTrackCount" style="color:rgba(255,255,255,0.3);font-weight:normal;font-size:0.85rem;"></span></span>
+                            <button class="btn danger" style="font-size:0.72rem;padding:4px 11px;"
+                                    onclick="deleteAllTracks()">🗑 Delete ALL Tracks</button>
+                        </div>
                         <div id="gpsTrackList">
                             <div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</div>
                         </div>
@@ -1285,7 +1289,11 @@
                         <div class="track-meta" style="margin-top:3px;">${pts} pts · max ${maxSpd}</div>
                         ${forceStopBtn}
                     </div>
-                    <span class="track-badge ${live?'':'ended'}">${live?'🟢 Live':'⏹ Ended'}</span>
+                    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
+                        <span class="track-badge ${live?'':'ended'}">${live?'🟢 Live':'⏹ Ended'}</span>
+                        <button class="btn danger" style="font-size:0.68rem;padding:2px 8px;"
+                                onclick="event.stopPropagation();deleteTrack(${t.id})">🗑 Delete</button>
+                    </div>
                 </div>`;
             }).join('');
 
@@ -1308,6 +1316,36 @@
             await loadGpsTracks();
         } catch(e) {
             alert('Force stop failed: ' + e.message);
+        }
+    }
+
+    async function deleteTrack(trackId) {
+        if (!confirm('Delete this track and all its GPS points? This cannot be undone.')) return;
+        try {
+            const resp = await fetch(`/api/tracks/${trackId}`, { method: 'DELETE' });
+            if (!resp.ok) throw new Error((await resp.json()).error || 'Delete failed');
+            await loadGpsTracks();
+        } catch(e) {
+            alert('Delete failed: ' + e.message);
+        }
+    }
+
+    async function deleteAllTracks() {
+        const d = selectedDevice;
+        if (!d) return;
+        const countEl = document.getElementById('gpsTrackCount');
+        const countStr = countEl ? countEl.textContent : '';
+        if (!confirm(`Delete ALL tracks ${countStr} for "${d.name || d.device_id}"?\n\nThis will permanently remove all GPS history for this device and cannot be undone.`)) return;
+        try {
+            const resp = await fetch(
+                `/api/tracks?device=${encodeURIComponent(d.device_id)}`,
+                { method: 'DELETE' }
+            );
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Delete failed');
+            await loadGpsTracks();
+        } catch(e) {
+            alert('Delete all failed: ' + e.message);
         }
     }
 

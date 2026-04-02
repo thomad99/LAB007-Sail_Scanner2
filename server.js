@@ -6096,6 +6096,20 @@ app.delete('/api/tracks/:id', async (req, res) => {
     }
 });
 
+// Delete ALL tracks for a device
+app.delete('/api/tracks', async (req, res) => {
+    try {
+        const { device } = req.query;
+        if (!device) return res.status(400).json({ error: 'device query param required' });
+        const result = await pool.query(
+            `DELETE FROM tracks WHERE device_name = $1`, [device]
+        );
+        res.json({ success: true, deleted: result.rowCount });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Rename a track
 app.patch('/api/tracks/:id', async (req, res) => {
     try {

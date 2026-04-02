@@ -254,7 +254,12 @@ def camera_thread_fn():
             def _run_session():
                 camera_handler.run_photo_session(
                     interval_s, duration_m,
-                    lambda: gps_reader.current_fix if gps_reader else None
+                    lambda: gps_reader.current_fix if gps_reader else None,
+                    stop_event=shutdown_event,
+                    should_continue=lambda: (
+                        device_config.get("camera_enabled", False) and
+                        device_config.get("camera_auto_photo", False)
+                    )
                 )
             threading.Thread(target=_run_session, daemon=True, name="photo-session").start()
 

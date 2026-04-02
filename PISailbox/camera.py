@@ -85,17 +85,33 @@ class CameraHandler:
                 except Exception: pass
                 return None
 
-    def run_photo_session(self, interval_seconds, session_minutes, get_gps_fix):
+    def run_photo_session(self, interval_seconds, session_minutes, get_gps_fix,
+                          stop_event=None, should_continue=None):
         """
         Take photos every interval_seconds for session_minutes.
-        get_gps_fix is a callable that returns the current GPSFix or None.
+        get_gps_fix      — callable returning current GPSFix or None.
+        stop_event       — threading.Event; session stops when set (e.g. shutdown).
+        should_continue  — callable returning bool; session stops when it returns False
+                           (used to react to camera_enabled / camera_auto_photo toggles).
         """
         log.info(f"Starting photo session: every {interval_seconds}s for {session_minutes}min")
         deadline = time.time() + session_minutes * 60
         while time.time() < deadline:
+            if stop_event and stop_event.is_set():
+                log.info("Photo session stopped (shutdown)")
+                break
+            if should_continue and not should_continue():
+                log.info("Photo session stopped (camera disabled or auto-photo turned off)")
+                break
             fix = get_gps_fix()
             self.capture_photo(gps_fix=fix)
-            time.sleep(interval_seconds)
+            # Sleep in 1-second chunks so we respond to stop quickly
+            for _ in range(int(interval_seconds)):
+                if stop_event and stop_event.is_set():
+                    break
+                if should_continue and not should_continue():
+                    break
+                time.sleep(1)
         log.info("Photo session complete")
 
     # ── Video ─────────────────────────────────────────────────────────────────
