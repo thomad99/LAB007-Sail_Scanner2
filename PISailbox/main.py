@@ -92,19 +92,23 @@ def handle_commands(commands):
             t.start()
 
         elif cmd == 'start_video':
-            if not video_active.is_set():
+            if not device_config.get("camera_enabled", False):
+                log.warning("start_video ignored — camera master switch is OFF")
+            elif video_active.is_set():
+                log.info("Video already recording")
+            else:
                 dur = device_config.get("video_duration_seconds", 60)
                 t = threading.Thread(
                     target=_do_record_video, args=(dur,), daemon=True, name="cmd-video"
                 )
                 t.start()
-            else:
-                log.info("Video already recording")
 
         elif cmd == 'stop_video':
-            # Signal video thread to stop (camera.py checks this event)
-            video_active.clear()
-            log.info("Video stop requested")
+            if not video_active.is_set():
+                log.info("stop_video ignored — not currently recording")
+            else:
+                video_active.clear()
+                log.info("Video stop requested")
 
 def _do_capture_photo():
     fix = gps_reader.current_fix if gps_reader else None
@@ -144,10 +148,11 @@ def gps_thread_fn():
             if not current_track_id:
                 import zoneinfo
                 est = zoneinfo.ZoneInfo("America/New_York")
-                track_name = f"{cfg.DEVICE_ID} — {datetime.datetime.now(est).strftime('%Y-%m-%d %H:%M')} ET"
+                now_est = datetime.datetime.now(est)
+                track_name = f"{cfg.DEVICE_ID} — {now_est.strftime('%Y-%m-%d %H:%M')} ET"
                 current_track_id = uploader_inst.start_track(name=track_name)
                 if current_track_id:
-                    log.info(f"Track opened: id={current_track_id}")
+                    log.info(f"▶ Track STARTED  id={current_track_id}  name='{track_name}'  at {now_est.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                 else:
                     log.warning("Could not open track, will retry")
                     shutdown_event.wait(5)
@@ -166,15 +171,22 @@ def gps_thread_fn():
         else:
             # Tracking inactive — if we had an open track, close it
             if current_track_id:
+                import zoneinfo
+                est = zoneinfo.ZoneInfo("America/New_York")
+                now_est = datetime.datetime.now(est)
                 uploader_inst.stop_track()
+                log.info(f"⏹ Track STOPPED  id={current_track_id}  at {now_est.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                 current_track_id = None
-                log.info("Track closed")
 
         shutdown_event.wait(poll_s)
 
     # Clean shutdown
     if current_track_id:
+        import zoneinfo
+        est = zoneinfo.ZoneInfo("America/New_York")
+        now_est = datetime.datetime.now(est)
         uploader_inst.stop_track()
+        log.info(f"⏹ Track STOPPED (shutdown)  id={current_track_id}  at {now_est.strftime('%Y-%m-%d %H:%M:%S %Z')}")
     gps_reader.stop()
     log.info("GPS thread stopped")
 
@@ -195,8 +207,8 @@ def camera_thread_fn():
             shutdown_event.wait(10)
             continue
 
-        # Scheduled photo session
-        if now >= next_photo_session:
+        # Scheduled photo session (only when auto-photo is enabled)
+        if device_config.get("camera_auto_photo", False) and now >= next_photo_session:
             interval_s = device_config.get("photo_interval_seconds", 30)
             duration_m = device_config.get("photo_session_minutes", 60)
             next_photo_session = now + duration_m * 60
@@ -208,8 +220,9 @@ def camera_thread_fn():
                 )
             threading.Thread(target=_run_session, daemon=True, name="photo-session").start()
 
-        # Scheduled video recording (only if not already recording)
-        video_sched = device_config.get("video_enabled", False)
+        # Scheduled video recording — needs camera enabled AND auto-record on
+        video_sched = device_config.get("camera_enabled", False) and \
+                      device_config.get("video_auto_record", False)
         if video_sched and not video_active.is_set() and now >= next_video:
             v_interval = device_config.get("video_interval_minutes", 10) * 60
             v_duration = device_config.get("video_duration_seconds", 60)

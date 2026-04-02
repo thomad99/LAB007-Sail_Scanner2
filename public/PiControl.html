@@ -149,6 +149,7 @@
         .photo-thumb {
             border-radius: 8px; overflow: hidden; aspect-ratio: 4/3;
             background: rgba(0,0,0,0.3); cursor: pointer; position: relative;
+            transition: outline 0.1s;
         }
         .photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.2s; }
         .photo-thumb:hover img { transform: scale(1.05); }
@@ -157,6 +158,20 @@
             background: rgba(0,0,0,0.7); font-size: 0.65rem; padding: 3px 6px;
             color: rgba(255,255,255,0.7);
         }
+        .photo-thumb.selected { outline: 3px solid #2ecc71; }
+        .photo-thumb .sel-check {
+            display: none; position: absolute; top: 6px; left: 6px;
+            width: 20px; height: 20px; border-radius: 50%;
+            background: rgba(0,0,0,0.55); border: 2px solid rgba(255,255,255,0.5);
+            align-items: center; justify-content: center; font-size: 0.75rem; color: #fff;
+        }
+        .select-mode .photo-thumb .sel-check { display: flex; }
+        .photo-thumb.selected .sel-check { background: #2ecc71; border-color: #2ecc71; }
+        .gallery-toolbar {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            margin-bottom: 12px; min-height: 34px;
+        }
+        .gallery-toolbar .sel-count { font-size: 0.82rem; color: rgba(255,255,255,0.45); margin-left: auto; }
 
         /* Lightbox */
         .lightbox {
@@ -178,7 +193,7 @@
         /* GPS map */
         .gps-map { height: 320px; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }
         .track-row {
-            display: flex; align-items: center; justify-content: space-between;
+            display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
             padding: 9px 12px; border-radius: 8px; margin-bottom: 6px; cursor: pointer;
             background: rgba(255,255,255,0.04); border: 1px solid transparent; transition: all 0.12s;
         }
@@ -361,7 +376,7 @@
                     </div>
 
                     <div class="card">
-                        <div class="card-title">Camera — Photos</div>
+                        <div class="card-title">Camera</div>
                         <div class="toggle-row">
                             <span class="toggle-label">Camera Enabled</span>
                             <label class="toggle">
@@ -369,44 +384,9 @@
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
-                        <div class="config-grid" style="margin-top:14px;">
-                            <div class="field">
-                                <label>Photo interval (seconds)</label>
-                                <input type="number" id="cfgPhotoInterval" value="${config.photo_interval_seconds||30}" min="5" max="3600">
-                            </div>
-                            <div class="field">
-                                <label>Photo session duration (minutes)</label>
-                                <input type="number" id="cfgPhotoDuration" value="${config.photo_session_minutes||60}" min="1" max="1440">
-                            </div>
-                            <div class="field">
-                                <label>Upload batch every (minutes)</label>
-                                <input type="number" id="cfgPhotoUpload" value="${config.photo_upload_interval_minutes||5}" min="1" max="60">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-title">Camera — Video (stored locally on Pi only)</div>
-                        <div class="toggle-row">
-                            <span class="toggle-label">Video Recording Enabled</span>
-                            <label class="toggle">
-                                <input type="checkbox" id="cfgVideoEnabled" ${config.video_enabled?'checked':''}>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                        <div class="config-grid" style="margin-top:14px;">
-                            <div class="field">
-                                <label>Record every (minutes)</label>
-                                <input type="number" id="cfgVideoInterval" value="${config.video_interval_minutes||10}" min="1" max="1440">
-                            </div>
-                            <div class="field">
-                                <label>Recording duration (seconds)</label>
-                                <input type="number" id="cfgVideoDuration" value="${config.video_duration_seconds||60}" min="5" max="3600">
-                            </div>
-                        </div>
-                        <p style="font-size:0.75rem;color:rgba(255,255,255,0.3);margin-top:10px;">
-                            ⚠️ Video is stored on the Pi's SD card only and not uploaded (to conserve SIM data).
-                            Retrieve via SSH or when connected to local network.
+                        <p style="font-size:0.73rem;color:rgba(255,255,255,0.3);margin:8px 0 0;">
+                            Master switch for all camera features. Auto-capture schedules and manual controls
+                            are configured on the <strong>Photos</strong> tab.
                         </p>
                     </div>
 
@@ -543,9 +523,16 @@
                 <!-- PHOTOS TAB -->
                 <div class="tab-panel ${currentTab==='photos'?'active':''}" id="tab-photos">
 
+                    <!-- ── Manual Camera Controls ─────────────────────────────── -->
                     <div class="card">
                         <div class="card-title">Camera Controls</div>
-                        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                        ${!config.camera_enabled ? `
+                        <div style="font-size:0.78rem;color:rgba(231,76,60,0.85);background:rgba(231,76,60,0.1);
+                                    border:1px solid rgba(231,76,60,0.25);border-radius:6px;padding:8px 12px;margin-bottom:12px;">
+                            ⚠️ Camera is disabled — enable it in the <strong>Config</strong> tab first.
+                        </div>` : ''}
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+                                    ${!config.camera_enabled ? 'opacity:0.35;pointer-events:none;' : ''}">
                             <button class="btn success" onclick="sendCommand('capture_photo')">
                                 📸 Take Photo Now
                             </button>
@@ -553,7 +540,7 @@
                                     onclick="sendCommand('start_video')">
                                 ⏺ Start Video
                             </button>
-                            <button class="btn danger"  id="btnStopVideo"
+                            <button class="btn danger" id="btnStopVideo"
                                     onclick="sendCommand('stop_video')">
                                 ⏹ Stop Video
                             </button>
@@ -564,8 +551,100 @@
                         <div id="camCmdFeedback" style="font-size:0.82rem;color:#2ecc71;margin-top:8px;min-height:18px;"></div>
                     </div>
 
+                    <!-- ── Auto-capture — Photos ───────────────────────────────── -->
+                    <div class="card">
+                        <div class="card-title">Auto-capture — Photos</div>
+                        <div class="toggle-row">
+                            <span class="toggle-label">Auto photo sessions</span>
+                            <label class="toggle">
+                                <input type="checkbox" id="cfgCamAutoPhoto"
+                                       onchange="updatePhotoScheduleSection()"
+                                       ${config.camera_auto_photo?'checked':''}>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <p style="font-size:0.73rem;color:rgba(255,255,255,0.3);margin:6px 0 14px;">
+                            When on, Pi automatically takes photos on the schedule below and uploads them in batches.
+                        </p>
+                        <div id="photoScheduleSection"
+                             style="transition:opacity 0.2s;${config.camera_auto_photo?'':'opacity:0.35;pointer-events:none;'}">
+                            <div class="config-grid">
+                                <div class="field">
+                                    <label>Photo interval (seconds)</label>
+                                    <input type="number" id="cfgPhotoInterval"
+                                           value="${config.photo_interval_seconds||30}" min="5" max="3600">
+                                </div>
+                                <div class="field">
+                                    <label>Session duration (minutes)</label>
+                                    <input type="number" id="cfgPhotoDuration"
+                                           value="${config.photo_session_minutes||60}" min="1" max="1440">
+                                </div>
+                                <div class="field">
+                                    <label>Upload batch every (minutes)</label>
+                                    <input type="number" id="cfgPhotoUpload"
+                                           value="${config.photo_upload_interval_minutes||5}" min="1" max="60">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── Auto-capture — Video ────────────────────────────────── -->
+                    <div class="card">
+                        <div class="card-title">Auto-capture — Video</div>
+                        <div class="toggle-row">
+                            <span class="toggle-label">Auto-recording (scheduled)</span>
+                            <label class="toggle">
+                                <input type="checkbox" id="cfgVideoAutoRecord"
+                                       onchange="updateVideoScheduleSection()"
+                                       ${config.video_auto_record?'checked':''}>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <p style="font-size:0.73rem;color:rgba(255,255,255,0.3);margin:6px 0 14px;">
+                            When on, Pi records video automatically on the schedule below.
+                            Manual <strong>Start / Stop Video</strong> above always works (when camera enabled).
+                        </p>
+                        <div id="videoScheduleSection"
+                             style="transition:opacity 0.2s;${config.video_auto_record?'':'opacity:0.35;pointer-events:none;'}">
+                            <div class="config-grid">
+                                <div class="field">
+                                    <label>Record every (minutes)</label>
+                                    <input type="number" id="cfgVideoInterval"
+                                           value="${config.video_interval_minutes||10}" min="1" max="1440">
+                                </div>
+                                <div class="field">
+                                    <label>Recording duration (seconds)</label>
+                                    <input type="number" id="cfgVideoDuration"
+                                           value="${config.video_duration_seconds||60}" min="5" max="3600">
+                                </div>
+                            </div>
+                        </div>
+                        <p style="font-size:0.73rem;color:rgba(255,255,255,0.3);margin-top:14px;">
+                            ⚠️ Video is stored on the Pi's SD card only and not uploaded (to conserve SIM data).
+                        </p>
+                        <div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);
+                                    display:flex;align-items:center;gap:12px;">
+                            <button class="btn success" onclick="saveAutoCaptureConfig()">
+                                💾 Save Auto-capture Settings
+                            </button>
+                            <span class="save-msg" id="saveMsgCapture"></span>
+                        </div>
+                    </div>
+
+                    <!-- ── Photo Gallery ───────────────────────────────────────── -->
                     <div class="card">
                         <div class="card-title">Uploaded Photos <span id="photoCount" style="color:rgba(255,255,255,0.3)"></span></div>
+                        <div class="gallery-toolbar" id="galleryToolbar">
+                            <button class="btn" style="font-size:0.78rem;padding:6px 12px;" onclick="toggleSelectAll()">
+                                ☑ Select All
+                            </button>
+                            <button class="btn danger" id="btnDeleteSelected"
+                                    style="font-size:0.78rem;padding:6px 12px;display:none;"
+                                    onclick="deleteSelectedPhotos()">
+                                🗑 Delete Selected
+                            </button>
+                            <span class="sel-count" id="selCount"></span>
+                        </div>
                         <div class="photo-grid" id="photoGrid">
                             <div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</div>
                         </div>
@@ -734,12 +813,13 @@
             auto_track:                     document.getElementById('cfgAutoTrack').checked,
             gps_poll_seconds:               parseInt(document.getElementById('cfgGpsPoll').value)        || 10,
             camera_enabled:                 document.getElementById('cfgCamEnabled').checked,
-            photo_interval_seconds:         parseInt(document.getElementById('cfgPhotoInterval').value)  || 30,
-            photo_session_minutes:          parseInt(document.getElementById('cfgPhotoDuration').value)  || 60,
-            photo_upload_interval_minutes:  parseInt(document.getElementById('cfgPhotoUpload').value)    || 5,
-            video_enabled:                  document.getElementById('cfgVideoEnabled').checked,
-            video_interval_minutes:         parseInt(document.getElementById('cfgVideoInterval').value)  || 10,
-            video_duration_seconds:         parseInt(document.getElementById('cfgVideoDuration').value)  || 60,
+            camera_auto_photo:              (document.getElementById('cfgCamAutoPhoto')||{}).checked || false,
+            photo_interval_seconds:         parseInt((document.getElementById('cfgPhotoInterval')||{}).value) || 30,
+            photo_session_minutes:          parseInt((document.getElementById('cfgPhotoDuration')||{}).value) || 60,
+            photo_upload_interval_minutes:  parseInt((document.getElementById('cfgPhotoUpload')||{}).value)   || 5,
+            video_auto_record:              (document.getElementById('cfgVideoAutoRecord')||{}).checked || false,
+            video_interval_minutes:         parseInt((document.getElementById('cfgVideoInterval')||{}).value) || 10,
+            video_duration_seconds:         parseInt((document.getElementById('cfgVideoDuration')||{}).value) || 60,
             // Carry over SIM fields unchanged
             sim_apn:                        existingConfig.sim_apn                     || '',
             sim_apn_user:                   existingConfig.sim_apn_user                || '',
@@ -755,41 +835,143 @@
             });
             await resp.json();
             d.config = config;
-            const msg = document.getElementById('saveMsg');
-            msg.textContent = '✅ Saved — Pi will pick up changes within ' + config.gps_poll_seconds + 's';
-            setTimeout(() => { if(msg) msg.textContent = ''; }, 5000);
+            // Update whichever save message is visible
+            ['saveMsg','saveMsgCapture'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) { el.textContent = '✅ Saved — Pi picks up in ~' + config.gps_poll_seconds + 's';
+                          setTimeout(() => { if(el) el.textContent = ''; }, 5000); }
+            });
             await loadDevices();
         } catch(e) {
             alert('Save failed: ' + e.message);
         }
     }
 
+    async function saveAutoCaptureConfig() {
+        await saveConfig();
+    }
+
     // ── Load photos ───────────────────────────────────────────────────────────
+    let _photoData      = [];   // [{id, storage_path, captured_at, ...}]
+    let _selectedIds    = new Set();
+
     async function loadPhotos() {
         const d = selectedDevice;
         if (!d) return;
+        _selectedIds.clear();
         const grid = document.getElementById('photoGrid');
         if (!grid) return;
         grid.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</div>';
 
-        const resp = await fetch(`/api/pi/devices/${encodeURIComponent(d.device_id)}/photos?limit=100`);
-        const photos = await resp.json();
+        const resp = await fetch(`/api/pi/devices/${encodeURIComponent(d.device_id)}/photos?limit=200`);
+        _photoData = await resp.json();
 
         const countEl = document.getElementById('photoCount');
-        if (countEl) countEl.textContent = `(${photos.length})`;
+        if (countEl) countEl.textContent = `(${_photoData.length})`;
 
-        if (!photos.length) {
+        _renderPhotoGrid();
+        _updateSelectionUI();
+    }
+
+    function _renderPhotoGrid() {
+        const grid = document.getElementById('photoGrid');
+        if (!grid) return;
+        if (!_photoData.length) {
             grid.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">No photos uploaded yet.</div>';
             return;
         }
-
-        grid.innerHTML = photos.map(p => {
-            const t = p.captured_at ? fmtDateTime(p.captured_at) + ' ET' : '—';
-            return `<div class="photo-thumb" onclick="openLightbox('${p.storage_path}','${esc(t)}')">
+        grid.className = 'photo-grid' + (_selectedIds.size > 0 || _photoData.length ? ' select-mode' : '');
+        grid.innerHTML = _photoData.map(p => {
+            const t   = p.captured_at ? fmtDateTime(p.captured_at) + ' ET' : '—';
+            const sel = _selectedIds.has(p.id) ? 'selected' : '';
+            return `<div class="photo-thumb ${sel}" data-id="${p.id}"
+                        onclick="togglePhotoSelect(event,${p.id},'${p.storage_path}','${esc(t)}')">
+                <span class="sel-check">✓</span>
                 <img src="${p.storage_path}" alt="capture" loading="lazy">
                 <div class="photo-time">${fmtTime(p.captured_at||p.uploaded_at)} ET</div>
             </div>`;
         }).join('');
+        // Always show checkboxes
+        grid.classList.add('select-mode');
+    }
+
+    function togglePhotoSelect(e, id, src, caption) {
+        // Click on the checkbox circle always selects
+        if (e.target.classList.contains('sel-check')) {
+            _toggleId(id);
+            return;
+        }
+        // If in multi-select mode, toggle selection; otherwise open lightbox
+        if (_selectedIds.size > 0) {
+            _toggleId(id);
+        } else {
+            openLightbox(src, caption);
+        }
+    }
+
+    function _toggleId(id) {
+        if (_selectedIds.has(id)) _selectedIds.delete(id);
+        else                       _selectedIds.add(id);
+        // Update just the affected thumb
+        const thumb = document.querySelector(`.photo-thumb[data-id="${id}"]`);
+        if (thumb) thumb.classList.toggle('selected', _selectedIds.has(id));
+        _updateSelectionUI();
+    }
+
+    function toggleSelectAll() {
+        const btn = document.querySelector('#galleryToolbar .btn');
+        if (_selectedIds.size === _photoData.length && _photoData.length > 0) {
+            // Deselect all
+            _selectedIds.clear();
+            document.querySelectorAll('.photo-thumb').forEach(t => t.classList.remove('selected'));
+            if (btn) btn.textContent = '☑ Select All';
+        } else {
+            // Select all
+            _photoData.forEach(p => _selectedIds.add(p.id));
+            document.querySelectorAll('.photo-thumb').forEach(t => t.classList.add('selected'));
+            if (btn) btn.textContent = '☐ Deselect All';
+        }
+        _updateSelectionUI();
+    }
+
+    function _updateSelectionUI() {
+        const n      = _selectedIds.size;
+        const total  = _photoData.length;
+        const delBtn = document.getElementById('btnDeleteSelected');
+        const countEl = document.getElementById('selCount');
+        const selBtn  = document.querySelector('#galleryToolbar .btn');
+        if (delBtn)  { delBtn.style.display = n > 0 ? '' : 'none';
+                       delBtn.textContent = `🗑 Delete Selected (${n})`; }
+        if (countEl)  countEl.textContent = n > 0 ? `${n} of ${total} selected` : `${total} photo${total!==1?'s':''}`;
+        if (selBtn && n < total) selBtn.textContent = '☑ Select All';
+    }
+
+    async function deleteSelectedPhotos() {
+        const n = _selectedIds.size;
+        if (!n) return;
+        if (!confirm(`Permanently delete ${n} photo${n!==1?'s':''}? This cannot be undone.`)) return;
+
+        const d = selectedDevice;
+        const ids = Array.from(_selectedIds);
+        try {
+            const resp = await fetch(`/api/pi/devices/${encodeURIComponent(d.device_id)}/photos`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids })
+            });
+            const result = await resp.json();
+            if (!resp.ok) throw new Error(result.error || 'Delete failed');
+
+            // Remove from local data and re-render
+            _photoData = _photoData.filter(p => !_selectedIds.has(p.id));
+            _selectedIds.clear();
+            const countEl = document.getElementById('photoCount');
+            if (countEl) countEl.textContent = `(${_photoData.length})`;
+            _renderPhotoGrid();
+            _updateSelectionUI();
+        } catch (e) {
+            alert('Delete failed: ' + e.message);
+        }
     }
 
     // ── Delete device ─────────────────────────────────────────────────────────
@@ -925,16 +1107,40 @@
             }
 
             listEl.innerHTML = tracks.map(t => {
-                const pts  = t.point_count || 0;
-                const live = !t.ended_at;
-                const start = t.started_at ? fmtDateTime(t.started_at) + ' ET' : '—';
+                const pts    = t.point_count || 0;
+                const live   = !t.ended_at;
+                const start  = t.started_at ? fmtDateTime(t.started_at) + ' ET' : '—';
+                const stop   = t.ended_at   ? fmtDateTime(t.ended_at)   + ' ET' : null;
                 const maxSpd = t.max_speed_ms ? (t.max_speed_ms * 1.94384).toFixed(1) + ' kn' : '—';
+
+                // Duration string
+                let dur = '';
+                if (t.started_at && t.ended_at) {
+                    const secs = Math.round((new Date(t.ended_at) - new Date(t.started_at)) / 1000);
+                    const h = Math.floor(secs/3600), m = Math.floor((secs%3600)/60), s = secs%60;
+                    dur = h ? `${h}h ${m}m` : m ? `${m}m ${s}s` : `${s}s`;
+                }
+
+                const stopRow = stop
+                    ? `<div class="track-meta" style="color:rgba(255,255,255,0.35);">
+                           ⏹ Stopped: ${stop}${dur ? ' · '+dur : ''}
+                       </div>`
+                    : '';
+
+                const forceStopBtn = live
+                    ? `<button class="btn danger" style="font-size:0.7rem;padding:3px 8px;margin-top:6px;"
+                               onclick="event.stopPropagation();forceStopTrack(${t.id})">Force Stop</button>`
+                    : '';
+
                 return `<div class="track-row ${gpsSelectedTrack===t.id?'active':''}" onclick="selectGpsTrack(${t.id})">
-                    <div>
+                    <div style="flex:1;min-width:0;">
                         <div class="track-name">${esc(t.name||'Track '+t.id)}</div>
-                        <div class="track-meta">${start} · ${pts} pts · max ${maxSpd}</div>
+                        <div class="track-meta">▶ Started: ${start}</div>
+                        ${stopRow}
+                        <div class="track-meta" style="margin-top:3px;">${pts} pts · max ${maxSpd}</div>
+                        ${forceStopBtn}
                     </div>
-                    <span class="track-badge ${live?'':'ended'}">${live?'🟢 Live':'Ended'}</span>
+                    <span class="track-badge ${live?'':'ended'}">${live?'🟢 Live':'⏹ Ended'}</span>
                 </div>`;
             }).join('');
 
@@ -943,6 +1149,20 @@
 
         } catch(e) {
             if (listEl) listEl.innerHTML = `<div style="color:#e74c3c;font-size:0.85rem;">Error: ${e.message}</div>`;
+        }
+    }
+
+    async function forceStopTrack(trackId) {
+        if (!confirm('Force-stop this track? Use this when the Pi went offline without closing the track.')) return;
+        try {
+            const resp = await fetch(`/api/tracks/${trackId}/stop`, { method: 'PATCH' });
+            if (!resp.ok) {
+                const err = await resp.json();
+                throw new Error(err.error || 'Failed');
+            }
+            await loadGpsTracks();
+        } catch(e) {
+            alert('Force stop failed: ' + e.message);
         }
     }
 
@@ -979,6 +1199,22 @@
     // Initialise video buttons to "not recording" when the Photos tab renders
     function initVideoButtons() {
         setVideoButtons(false);
+    }
+
+    function updateVideoAutoSection() {
+        const master  = document.getElementById('cfgVideoEnabled');
+        const section = document.getElementById('videoAutoSection');
+        if (!master || !section) return;
+        section.style.opacity       = master.checked ? '1'    : '0.35';
+        section.style.pointerEvents = master.checked ? 'auto' : 'none';
+    }
+
+    function updateVideoScheduleSection() {
+        const auto    = document.getElementById('cfgVideoAutoRecord');
+        const section = document.getElementById('videoScheduleSection');
+        if (!auto || !section) return;
+        section.style.opacity       = auto.checked ? '1'    : '0.35';
+        section.style.pointerEvents = auto.checked ? 'auto' : 'none';
     }
 
     function setTrackingButtons(isTracking) {

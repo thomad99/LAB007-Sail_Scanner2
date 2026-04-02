@@ -5645,10 +5645,12 @@ function defaultPiConfig() {
         auto_track: false,                  // start GPS tracking automatically on boot
         gps_poll_seconds: 10,
         camera_enabled: false,
+        camera_auto_photo: false,
         photo_interval_seconds: 30,
         photo_session_minutes: 60,
         photo_upload_interval_minutes: 5,
         video_enabled: false,
+        video_auto_record: false,
         video_interval_minutes: 10,
         video_duration_seconds: 60,
         sim_apn: '',
@@ -5890,6 +5892,52 @@ app.get('/api/pi/devices/:deviceId/photos', async (req, res) => {
         );
         res.json(result.rows);
     } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Bulk-delete photos for a device
+app.delete('/api/pi/devices/:deviceId/photos', express.json(), async (req, res) => {
+    try {
+        const { ids } = req.body;
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ error: 'ids array required' });
+        }
+
+        // Fetch storage paths before deleting so we can remove the files
+        const placeholders = ids.map((_, i) => `$${i + 2}`).join(',');
+        const rows = await pool.query(
+            `SELECT id, storage_path FROM pi_photos WHERE device_id = $1 AND id IN (${placeholders})`,
+            [req.params.deviceId, ...ids]
+        );
+
+        // Delete DB records
+        await pool.query(
+            `DELETE FROM pi_photos WHERE device_id = $1 AND id IN (${placeholders})`,
+            [req.params.deviceId, ...ids]
+        );
+
+        // Delete files from disk (storage_path is a web path like /pi_captures/...)
+        let filesDeleted = 0;
+        for (const row of rows.rows) {
+            if (row.storage_path) {
+                // Convert web path → absolute filesystem path
+                const relPath = row.storage_path.replace(/^\/pi_captures\//, '');
+                const absPath = path.join(PI_CAPTURES_DIR, relPath);
+                try {
+                    if (fs.existsSync(absPath)) {
+                        fs.unlinkSync(absPath);
+                        filesDeleted++;
+                    }
+                } catch (e) {
+                    console.warn(`Could not delete file ${absPath}: ${e.message}`);
+                }
+            }
+        }
+
+        res.json({ ok: true, deleted: rows.rows.length, filesDeleted });
+    } catch (err) {
+        console.error('Pi photo delete error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
