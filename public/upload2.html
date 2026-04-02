@@ -356,6 +356,19 @@
 // ── State ────────────────────────────────────────────────────────
 let selectedFiles = [];
 let scanning = false;
+let sessionId = null;  // set at scan-start, groups all files from one batch
+
+function getMetadata() {
+    return {
+        date:              (document.getElementById('metaDate')?.value       || '').trim(),
+        regatta_name:      (document.getElementById('metaRegatta')?.value    || '').trim(),
+        location:          (document.getElementById('metaLocation')?.value   || '').trim(),
+        yacht_club:        (document.getElementById('metaYachtClub')?.value  || '').trim(),
+        photographer:      (document.getElementById('metaPhotographer')?.value || '').trim(),
+        website:           (document.getElementById('metaWebsite')?.value    || '').trim(),
+        tags:              (document.getElementById('metaTags')?.value       || '').trim(),
+    };
+}
 
 // ── Init ─────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -438,6 +451,9 @@ async function startScan() {
     if (!selectedFiles.length || scanning) return;
     scanning = true;
 
+    // New session ID per scan batch
+    sessionId = `u2-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+
     saveFields();
 
     const btn = document.getElementById('btnScan');
@@ -489,6 +505,20 @@ async function startScan() {
             if (hasHigh || sails.length > 0) found++; else none++;
 
             card.innerHTML = buildCard(file, sails, sails.length ? 'found' : 'none');
+
+            // Save to database (always, even when no sails detected so the scan is recorded)
+            try {
+                await fetch('/api/liveview-store-results', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sailNumbers: sails.map(s => s.number),
+                        sessionId,
+                        filename: file.name,
+                        metadata: getMetadata(),
+                    })
+                });
+            } catch(_) { /* non-fatal — scan result still shown */ }
         } catch(err) {
             card.innerHTML = buildCard(file, null, 'error', err.message);
             none++;

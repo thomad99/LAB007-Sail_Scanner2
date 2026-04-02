@@ -241,6 +241,22 @@ class GPSReader:
                 time.sleep(retry_interval)
         return False
 
+    def pause(self):
+        """Temporarily close serial port so PPP can use it."""
+        log.info("GPS: pausing serial port for PPP")
+        self._close()
+
+    def resume(self):
+        """Reopen serial port after PPP has finished."""
+        log.info("GPS: resuming serial port after PPP")
+        try:
+            self._open()
+            self._send_at("ATE0", wait_s=0.5)   # echo off
+            self.gps_engine_on = True            # GPS engine stays on through PPP
+            log.info("GPS: serial port resumed")
+        except Exception as e:
+            log.warning(f"GPS resume failed: {e} — will retry on next poll")
+
     def stop(self):
         self._running = False
         self.gps_engine_on = False

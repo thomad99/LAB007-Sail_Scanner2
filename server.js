@@ -888,11 +888,20 @@ async function createLiveviewResultsTable() {
                 session_id TEXT
             )
         `);
-        const col = await pool.query(`
-            SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'liveview_results' AND column_name = 'session_id');
-        `);
-        if (!col.rows[0].exists) {
-            await pool.query(`ALTER TABLE liveview_results ADD COLUMN session_id TEXT`);
+        // Migration: add columns if they don't exist yet
+        const additions = [
+            { col: 'session_id', def: 'TEXT' },
+            { col: 'filename',   def: 'TEXT' },
+            { col: 'metadata',   def: 'JSONB DEFAULT \'{}\'::jsonb' },
+        ];
+        for (const { col, def } of additions) {
+            const r = await pool.query(
+                `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='liveview_results' AND column_name=$1)`,
+                [col]
+            );
+            if (!r.rows[0].exists) {
+                await pool.query(`ALTER TABLE liveview_results ADD COLUMN ${col} ${def}`);
+            }
         }
         console.log('Liveview results table created or verified');
     } catch (err) {
@@ -1195,15 +1204,17 @@ app.post('/api/liveview-scan', upload.single('image'), async (req, res) => {
 // Store LiveView scan results in Postgres (timestamp added server-side)
 app.post('/api/liveview-store-results', express.json(), async (req, res) => {
     const sailNumbers = req.body.sailNumbers;
-    const sessionId = req.body.sessionId && String(req.body.sessionId).trim() ? String(req.body.sessionId).trim() : null;
+    const sessionId  = req.body.sessionId && String(req.body.sessionId).trim() ? String(req.body.sessionId).trim() : null;
+    const filename   = req.body.filename   ? String(req.body.filename).trim()  : null;
+    const metadata   = req.body.metadata && typeof req.body.metadata === 'object' ? req.body.metadata : null;
     if (!Array.isArray(sailNumbers)) {
         return res.status(400).json({ error: 'sailNumbers array required' });
     }
     try {
         await createLiveviewResultsTable();
         await pool.query(
-            'INSERT INTO liveview_results (sail_numbers, session_id) VALUES ($1, $2)',
-            [sailNumbers.map(String), sessionId]
+            'INSERT INTO liveview_results (sail_numbers, session_id, filename, metadata) VALUES ($1, $2, $3, $4)',
+            [sailNumbers.map(String), sessionId, filename, metadata ? JSON.stringify(metadata) : null]
         );
         res.json({ ok: true });
     } catch (err) {
@@ -1436,31 +1447,104 @@ function polygonToBoundingBox(polygon) {
     return null;
 }
 
+// Return axis-aligned rect {minX, minY, maxX, maxY} from an 8-coord bounding box
+function bbRect(bb) {
+    return {
+        minX: Math.min(bb[0], bb[2], bb[4], bb[6]),
+        minY: Math.min(bb[1], bb[3], bb[5], bb[7]),
+        maxX: Math.max(bb[0], bb[2], bb[4], bb[6]),
+        maxY: Math.max(bb[1], bb[3], bb[5], bb[7]),
+    };
+}
+
+// Merge two bounding boxes into the smallest enclosing box
+function mergeBoundingBoxes(bb1, bb2) {
+    const r1 = bbRect(bb1), r2 = bbRect(bb2);
+    const minX = Math.min(r1.minX, r2.minX), minY = Math.min(r1.minY, r2.minY);
+    const maxX = Math.max(r1.maxX, r2.maxX), maxY = Math.max(r1.maxY, r2.maxY);
+    return [minX, minY, maxX, minY, maxX, maxY, minX, maxY];
+}
+
+// Two digit fragments are "part of the same sail number" if they occupy the same
+// horizontal band and the gap between them is small relative to their height.
+function areSailFragmentsNearby(bb1, bb2) {
+    const r1 = bbRect(bb1), r2 = bbRect(bb2);
+    const h1 = r1.maxY - r1.minY, h2 = r2.maxY - r2.minY;
+    const avgH = (h1 + h2) / 2 || 1;
+    // Must share a significant vertical overlap
+    const overlapY = Math.min(r1.maxY, r2.maxY) - Math.max(r1.minY, r2.minY);
+    if (overlapY < avgH * 0.3) return false;
+    // Must be horizontally close — gap ≤ 2× average height
+    const gap = Math.max(r1.minX, r2.minX) - Math.min(r1.maxX, r2.maxX);
+    return gap < avgH * 2;
+}
+
 // Extract sail numbers from Document Intelligence analyze result; ignore standard sail text (C420, USA, Nacra15, US)
 function extractSailNumbersFromDocumentIntelligence(analyzeResult) {
     const candidates = [];
     if (!analyzeResult || !analyzeResult.pages) return candidates;
+
     for (const page of analyzeResult.pages) {
         const lines = page.lines || [];
+        const digitLines = []; // digit-only fragments for merge pass
+
         for (const line of lines) {
-            const content = (line.content || line.text || '').trim();
-            const normalized = content.toLowerCase().trim();
+            const raw = (line.content || line.text || '').trim();
+            const normalized = raw.toLowerCase();
             if (SAIL_TEXT_TO_IGNORE.has(normalized)) continue;
-            if (!/^\d{1,6}$/.test(content)) continue;
+
             const polygon = line.polygon || line.boundingPolygon || line.boundingBox;
             const boundingBox = polygon ? polygonToBoundingBox(Array.isArray(polygon) ? polygon : [polygon]) : null;
-            if (boundingBox) {
-                candidates.push({
-                    number: content,
-                    confidence: line.confidence ?? 0.9,
-                    boundingBox
-                });
+            if (!boundingBox) continue;
+
+            // Case 1: pure digit string (1–8 digits) — direct match
+            if (/^\d{1,8}$/.test(raw)) {
+                candidates.push({ number: raw, confidence: line.confidence ?? 0.9, boundingBox });
+                digitLines.push({ number: raw, confidence: line.confidence ?? 0.9, boundingBox });
+                continue;
+            }
+
+            // Case 2: digits separated by spaces — large close-up sail numbers
+            // e.g. Azure returns "1 2 3 4 5" for "12345" painted large on a sail
+            const stripped = raw.replace(/\s+/g, '');
+            if (/^\d{2,8}$/.test(stripped)) {
+                candidates.push({ number: stripped, confidence: (line.confidence ?? 0.9) * 0.9, boundingBox });
+                digitLines.push({ number: stripped, confidence: (line.confidence ?? 0.9) * 0.9, boundingBox });
+            }
+        }
+
+        // Pass 2: merge pairs of spatially adjacent digit fragments into a longer number.
+        // This handles large single-sail photos where one number is split across OCR lines.
+        for (let i = 0; i < digitLines.length; i++) {
+            for (let j = i + 1; j < digitLines.length; j++) {
+                if (!areSailFragmentsNearby(digitLines[i].boundingBox, digitLines[j].boundingBox)) continue;
+                // Try both orderings (left-to-right) based on X position
+                const r1 = bbRect(digitLines[i].boundingBox), r2 = bbRect(digitLines[j].boundingBox);
+                const [first, second] = r1.minX <= r2.minX ? [digitLines[i], digitLines[j]] : [digitLines[j], digitLines[i]];
+                const merged = first.number + second.number;
+                if (/^\d{2,8}$/.test(merged) && isValidSailNumber(merged)) {
+                    candidates.push({
+                        number: merged,
+                        confidence: Math.min(first.confidence, second.confidence) * 0.95,
+                        boundingBox: mergeBoundingBoxes(first.boundingBox, second.boundingBox)
+                    });
+                }
             }
         }
     }
-    // Prefer valid sail numbers (2–6 digits, range 10–999999), then any digit line; sort by confidence
-    const valid = candidates.filter((c) => isValidSailNumber(c.number));
-    const rest = candidates.filter((c) => !isValidSailNumber(c.number));
+
+    // Deduplicate: keep highest-confidence entry per unique number
+    const seen = new Map();
+    for (const c of candidates) {
+        if (!seen.has(c.number) || (seen.get(c.number).confidence < c.confidence)) {
+            seen.set(c.number, c);
+        }
+    }
+    const deduped = Array.from(seen.values());
+
+    // Prefer valid sail numbers (2–8 digits, range 10–999999), then any digit line; sort by confidence
+    const valid = deduped.filter((c) => isValidSailNumber(c.number));
+    const rest  = deduped.filter((c) => !isValidSailNumber(c.number));
     return [...valid.sort((a, b) => (b.confidence || 0) - (a.confidence || 0)), ...rest.sort((a, b) => (b.confidence || 0) - (a.confidence || 0))];
 }
 
@@ -1536,9 +1620,9 @@ function sanitizeForFilename(str) {
 // Helper function to validate sail numbers
 function isValidSailNumber(number) {
     const num = parseInt(number);
-    // Typical sail number ranges
-    return num >= 10 && num <= 999999 &&
-        number.length >= 2 && number.length <= 6;
+    // Typical sail number ranges; allow up to 8 digits for large-class boats
+    return num >= 10 && num <= 99999999 &&
+        number.length >= 2 && number.length <= 8;
 }
 
 // Helper function to calculate group bounding box

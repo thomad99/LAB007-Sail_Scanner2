@@ -42,6 +42,7 @@ from camera   import CameraHandler
 from uploader import Uploader
 from device   import DeviceConfig
 from sim      import SIMManager
+import ppp as ppp_mgr
 
 # ── Globals ───────────────────────────────────────────────────────────────────
 shutdown_event    = threading.Event()
@@ -200,13 +201,29 @@ def gps_thread_fn():
             else:
                 log.info("GPS: no fix yet — waiting for satellites")
 
-            # Upload queued points to server every upload_s seconds
+            # Upload queued points every upload_s seconds
             now = time.time()
             if now >= next_gps_upload:
                 next_gps_upload = now + upload_s
-                queued = uploader_inst.flush_gps_queue()
-                if queued:
-                    log.info(f"GPS: uploaded {queued} point(s) to server")
+                if ppp_mgr.is_wifi_available():
+                    # WiFi is up — upload directly
+                    queued = uploader_inst.flush_gps_queue()
+                    if queued:
+                        log.info(f"GPS: uploaded {queued} point(s) via WiFi")
+                else:
+                    # No WiFi — briefly connect PPP, upload, disconnect
+                    log.info("GPS: no WiFi — connecting PPP for upload")
+                    gps_reader.pause()
+                    try:
+                        if ppp_mgr.connect():
+                            queued = uploader_inst.flush_gps_queue()
+                            if queued:
+                                log.info(f"GPS: uploaded {queued} point(s) via PPP")
+                            ppp_mgr.disconnect()
+                        else:
+                            log.warning("GPS: PPP connect failed — points stay queued")
+                    finally:
+                        gps_reader.resume()
 
         else:
             # Tracking inactive — if we had an open track, close it
