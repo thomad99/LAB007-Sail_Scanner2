@@ -390,6 +390,18 @@
                         </p>
                     </div>
 
+                    <div class="card" style="border:1px solid rgba(231,76,60,0.2);">
+                        <div class="card-title" style="color:#e74c3c;">Device Actions</div>
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                            <button class="btn" style="background:rgba(241,196,15,0.15);border:1px solid rgba(241,196,15,0.35);color:#f1c40f;"
+                                    onclick="restartDevice()">🔄 Restart Service</button>
+                            <span id="restartMsg" style="font-size:0.8rem;color:rgba(255,255,255,0.4);"></span>
+                        </div>
+                        <p style="font-size:0.73rem;color:rgba(255,255,255,0.3);margin:8px 0 0;">
+                            The Pi will restart its service on the next config poll (~10 s). Systemd will bring it back up automatically.
+                        </p>
+                    </div>
+
                     <div class="save-bar">
                         <button class="btn success" onclick="saveConfig()">💾 Save &amp; Push to Device</button>
                         <button class="btn danger" onclick="deleteDevice('${esc(d.device_id)}')">🗑 Remove Device</button>
@@ -520,6 +532,19 @@
                             <div class="stat-box">
                                 <div class="stat-label">OS</div>
                                 <div class="stat-val" style="font-size:0.72rem;">${esc((d.os_info||'—').substring(0,30))}</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-label">Service Started</div>
+                                ${(()=>{
+                                    if (!d.service_started_at) return `<div class="stat-val" style="color:rgba(255,255,255,0.3)">—</div>`;
+                                    const start = new Date(d.service_started_at);
+                                    const uptimeMs = Date.now() - start.getTime();
+                                    const h = Math.floor(uptimeMs / 3600000);
+                                    const m = Math.floor((uptimeMs % 3600000) / 60000);
+                                    const uptimeStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
+                                    return `<div class="stat-val" style="font-size:0.75rem;">${fmtTime(d.service_started_at)} ET</div>
+                                            <div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Up ${uptimeStr}</div>`;
+                                })()}
                             </div>
                             <div class="stat-box">
                                 <div class="stat-label">Registered</div>
@@ -1059,6 +1084,30 @@
             if (data.ok && cmd === 'stop_video')   setVideoButtons(false);
         } catch(e) {
             if (fb) { fb.textContent = '❌ ' + e.message; setTimeout(() => { if(fb) fb.textContent=''; }, 4000); }
+        }
+    }
+
+    async function restartDevice() {
+        const d = selectedDevice;
+        if (!d) return;
+        const msg = document.getElementById('restartMsg');
+        if (!confirm(`Restart the PiSailBox service on "${d.name || d.device_id}"?\n\nThe device will go offline briefly then reconnect automatically.`)) return;
+        if (msg) msg.textContent = '⏳ Queuing restart…';
+        try {
+            const resp = await fetch(
+                `/api/pi/devices/${encodeURIComponent(d.device_id)}/command`,
+                { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ command: 'restart' }) }
+            );
+            const data = await resp.json();
+            if (msg) {
+                msg.textContent = data.ok
+                    ? '✅ Restart queued — Pi will restart within ~10s'
+                    : `❌ ${data.error}`;
+                setTimeout(() => { if (msg) msg.textContent = ''; }, 8000);
+            }
+        } catch(e) {
+            if (msg) { msg.textContent = '❌ ' + e.message; setTimeout(() => { if (msg) msg.textContent = ''; }, 5000); }
         }
     }
 

@@ -84,7 +84,7 @@ class Uploader:
             pass
         return ips
 
-    def register(self, os_info=None):
+    def register(self, os_info=None, started_at=None):
         """Register this device with the server and return its config dict."""
         import platform
         if os_info is None:
@@ -97,6 +97,7 @@ class Uploader:
             "name":         self.device_id,
             "ip_addresses": ip_addresses,
             "os_info":      os_info,
+            "started_at":   started_at,
         }
         try:
             resp = requests.post(

@@ -110,6 +110,12 @@ def handle_commands(commands):
                 video_active.clear()
                 log.info("Video stop requested")
 
+        elif cmd == 'restart':
+            log.info("Restart command received — exiting cleanly (systemd will restart)")
+            shutdown_event.set()
+            tracking_active.clear()
+            video_active.clear()
+
 def _do_capture_photo():
     fix = gps_reader.current_fix if gps_reader else None
     path = camera_handler.capture_photo(gps_fix=fix)
@@ -316,7 +322,8 @@ def _on_config_change(new_cfg):
 def main():
     global gps_reader, camera_handler, uploader_inst, device_config, sim_manager
 
-    log.info(f"PiSailBox starting — device={cfg.DEVICE_ID}  server={cfg.SERVER_URL}")
+    service_started_at = datetime.datetime.utcnow().isoformat() + "Z"
+    log.info(f"PiSailBox starting — device={cfg.DEVICE_ID}  server={cfg.SERVER_URL}  started={service_started_at}")
 
     os.makedirs(cfg.DATA_DIR,   exist_ok=True)
     os.makedirs(cfg.PHOTOS_DIR, exist_ok=True)
@@ -328,7 +335,7 @@ def main():
     log.info("Waiting for network…")
     initial_config = {}
     while not initial_config and not shutdown_event.is_set():
-        initial_config = uploader_inst.register()
+        initial_config = uploader_inst.register(started_at=service_started_at)
         if not initial_config:
             log.warning("Registration failed — retrying in 15s")
             shutdown_event.wait(15)

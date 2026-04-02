@@ -5636,7 +5636,8 @@ async function createPiTables() {
     await pool.query(`ALTER TABLE pi_devices ADD COLUMN IF NOT EXISTS sim_status        JSONB DEFAULT '{}'`);
     await pool.query(`ALTER TABLE pi_devices ADD COLUMN IF NOT EXISTS ip_addresses      JSONB DEFAULT '{}'`);
     await pool.query(`ALTER TABLE pi_devices ADD COLUMN IF NOT EXISTS pending_commands  JSONB DEFAULT '[]'`);
-    await pool.query(`ALTER TABLE pi_devices ADD COLUMN IF NOT EXISTS gps_status       JSONB DEFAULT '{}'`);
+    await pool.query(`ALTER TABLE pi_devices ADD COLUMN IF NOT EXISTS gps_status          JSONB DEFAULT '{}'`);
+    await pool.query(`ALTER TABLE pi_devices ADD COLUMN IF NOT EXISTS service_started_at  TIMESTAMPTZ`);
     console.log('✓ PiSailBox tables ready');
 }
 
@@ -5664,7 +5665,7 @@ function defaultPiConfig() {
 // Register / heartbeat — called by Pi on boot and periodically
 app.post('/api/pi/register', express.json(), async (req, res) => {
     try {
-        const { device_id, name, ip_address, ip_addresses, os_info } = req.body;
+        const { device_id, name, ip_address, ip_addresses, os_info, started_at } = req.body;
         if (!device_id) return res.status(400).json({ error: 'device_id required' });
 
         // Build a display IP — prefer the first non-loopback from ip_addresses map
@@ -5681,18 +5682,19 @@ app.post('/api/pi/register', express.json(), async (req, res) => {
         }
 
         const result = await pool.query(`
-            INSERT INTO pi_devices (device_id, name, ip_address, ip_addresses, os_info, last_seen, config)
-            VALUES ($1, $2, $3, $4, $5, NOW(), $6)
+            INSERT INTO pi_devices (device_id, name, ip_address, ip_addresses, os_info, last_seen, config, service_started_at)
+            VALUES ($1, $2, $3, $4, $5, NOW(), $6, $7)
             ON CONFLICT (device_id) DO UPDATE SET
-                name             = COALESCE(EXCLUDED.name, pi_devices.name),
-                ip_address       = EXCLUDED.ip_address,
-                ip_addresses     = EXCLUDED.ip_addresses,
-                os_info          = EXCLUDED.os_info,
-                last_seen        = NOW(),
-                pending_commands = '[]'
+                name                = COALESCE(EXCLUDED.name, pi_devices.name),
+                ip_address          = EXCLUDED.ip_address,
+                ip_addresses        = EXCLUDED.ip_addresses,
+                os_info             = EXCLUDED.os_info,
+                last_seen           = NOW(),
+                pending_commands    = '[]',
+                service_started_at  = COALESCE(EXCLUDED.service_started_at, pi_devices.service_started_at)
             RETURNING *
         `, [device_id, name || device_id, displayIp, JSON.stringify(ip_addresses || {}),
-            os_info || null, JSON.stringify(defaultPiConfig())]);
+            os_info || null, JSON.stringify(defaultPiConfig()), started_at || null]);
 
         const device = result.rows[0];
         const config = typeof device.config === 'string' ? JSON.parse(device.config) : device.config;
@@ -5730,7 +5732,7 @@ app.get('/api/pi/devices/:deviceId/config', async (req, res) => {
 app.post('/api/pi/devices/:deviceId/command', express.json(), async (req, res) => {
     try {
         const { command } = req.body;
-        const valid = ['start_track','stop_track','capture_photo','start_video','stop_video'];
+        const valid = ['start_track','stop_track','capture_photo','start_video','stop_video','restart'];
         if (!valid.includes(command)) {
             return res.status(400).json({ error: `Unknown command. Valid: ${valid.join(', ')}` });
         }
