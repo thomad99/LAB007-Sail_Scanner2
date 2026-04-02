@@ -5588,6 +5588,7 @@ async function initializeServer() {
         await createRegattasTable();
         await ensureRegattaNetworkDataTable();
         await createTrackerTables();
+        await createPiTables();
         await testS3Connection();
         console.log('✓ Server initialization complete');
     } catch (startupError) {
@@ -5595,6 +5596,239 @@ async function initializeServer() {
         console.error('Stack:', startupError.stack);
     }
 }
+
+// ─── PiSailBox Device Management ──────────────────────────────────────────────
+
+const PI_CAPTURES_DIR = path.join(__dirname, 'pi_captures');
+if (!fs.existsSync(PI_CAPTURES_DIR)) fs.mkdirSync(PI_CAPTURES_DIR, { recursive: true });
+
+// Serve stored Pi photos as static files
+app.use('/pi_captures', express.static(PI_CAPTURES_DIR));
+
+async function createPiTables() {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS pi_devices (
+            id          SERIAL PRIMARY KEY,
+            device_id   TEXT UNIQUE NOT NULL,
+            name        TEXT,
+            last_seen   TIMESTAMP,
+            ip_address  TEXT,
+            os_info     TEXT,
+            config      JSONB NOT NULL DEFAULT '{}',
+            created_at  TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    `);
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS pi_photos (
+            id          SERIAL PRIMARY KEY,
+            device_id   TEXT NOT NULL,
+            filename    TEXT NOT NULL,
+            captured_at TIMESTAMP,
+            uploaded_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            file_size   INTEGER,
+            storage_path TEXT,
+            lat         DOUBLE PRECISION,
+            lng         DOUBLE PRECISION
+        )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_pi_photos_device ON pi_photos(device_id)`);
+    // Migration: add sim_status column to existing tables
+    await pool.query(`ALTER TABLE pi_devices ADD COLUMN IF NOT EXISTS sim_status JSONB DEFAULT '{}'`);
+    console.log('✓ PiSailBox tables ready');
+}
+
+// Default config template for new devices
+function defaultPiConfig() {
+    return {
+        gps_poll_seconds: 10,
+        camera_enabled: false,
+        photo_interval_seconds: 30,
+        photo_session_minutes: 60,
+        photo_upload_interval_minutes: 5,
+        video_enabled: false,
+        video_interval_minutes: 10,
+        video_duration_seconds: 60,
+        sim_apn: '',           // APN for 4G connection (blank = auto)
+        sim_apn_user: '',      // APN username if required
+        sim_apn_pass: '',      // APN password if required
+        sim_status_interval_seconds: 60  // how often Pi reports SIM status
+    };
+}
+
+// Register / heartbeat — called by Pi on boot and periodically
+app.post('/api/pi/register', express.json(), async (req, res) => {
+    try {
+        const { device_id, name, ip_address, os_info } = req.body;
+        if (!device_id) return res.status(400).json({ error: 'device_id required' });
+
+        const result = await pool.query(`
+            INSERT INTO pi_devices (device_id, name, ip_address, os_info, last_seen, config)
+            VALUES ($1, $2, $3, $4, NOW(), $5)
+            ON CONFLICT (device_id) DO UPDATE SET
+                name       = COALESCE(EXCLUDED.name, pi_devices.name),
+                ip_address = EXCLUDED.ip_address,
+                os_info    = EXCLUDED.os_info,
+                last_seen  = NOW()
+            RETURNING *
+        `, [device_id, name || device_id, ip_address || null, os_info || null,
+            JSON.stringify(defaultPiConfig())]);
+
+        const device = result.rows[0];
+        const config = typeof device.config === 'string' ? JSON.parse(device.config) : device.config;
+        res.json({ ok: true, device_id: device.device_id, config });
+    } catch (err) {
+        console.error('Pi register error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get device config (polled by Pi)
+app.get('/api/pi/devices/:deviceId/config', async (req, res) => {
+    try {
+        const result = await pool.query(
+            `UPDATE pi_devices SET last_seen = NOW() WHERE device_id = $1 RETURNING config`,
+            [req.params.deviceId]
+        );
+        if (!result.rows.length) return res.status(404).json({ error: 'Device not found' });
+        const config = result.rows[0].config || defaultPiConfig();
+        res.json(config);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update device config (from admin panel)
+app.put('/api/pi/devices/:deviceId/config', express.json(), async (req, res) => {
+    try {
+        const result = await pool.query(
+            `UPDATE pi_devices SET config = $1 WHERE device_id = $2 RETURNING *`,
+            [JSON.stringify(req.body), req.params.deviceId]
+        );
+        if (!result.rows.length) return res.status(404).json({ error: 'Device not found' });
+        res.json({ ok: true, config: result.rows[0].config });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Rename a device
+app.patch('/api/pi/devices/:deviceId', express.json(), async (req, res) => {
+    try {
+        const { name } = req.body;
+        const result = await pool.query(
+            `UPDATE pi_devices SET name = $1 WHERE device_id = $2 RETURNING *`,
+            [name, req.params.deviceId]
+        );
+        res.json(result.rows[0] || {});
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// List all registered devices
+app.get('/api/pi/devices', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT d.*,
+                (SELECT COUNT(*) FROM pi_photos p WHERE p.device_id = d.device_id)::int AS photo_count,
+                NOW() - d.last_seen < INTERVAL '2 minutes' AS online
+            FROM pi_devices d
+            ORDER BY d.last_seen DESC NULLS LAST
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Pi reports SIM / modem status (called periodically by the Pi)
+app.post('/api/pi/devices/:deviceId/sim-status', express.json(), async (req, res) => {
+    try {
+        const status = req.body || {};
+        await pool.query(
+            `UPDATE pi_devices SET sim_status = $1, last_seen = NOW() WHERE device_id = $2`,
+            [JSON.stringify(status), req.params.deviceId]
+        );
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get latest SIM status for a device (used by admin panel)
+app.get('/api/pi/devices/:deviceId/sim-status', async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT sim_status FROM pi_devices WHERE device_id = $1`,
+            [req.params.deviceId]
+        );
+        if (!result.rows.length) return res.status(404).json({ error: 'Device not found' });
+        res.json(result.rows[0].sim_status || {});
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete a device
+app.delete('/api/pi/devices/:deviceId', async (req, res) => {
+    try {
+        await pool.query(`DELETE FROM pi_devices WHERE device_id = $1`, [req.params.deviceId]);
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Upload batch of photos from Pi (multipart, multiple files)
+app.post('/api/pi/devices/:deviceId/photos', upload.array('photos', 50), async (req, res) => {
+    try {
+        const deviceId = req.params.deviceId;
+        const files = req.files || [];
+        const meta = req.body.meta ? JSON.parse(req.body.meta) : [];  // [{captured_at, lat, lng}, ...]
+
+        const today = new Date().toISOString().slice(0, 10);
+        const deviceDir = path.join(PI_CAPTURES_DIR, deviceId, today);
+        if (!fs.existsSync(deviceDir)) fs.mkdirSync(deviceDir, { recursive: true });
+
+        const saved = [];
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const m = meta[i] || {};
+            const ts = m.captured_at ? new Date(m.captured_at).getTime() : Date.now();
+            const filename = `${ts}_${i}.jpg`;
+            const storagePath = path.join(deviceDir, filename);
+            fs.writeFileSync(storagePath, file.buffer);
+
+            const webPath = `/pi_captures/${deviceId}/${today}/${filename}`;
+            await pool.query(
+                `INSERT INTO pi_photos (device_id, filename, captured_at, file_size, storage_path, lat, lng)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+                [deviceId, filename, m.captured_at || new Date(), file.size,
+                 webPath, m.lat || null, m.lng || null]
+            );
+            saved.push(webPath);
+        }
+
+        res.json({ ok: true, saved: saved.length });
+    } catch (err) {
+        console.error('Pi photo upload error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// List photos for a device
+app.get('/api/pi/devices/:deviceId/photos', async (req, res) => {
+    try {
+        const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+        const result = await pool.query(
+            `SELECT * FROM pi_photos WHERE device_id = $1 ORDER BY captured_at DESC LIMIT $2`,
+            [req.params.deviceId, limit]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // ─── GPS Tracker ─────────────────────────────────────────────────────────────
 

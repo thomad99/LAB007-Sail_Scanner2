@@ -1,0 +1,4 @@
+pyserial>=3.5
+requests>=2.28.0
+# picamera2 is installed as a system package via apt — do NOT pip install it
+# sudo apt install -y python3-picamera2

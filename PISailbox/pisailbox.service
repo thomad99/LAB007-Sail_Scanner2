@@ -1,0 +1,23 @@
+[Unit]
+Description=PiSailBox GPS Tracker & Camera
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/pisailbox
+ExecStart=/usr/bin/python3 /opt/pisailbox/main.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Ensure the SIM7600 HAT has time to initialise before we start
+ExecStartPre=/bin/sleep 10
+
+# Environment — edit SERVER URL here or in /opt/pisailbox/config.py
+Environment=PISAILBOX_SERVER=https://lovesailing.ai
+
+[Install]
+WantedBy=multi-user.target
