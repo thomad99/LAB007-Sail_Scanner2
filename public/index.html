@@ -94,6 +94,62 @@
             line-height: 1;
         }
 
+        /* Tracker group — image header + sub-buttons */
+        .nav-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0;
+        }
+
+        .nav-group-header img {
+            width: 200px;
+            display: block;
+            transition: transform 0.3s ease;
+        }
+
+        .nav-group-header img:hover {
+            transform: scale(1.05);
+        }
+
+        .nav-group-items {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .nav-sub-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            width: 62px;
+            height: 60px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 10px;
+            color: white;
+            text-decoration: none;
+            font-size: 0.6rem;
+            font-weight: bold;
+            text-align: center;
+            letter-spacing: 0.3px;
+            transition: background 0.2s ease, transform 0.2s ease;
+            line-height: 1.2;
+            padding: 4px;
+        }
+
+        .nav-sub-btn:hover {
+            background: rgba(255,255,255,0.22);
+            transform: scale(1.08);
+        }
+
+        .nav-sub-btn .sub-icon {
+            font-size: 1.4rem;
+            line-height: 1;
+        }
+
         .tagline {
             margin-top: 50px;
             font-size: 1em;
@@ -155,6 +211,34 @@
         .mobile-menu a:hover {
             background-color: rgba(255, 255, 255, 0.25);
             transform: scale(1.05);
+        }
+
+        .mobile-menu .mobile-group {
+            width: 80%;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 14px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin: 6px 0;
+        }
+
+        .mobile-menu .mobile-group-label {
+            font-size: 0.7rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.35);
+            text-align: center;
+            padding-bottom: 4px;
+        }
+
+        .mobile-menu .mobile-group a {
+            width: 100%;
+            margin: 0;
+            padding: 14px 20px;
+            font-size: 1.2em;
         }
 
         .mobile-menu img {
@@ -226,21 +310,25 @@
         <a href="Find-regatta.html" class="nav-item">
             <img src="/Images/regattasearch_button.png" alt="Find Regatta">
         </a>
-        <a href="Tracker.html" class="nav-item">
-            <img src="/Images/Tracker_button.png" alt="Tracker">
-        </a>
-        <a href="Tracker-dashboard.html" class="nav-item">
-            <div class="nav-icon-card">
-                <div class="icon">🗺️</div>
-                <span>Track Dashboard</span>
+        <div class="nav-group">
+            <div class="nav-group-header">
+                <img src="/Images/Tracker_button.png" alt="Tracker">
             </div>
-        </a>
-        <a href="PiControl.html" class="nav-item">
-            <div class="nav-icon-card">
-                <div class="icon">🥧</div>
-                <span>Pi Control</span>
+            <div class="nav-group-items">
+                <a href="Tracker.html" class="nav-sub-btn">
+                    <span class="sub-icon">📍</span>
+                    Web Tracker
+                </a>
+                <a href="Tracker-dashboard.html" class="nav-sub-btn">
+                    <span class="sub-icon">🗺️</span>
+                    Track Dashboard
+                </a>
+                <a href="PiControl.html" class="nav-sub-btn">
+                    <span class="sub-icon">🥧</span>
+                    Pi Control
+                </a>
             </div>
-        </a>
+        </div>
         <a href="Shop.html" class="nav-item">
             <img src="/Images/Love%20Sailing%20Shop%20Shopping%20Basket%20Icon.jpg?v=3" alt="Love Sailing Shop">
         </a>
@@ -266,9 +354,12 @@
         <a href="LiveView.html">Live View</a>
         <a href="Find-regatta.html">Find Regatta</a>
         <a href="Chatbot.html">Chatbot</a>
-        <a href="Tracker.html">📍 Tracker</a>
-        <a href="Tracker-dashboard.html">📊 Track Dashboard</a>
-        <a href="PiControl.html">🥧 Pi Control</a>
+        <div class="mobile-group">
+            <div class="mobile-group-label">Tracker</div>
+            <a href="Tracker.html">📍 Web Tracker</a>
+            <a href="Tracker-dashboard.html">🗺️ Track Dashboard</a>
+            <a href="PiControl.html">🥧 Pi Control</a>
+        </div>
         <a href="Shop.html">Shop</a>
         <a href="game.html">GAME</a>
     </div>

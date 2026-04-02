@@ -5632,14 +5632,17 @@ async function createPiTables() {
         )
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_pi_photos_device ON pi_photos(device_id)`);
-    // Migration: add sim_status column to existing tables
-    await pool.query(`ALTER TABLE pi_devices ADD COLUMN IF NOT EXISTS sim_status JSONB DEFAULT '{}'`);
+    // Migrations: add columns to existing tables
+    await pool.query(`ALTER TABLE pi_devices ADD COLUMN IF NOT EXISTS sim_status        JSONB DEFAULT '{}'`);
+    await pool.query(`ALTER TABLE pi_devices ADD COLUMN IF NOT EXISTS ip_addresses      JSONB DEFAULT '{}'`);
+    await pool.query(`ALTER TABLE pi_devices ADD COLUMN IF NOT EXISTS pending_commands  JSONB DEFAULT '[]'`);
     console.log('✓ PiSailBox tables ready');
 }
 
 // Default config template for new devices
 function defaultPiConfig() {
     return {
+        auto_track: false,                  // start GPS tracking automatically on boot
         gps_poll_seconds: 10,
         camera_enabled: false,
         photo_interval_seconds: 30,
@@ -5648,30 +5651,44 @@ function defaultPiConfig() {
         video_enabled: false,
         video_interval_minutes: 10,
         video_duration_seconds: 60,
-        sim_apn: '',           // APN for 4G connection (blank = auto)
-        sim_apn_user: '',      // APN username if required
-        sim_apn_pass: '',      // APN password if required
-        sim_status_interval_seconds: 60  // how often Pi reports SIM status
+        sim_apn: '',
+        sim_apn_user: '',
+        sim_apn_pass: '',
+        sim_status_interval_seconds: 60
     };
 }
 
 // Register / heartbeat — called by Pi on boot and periodically
 app.post('/api/pi/register', express.json(), async (req, res) => {
     try {
-        const { device_id, name, ip_address, os_info } = req.body;
+        const { device_id, name, ip_address, ip_addresses, os_info } = req.body;
         if (!device_id) return res.status(400).json({ error: 'device_id required' });
 
+        // Build a display IP — prefer the first non-loopback from ip_addresses map
+        let displayIp = ip_address || null;
+        if (ip_addresses && typeof ip_addresses === 'object') {
+            const preferred = ['wlan0','eth0','wwan0','ppp0','usb0'];
+            for (const iface of preferred) {
+                if (ip_addresses[iface]) { displayIp = ip_addresses[iface]; break; }
+            }
+            if (!displayIp) {
+                const first = Object.values(ip_addresses)[0];
+                if (first) displayIp = first;
+            }
+        }
+
         const result = await pool.query(`
-            INSERT INTO pi_devices (device_id, name, ip_address, os_info, last_seen, config)
-            VALUES ($1, $2, $3, $4, NOW(), $5)
+            INSERT INTO pi_devices (device_id, name, ip_address, ip_addresses, os_info, last_seen, config)
+            VALUES ($1, $2, $3, $4, $5, NOW(), $6)
             ON CONFLICT (device_id) DO UPDATE SET
-                name       = COALESCE(EXCLUDED.name, pi_devices.name),
-                ip_address = EXCLUDED.ip_address,
-                os_info    = EXCLUDED.os_info,
-                last_seen  = NOW()
+                name         = COALESCE(EXCLUDED.name, pi_devices.name),
+                ip_address   = EXCLUDED.ip_address,
+                ip_addresses = EXCLUDED.ip_addresses,
+                os_info      = EXCLUDED.os_info,
+                last_seen    = NOW()
             RETURNING *
-        `, [device_id, name || device_id, ip_address || null, os_info || null,
-            JSON.stringify(defaultPiConfig())]);
+        `, [device_id, name || device_id, displayIp, JSON.stringify(ip_addresses || {}),
+            os_info || null, JSON.stringify(defaultPiConfig())]);
 
         const device = result.rows[0];
         const config = typeof device.config === 'string' ? JSON.parse(device.config) : device.config;
@@ -5682,16 +5699,50 @@ app.post('/api/pi/register', express.json(), async (req, res) => {
     }
 });
 
-// Get device config (polled by Pi)
+// Get device config (polled by Pi) — also returns and clears any pending commands
 app.get('/api/pi/devices/:deviceId/config', async (req, res) => {
     try {
         const result = await pool.query(
-            `UPDATE pi_devices SET last_seen = NOW() WHERE device_id = $1 RETURNING config`,
+            `UPDATE pi_devices
+             SET last_seen = NOW(), pending_commands = '[]'
+             WHERE device_id = $1
+             RETURNING config, pending_commands`,
             [req.params.deviceId]
         );
         if (!result.rows.length) return res.status(404).json({ error: 'Device not found' });
-        const config = result.rows[0].config || defaultPiConfig();
+        const row = result.rows[0];
+        const config   = row.config || defaultPiConfig();
+        const commands = row.pending_commands || [];
+        // Embed commands inside the config response under a reserved key
+        config.__commands = Array.isArray(commands) ? commands : [];
         res.json(config);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Queue a remote command for the Pi to execute on its next config poll
+// Valid commands: start_track, stop_track, capture_photo, start_video, stop_video
+app.post('/api/pi/devices/:deviceId/command', express.json(), async (req, res) => {
+    try {
+        const { command } = req.body;
+        const valid = ['start_track','stop_track','capture_photo','start_video','stop_video'];
+        if (!valid.includes(command)) {
+            return res.status(400).json({ error: `Unknown command. Valid: ${valid.join(', ')}` });
+        }
+        // Append to pending_commands array (avoid duplicates)
+        await pool.query(
+            `UPDATE pi_devices
+             SET pending_commands = (
+                 SELECT jsonb_agg(DISTINCT v)
+                 FROM jsonb_array_elements_text(
+                     COALESCE(pending_commands, '[]'::jsonb) || $1::jsonb
+                 ) v
+             )
+             WHERE device_id = $2`,
+            [JSON.stringify([command]), req.params.deviceId]
+        );
+        res.json({ ok: true, command, note: 'Pi will receive this on next config poll (~10s)' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -5908,6 +5959,9 @@ app.post('/api/tracks/:id/points', async (req, res) => {
 // List all tracks with point count and computed stats
 app.get('/api/tracks', async (req, res) => {
     try {
+        const device = req.query.device || null;
+        const params = device ? [device] : [];
+        const where  = device ? `WHERE t.device_name = $1` : '';
         const result = await pool.query(`
             SELECT
                 t.*,
@@ -5918,9 +5972,10 @@ app.get('/api/tracks', async (req, res) => {
                 AVG(NULLIF(p.speed, 0))                             AS avg_speed_ms
             FROM tracks t
             LEFT JOIN track_points p ON p.track_id = t.id
+            ${where}
             GROUP BY t.id
             ORDER BY t.started_at DESC
-        `);
+        `, params);
         res.json(result.rows);
     } catch (err) {
         res.status(500).json({ error: err.message });

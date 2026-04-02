@@ -62,23 +62,41 @@ class Uploader:
 
     # ── Device registration ───────────────────────────────────────────────────
 
+    @staticmethod
+    def _get_all_ips():
+        """
+        Return a dict of {interface_name: ip_address} for all active non-loopback
+        interfaces (WiFi, Ethernet, 4G modem, USB, etc.).
+        """
+        import subprocess, re
+        ips = {}
+        try:
+            out = subprocess.check_output(['ip', '-4', 'addr', 'show'], text=True, timeout=5)
+            current = None
+            for line in out.splitlines():
+                m = re.match(r'^\d+: (\S+):', line)
+                if m:
+                    current = m.group(1).rstrip(':')
+                ip_m = re.search(r'inet (\d+\.\d+\.\d+\.\d+)/', line)
+                if ip_m and current and current != 'lo':
+                    ips[current] = ip_m.group(1)
+        except Exception:
+            pass
+        return ips
+
     def register(self, os_info=None):
         """Register this device with the server and return its config dict."""
         import platform
         if os_info is None:
             os_info = platform.platform()
 
-        import socket
-        try:
-            ip = socket.gethostbyname(socket.gethostname())
-        except Exception:
-            ip = "unknown"
+        ip_addresses = self._get_all_ips()
 
         payload = {
-            "device_id": self.device_id,
-            "name":      self.device_id,
-            "ip_address": ip,
-            "os_info":   os_info,
+            "device_id":    self.device_id,
+            "name":         self.device_id,
+            "ip_addresses": ip_addresses,
+            "os_info":      os_info,
         }
         try:
             resp = requests.post(

@@ -68,4 +68,15 @@ class DeviceConfig:
             time.sleep(cfg.CONFIG_POLL_SECONDS)
             new = self._uploader.fetch_config()
             if new:
+                # Commands are embedded under __commands — strip before storing config
+                commands = new.pop("__commands", []) or []
                 self.update(new)
+                # Fire callbacks with commands included so main.py can act on them
+                if commands:
+                    for cb in self._callbacks:
+                        try:
+                            merged = copy.deepcopy(self._config)
+                            merged["__commands"] = commands
+                            cb(merged)
+                        except Exception as e:
+                            log.warning(f"Command callback error: {e}")

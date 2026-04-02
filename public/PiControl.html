@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PiSailBox Control - Love Sailing</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { height: 100%; background: #020053; color: #fff; font-family: Arial, sans-serif; overflow: hidden; }
@@ -172,6 +174,30 @@
 
         .save-bar { display: flex; gap: 10px; align-items: center; margin-top: 16px; }
         .save-msg  { font-size: 0.82rem; color: #2ecc71; }
+
+        /* GPS map */
+        .gps-map { height: 320px; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }
+        .track-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 9px 12px; border-radius: 8px; margin-bottom: 6px; cursor: pointer;
+            background: rgba(255,255,255,0.04); border: 1px solid transparent; transition: all 0.12s;
+        }
+        .track-row:hover  { background: rgba(255,255,255,0.09); border-color: rgba(126,207,255,0.3); }
+        .track-row.active { background: rgba(126,207,255,0.1);  border-color: rgba(126,207,255,0.4); }
+        .track-name  { font-size: 0.88rem; font-weight: bold; }
+        .track-meta  { font-size: 0.72rem; color: rgba(255,255,255,0.4); margin-top: 2px; }
+        .track-badge {
+            font-size: 0.68rem; padding: 2px 8px; border-radius: 20px; white-space: nowrap;
+            background: rgba(46,204,113,0.15); border: 1px solid rgba(46,204,113,0.3); color: #2ecc71;
+        }
+        .track-badge.ended { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); color: rgba(255,255,255,0.4); }
+        .ip-tag {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 4px 10px; margin: 3px;
+            background: rgba(126,207,255,0.08); border: 1px solid rgba(126,207,255,0.2);
+            border-radius: 20px; font-size: 0.75rem; color: rgba(255,255,255,0.75);
+        }
+        .ip-tag .iface { font-size: 0.65rem; color: rgba(126,207,255,0.7); text-transform: uppercase; }
     </style>
 </head>
 <body>
@@ -266,6 +292,8 @@
         document.querySelectorAll('.device-item').forEach(e => e.classList.remove('selected'));
         const el = document.getElementById('dev-' + deviceId);
         if (el) el.classList.add('selected');
+        // Destroy old map so it re-initialises for the new device
+        if (gpsMap) { gpsMap.remove(); gpsMap = null; gpsMapLayers = []; gpsSelectedTrack = null; }
         renderMainPanel();
     }
 
@@ -275,6 +303,7 @@
         document.getElementById('mainPanel').innerHTML = `
             <div class="tabs">
                 <div class="tab ${currentTab==='config'?'active':''}" onclick="switchTab('config')">⚙️ Config</div>
+                <div class="tab ${currentTab==='gps'?'active':''}"    onclick="switchTab('gps')">📍 GPS</div>
                 <div class="tab ${currentTab==='sim'?'active':''}"    onclick="switchTab('sim')">📶 SIM</div>
                 <div class="tab ${currentTab==='status'?'active':''}" onclick="switchTab('status')">📊 Status</div>
                 <div class="tab ${currentTab==='photos'?'active':''}" onclick="switchTab('photos')">📷 Photos</div>
@@ -300,9 +329,20 @@
 
                     <div class="card">
                         <div class="card-title">GPS Tracking</div>
+                        <div class="toggle-row">
+                            <span class="toggle-label">Auto-track on boot</span>
+                            <label class="toggle">
+                                <input type="checkbox" id="cfgAutoTrack" ${config.auto_track?'checked':''}>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <p style="font-size:0.73rem;color:rgba(255,255,255,0.3);margin:8px 0 14px;">
+                            When enabled, tracking starts automatically when the Pi boots.
+                            When disabled, use the <strong>Start Tracking</strong> button on the GPS tab.
+                        </p>
                         <div class="config-grid">
                             <div class="field">
-                                <label>Upload interval (seconds)</label>
+                                <label>GPS upload interval (seconds)</label>
                                 <input type="number" id="cfgGpsPoll" value="${config.gps_poll_seconds||10}" min="5" max="300">
                             </div>
                         </div>
@@ -363,6 +403,45 @@
                         <button class="btn danger" onclick="deleteDevice('${esc(d.device_id)}')">🗑 Remove Device</button>
                         <span class="save-msg" id="saveMsg"></span>
                     </div>
+                </div>
+
+                <!-- GPS TAB -->
+                <div class="tab-panel ${currentTab==='gps'?'active':''}" id="tab-gps">
+
+                    <div class="card">
+                        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                            <span>Tracking Controls</span>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                <button class="btn success" id="btnStartTrack"
+                                        onclick="sendCommand('start_track')">▶ Start Tracking</button>
+                                <button class="btn danger"  id="btnStopTrack"
+                                        onclick="sendCommand('stop_track')">■ Stop Tracking</button>
+                                <button class="btn" style="float:right;padding:7px 12px;font-size:0.78rem;"
+                                        onclick="loadGpsTracks()">↻ Refresh</button>
+                            </div>
+                        </div>
+                        <p style="font-size:0.75rem;color:rgba(255,255,255,0.3);margin-top:6px;">
+                            Commands are delivered to the Pi on its next config poll (~${config.gps_poll_seconds||10}s).
+                            Enable <strong>Auto-track on boot</strong> in Config to start automatically.
+                        </p>
+                        <div id="cmdFeedback" style="font-size:0.82rem;color:#2ecc71;margin-top:6px;min-height:18px;"></div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">Live Position &amp; Track Map</div>
+                        <div class="gps-map" id="gpsMap"></div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">Tracks from this Device <span id="gpsTrackCount" style="color:rgba(255,255,255,0.3)"></span></div>
+                        <div id="gpsTrackList">
+                            <div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</div>
+                        </div>
+                        <div style="margin-top:12px;">
+                            <a id="gpsOpenDash" href="#" target="_blank" class="btn primary">Open in Tracker Dashboard →</a>
+                        </div>
+                    </div>
+
                 </div>
 
                 <!-- SIM TAB -->
@@ -431,10 +510,6 @@
                                 <div class="stat-val">${d.online ? '✅ Yes' : '❌ No'}</div>
                             </div>
                             <div class="stat-box">
-                                <div class="stat-label">IP Address</div>
-                                <div class="stat-val" style="font-size:0.85rem;">${esc(d.ip_address||'—')}</div>
-                            </div>
-                            <div class="stat-box">
                                 <div class="stat-label">Last Seen</div>
                                 <div class="stat-val" style="font-size:0.8rem;">${d.last_seen?new Date(d.last_seen).toLocaleTimeString():'—'}</div>
                             </div>
@@ -453,6 +528,10 @@
                         </div>
                     </div>
                     <div class="card">
+                        <div class="card-title">Network Interfaces</div>
+                        <div id="ipAddressesBlock">${renderIpAddresses(d)}</div>
+                    </div>
+                    <div class="card">
                         <div class="card-title">GPS Tracks from this Device</div>
                         <p style="font-size:0.85rem;color:rgba(255,255,255,0.5);margin-bottom:12px;">
                             Live and historic GPS tracks from this Pi appear in the Tracker Dashboard.
@@ -463,23 +542,51 @@
 
                 <!-- PHOTOS TAB -->
                 <div class="tab-panel ${currentTab==='photos'?'active':''}" id="tab-photos">
+
                     <div class="card">
-                        <div class="card-title">Recent Photos <span id="photoCount" style="color:rgba(255,255,255,0.3)"></span></div>
+                        <div class="card-title">Camera Controls</div>
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                            <button class="btn success" onclick="sendCommand('capture_photo')">
+                                📸 Take Photo Now
+                            </button>
+                            <button class="btn primary" id="btnStartVideo"
+                                    onclick="sendCommand('start_video')">
+                                ⏺ Start Video
+                            </button>
+                            <button class="btn danger"  id="btnStopVideo"
+                                    onclick="sendCommand('stop_video')">
+                                ⏹ Stop Video
+                            </button>
+                            <button class="btn" onclick="loadPhotos()" style="margin-left:auto;">
+                                ↻ Refresh Gallery
+                            </button>
+                        </div>
+                        <div id="camCmdFeedback" style="font-size:0.82rem;color:#2ecc71;margin-top:8px;min-height:18px;"></div>
+                        <p style="font-size:0.73rem;color:rgba(255,255,255,0.3);margin-top:6px;">
+                            Commands are delivered to the Pi on its next config poll (~${config.gps_poll_seconds||10}s).
+                            Video is stored locally on the Pi's SD card only.
+                        </p>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">Uploaded Photos <span id="photoCount" style="color:rgba(255,255,255,0.3)"></span></div>
                         <div class="photo-grid" id="photoGrid">
                             <div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</div>
                         </div>
                     </div>
+
                 </div>
 
             </div>`;
 
         if (currentTab === 'photos') loadPhotos();
         if (currentTab === 'sim')    loadSimStatus();
+        if (currentTab === 'gps')    loadGpsTracks();
     }
 
     function switchTab(tab) {
         currentTab = tab;
-        const tabOrder = ['config','sim','status','photos'];
+        const tabOrder = ['config','gps','sim','status','photos'];
         document.querySelectorAll('.tab').forEach((t, i) => {
             t.classList.toggle('active', tabOrder[i] === tab);
         });
@@ -488,6 +595,7 @@
         if (panel) panel.classList.add('active');
         if (tab === 'photos') loadPhotos();
         if (tab === 'sim')    loadSimStatus();
+        if (tab === 'gps')    loadGpsTracks();
     }
 
     // ── SIM status ────────────────────────────────────────────────────────────
@@ -627,6 +735,7 @@
         // Preserve existing SIM config fields that live on the SIM tab
         const existingConfig = typeof d.config === 'string' ? JSON.parse(d.config) : (d.config || {});
         const config = {
+            auto_track:                     document.getElementById('cfgAutoTrack').checked,
             gps_poll_seconds:               parseInt(document.getElementById('cfgGpsPoll').value)        || 10,
             camera_enabled:                 document.getElementById('cfgCamEnabled').checked,
             photo_interval_seconds:         parseInt(document.getElementById('cfgPhotoInterval').value)  || 30,
@@ -706,6 +815,171 @@
     function closeLightbox() { document.getElementById('lightbox').classList.remove('show'); }
 
     function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+    // ── Remote command sender ─────────────────────────────────────────────────
+    async function sendCommand(cmd) {
+        const d = selectedDevice;
+        if (!d) return;
+
+        // Pick feedback element based on which tab is active
+        const fbId = (cmd === 'capture_photo' || cmd === 'start_video' || cmd === 'stop_video')
+                     ? 'camCmdFeedback' : 'cmdFeedback';
+        const fb = document.getElementById(fbId);
+        if (fb) fb.textContent = '⏳ Sending…';
+
+        const labels = {
+            start_track:   '▶ Start tracking queued',
+            stop_track:    '■ Stop tracking queued',
+            capture_photo: '📸 Photo command queued',
+            start_video:   '⏺ Start video queued',
+            stop_video:    '⏹ Stop video queued',
+        };
+
+        try {
+            const resp = await fetch(
+                `/api/pi/devices/${encodeURIComponent(d.device_id)}/command`,
+                { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ command: cmd }) }
+            );
+            const data = await resp.json();
+            if (fb) {
+                fb.textContent = data.ok
+                    ? `✅ ${labels[cmd] || cmd} — Pi will act within ~${(d.config && d.config.gps_poll_seconds)||10}s`
+                    : `❌ ${data.error}`;
+                setTimeout(() => { if(fb) fb.textContent = ''; }, 6000);
+            }
+        } catch(e) {
+            if (fb) { fb.textContent = '❌ ' + e.message; setTimeout(() => { if(fb) fb.textContent=''; }, 4000); }
+        }
+    }
+
+    // ── IP addresses display ──────────────────────────────────────────────────
+    function renderIpAddresses(d) {
+        const ips = (typeof d.ip_addresses === 'string'
+            ? JSON.parse(d.ip_addresses) : d.ip_addresses) || {};
+
+        // Interface display names / icons
+        const ifaceLabel = { wlan0:'📶 WiFi', eth0:'🔌 Ethernet', wwan0:'📡 4G/LTE',
+                              ppp0:'📡 PPP/4G', usb0:'🔗 USB', lo:'loopback' };
+
+        const entries = Object.entries(ips).filter(([k]) => k !== 'lo');
+        if (!entries.length) {
+            // Fall back to legacy single ip_address field
+            if (d.ip_address) {
+                return `<span class="ip-tag"><span class="iface">IP</span>${esc(d.ip_address)}</span>`;
+            }
+            return '<span style="color:rgba(255,255,255,0.3);font-size:0.82rem;">No IP data yet — Pi will report on next registration.</span>';
+        }
+        return entries.map(([iface, ip]) => {
+            const label = ifaceLabel[iface] || ('🌐 ' + iface);
+            return `<span class="ip-tag"><span class="iface">${esc(label)}</span>${esc(ip)}</span>`;
+        }).join('');
+    }
+
+    // ── GPS tracks tab ────────────────────────────────────────────────────────
+    let gpsMap     = null;
+    let gpsMapLayers = [];
+
+    async function loadGpsTracks() {
+        const d = selectedDevice;
+        if (!d) return;
+        const listEl = document.getElementById('gpsTrackList');
+        const dashLink = document.getElementById('gpsOpenDash');
+        if (dashLink) dashLink.href = `/Tracker-dashboard.html?device=${encodeURIComponent(d.device_id)}`;
+        if (!listEl) return;
+
+        listEl.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</div>';
+
+        // Init map lazily
+        if (!gpsMap) {
+            const mapEl = document.getElementById('gpsMap');
+            if (mapEl) {
+                gpsMap = L.map(mapEl, { zoomControl: true }).setView([51.5, -0.1], 10);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors', maxZoom: 19
+                }).addTo(gpsMap);
+            }
+        }
+
+        try {
+            const resp = await fetch(`/api/tracks?device=${encodeURIComponent(d.device_id)}`);
+            const tracks = await resp.json();
+
+            const countEl = document.getElementById('gpsTrackCount');
+            if (countEl) countEl.textContent = `(${tracks.length})`;
+
+            if (!tracks.length) {
+                listEl.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">No GPS tracks yet. Pi will create one when it gets a fix.</div>';
+                return;
+            }
+
+            listEl.innerHTML = tracks.map(t => {
+                const pts  = t.point_count || 0;
+                const live = !t.ended_at;
+                const start = t.started_at ? new Date(t.started_at).toLocaleString() : '—';
+                const maxSpd = t.max_speed_ms ? (t.max_speed_ms * 1.94384).toFixed(1) + ' kn' : '—';
+                return `<div class="track-row ${gpsSelectedTrack===t.id?'active':''}" onclick="selectGpsTrack(${t.id})">
+                    <div>
+                        <div class="track-name">${esc(t.name||'Track '+t.id)}</div>
+                        <div class="track-meta">${start} · ${pts} pts · max ${maxSpd}</div>
+                    </div>
+                    <span class="track-badge ${live?'':'ended'}">${live?'🟢 Live':'Ended'}</span>
+                </div>`;
+            }).join('');
+
+            // Auto-select the most recent (first) track
+            selectGpsTrack(tracks[0].id);
+
+        } catch(e) {
+            if (listEl) listEl.innerHTML = `<div style="color:#e74c3c;font-size:0.85rem;">Error: ${e.message}</div>`;
+        }
+    }
+
+    let gpsSelectedTrack = null;
+
+    async function selectGpsTrack(trackId) {
+        gpsSelectedTrack = trackId;
+        // Highlight row
+        document.querySelectorAll('.track-row').forEach(r => r.classList.remove('active'));
+        const rows = document.querySelectorAll('.track-row');
+        rows.forEach(r => { if (r.querySelector('.track-name')) r.classList.toggle('active', r.onclick && r.getAttribute('onclick') && r.getAttribute('onclick').includes(trackId)); });
+
+        if (!gpsMap) return;
+
+        // Clear old layers
+        gpsMapLayers.forEach(l => gpsMap.removeLayer(l));
+        gpsMapLayers = [];
+
+        try {
+            const resp = await fetch(`/api/tracks/${trackId}/points`);
+            const pts  = await resp.json();
+            if (!pts.length) return;
+
+            const latlngs = pts.map(p => [p.lat, p.lng]);
+
+            // Draw polyline
+            const line = L.polyline(latlngs, { color: '#7ecfff', weight: 3, opacity: 0.85 }).addTo(gpsMap);
+            gpsMapLayers.push(line);
+
+            // Start marker (green)
+            const startM = L.circleMarker(latlngs[0], { radius: 8, fillColor: '#2ecc71', color: '#fff', weight: 2, fillOpacity: 1 })
+                .bindPopup('Start').addTo(gpsMap);
+            gpsMapLayers.push(startM);
+
+            // Latest position marker (blue, pulsing via larger ring)
+            const last = latlngs[latlngs.length - 1];
+            const lastPt = pts[pts.length - 1];
+            const spd  = lastPt.speed ? (lastPt.speed * 1.94384).toFixed(1) + ' kn' : '—';
+            const popupTxt = `<b>Latest position</b><br>Speed: ${spd}<br>${new Date(lastPt.recorded_at).toLocaleTimeString()}`;
+            const endM = L.circleMarker(last, { radius: 10, fillColor: '#7ecfff', color: '#fff', weight: 2, fillOpacity: 1 })
+                .bindPopup(popupTxt).addTo(gpsMap);
+            gpsMapLayers.push(endM);
+
+            gpsMap.fitBounds(line.getBounds(), { padding: [30, 30] });
+        } catch(e) {
+            console.error('GPS points load failed:', e);
+        }
+    }
 
     // ── Init ──────────────────────────────────────────────────────────────────
     loadDevices();
