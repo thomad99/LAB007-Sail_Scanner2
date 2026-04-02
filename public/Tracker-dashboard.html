@@ -361,6 +361,14 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
+    // Always display times in Eastern Time
+    const EST = { timeZone: 'America/New_York' };
+    const fmtTime     = d => new Date(d).toLocaleTimeString('en-US', EST);
+    const fmtDateTime = d => new Date(d).toLocaleString('en-US', EST);
+    const fmtDate     = d => new Date(d).toLocaleDateString('en-US', EST);
+    const fmtTimeShort = d => new Date(d).toLocaleTimeString('en-US', { ...EST, hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    const fmtTimeHM    = d => new Date(d).toLocaleTimeString('en-US', { ...EST, hour:'2-digit', minute:'2-digit' });
+
 // ── Colour palette ─────────────────────────────────────────────────────────
 const COLORS = [
     '#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6',
@@ -383,7 +391,7 @@ function formatDur(ms) {
 }
 function formatTime(d) {
     return d instanceof Date
-        ? d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})
+        ? fmtTimeShort(d)
         : '—';
 }
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -432,8 +440,8 @@ async function loadTracks() {
     if (allTracks.length===0){list.innerHTML='<div class="empty">No tracks yet.<br>Open Tracker on your device.</div>';return;}
     list.innerHTML = allTracks.map((t,i)=>{
         const live = !t.ended_at;
-        const date = new Date(t.started_at).toLocaleDateString();
-        const time = new Date(t.started_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+        const date = fmtDate(t.started_at);
+        const time = fmtTimeHM(t.started_at);
         const sel  = t.id===selectedTrackId?'selected':'';
         return `<div class="track-item ${sel}" id="ti-${t.id}" onclick="selectTrack(${t.id})">
             <div class="track-item-name">${esc(t.name||'Track '+t.id)}${live?'<span class="badge-live">LIVE</span>':''}</div>
@@ -491,13 +499,13 @@ async function loadTrackPoints(id) {
                  .bindPopup(popup).addTo(tMap);
         tMarkers.push(m);
     };
-    addM(ll[0],'#2ecc71',`<b>Start</b><br>${new Date(pts[0].recorded_at).toLocaleString()}`);
+        addM(ll[0],'#2ecc71',`<b>Start</b><br>${fmtDateTime(pts[0].recorded_at)} ET`);
     addM(ll[ll.length-1],allTracks.find(t=>t.id===id)?.ended_at?'#e74c3c':'#f4a261',
-        `<b>${allTracks.find(t=>t.id===id)?.ended_at?'End':'Live'}</b><br>${new Date(pts[pts.length-1].recorded_at).toLocaleString()}`);
+        `<b>${allTracks.find(t=>t.id===id)?.ended_at?'End':'Live'}</b><br>${fmtDateTime(pts[pts.length-1].recorded_at)} ET`);
     pts.forEach((p,i)=>{
         if(i===0||i===pts.length-1||i%5!==0) return;
         const m=L.circleMarker([p.lat,p.lng],{radius:3,fillColor:'#fff',color:'rgba(200,200,255,0.5)',weight:1,fillOpacity:0.5})
-               .bindPopup(`Point ${i+1}<br>${new Date(p.recorded_at).toLocaleTimeString()}`+
+               .bindPopup(`Point ${i+1}<br>${fmtTime(p.recorded_at)} ET`+
                            (p.speed?`<br>${(p.speed*1.94384).toFixed(1)} kts`:'')).addTo(tMap);
         tMarkers.push(m);
     });
@@ -543,7 +551,7 @@ async function refreshLive() {
     if(!liveMapReady) return;
     const data = await (await fetch('/api/tracks/live')).json();
     document.getElementById('liveStatus').textContent =
-        `Last refresh: ${new Date().toLocaleTimeString()} · ${data.length} active tracker${data.length!==1?'s':''}`;
+        `Last refresh: ${fmtTime(new Date())} ET · ${data.length} active tracker${data.length!==1?'s':''}`;
 
     const msg = document.getElementById('live-msg');
     if(data.length===0){ msg.style.display='flex'; document.getElementById('racersStrip').innerHTML='<div class="racer-card" style="color:rgba(255,255,255,0.3);font-size:0.82rem;">No active racers</div>'; return; }
@@ -576,7 +584,7 @@ async function refreshLive() {
         const popupContent = `<b>${esc(racer.device_name||racer.name||'Racer '+racer.id)}</b>` +
             (racer.speed!=null?`<br>Speed: ${(racer.speed*1.94384).toFixed(1)} kts`:'') +
             `<br>Points: ${racer.point_count||0}` +
-            (racer.point_time?`<br>Last: ${new Date(racer.point_time).toLocaleTimeString()}`:'');
+            (racer.point_time?`<br>Last: ${fmtTime(racer.point_time)} ET`:'');
 
         if(liveMarkers[racer.id]){
             liveMarkers[racer.id].setLatLng([racer.lat,racer.lng]);
@@ -598,7 +606,7 @@ async function refreshLive() {
                 <div class="racer-name">${esc(r.device_name||r.name||'Racer '+r.id)}</div>
                 <div class="racer-meta">
                     ${r.speed!=null?(r.speed*1.94384).toFixed(1)+' kts · ':''} 
-                    ${r.point_count||0} pts · Last: ${r.point_time?new Date(r.point_time).toLocaleTimeString():'—'}
+                    ${r.point_count||0} pts · Last: ${r.point_time?fmtTime(r.point_time)+' ET':'—'}
                 </div>
             </div>
         </div>`).join('');

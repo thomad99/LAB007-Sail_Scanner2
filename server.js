@@ -5782,7 +5782,12 @@ app.get('/api/pi/devices', async (req, res) => {
         const result = await pool.query(`
             SELECT d.*,
                 (SELECT COUNT(*) FROM pi_photos p WHERE p.device_id = d.device_id)::int AS photo_count,
-                NOW() - d.last_seen < INTERVAL '2 minutes' AS online
+                NOW() - d.last_seen < INTERVAL '2 minutes' AS online,
+                EXISTS (
+                    SELECT 1 FROM tracks t
+                    WHERE t.device_name = d.device_id
+                    AND t.ended_at IS NULL
+                ) AS tracking_active
             FROM pi_devices d
             ORDER BY d.last_seen DESC NULLS LAST
         `);

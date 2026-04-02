@@ -142,7 +142,9 @@ def gps_thread_fn():
         if tracking_active.is_set():
             # Ensure we have an open track on the server
             if not current_track_id:
-                track_name = f"{cfg.DEVICE_ID} — {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC"
+                import zoneinfo
+                est = zoneinfo.ZoneInfo("America/New_York")
+                track_name = f"{cfg.DEVICE_ID} — {datetime.datetime.now(est).strftime('%Y-%m-%d %H:%M')} ET"
                 current_track_id = uploader_inst.start_track(name=track_name)
                 if current_track_id:
                     log.info(f"Track opened: id={current_track_id}")

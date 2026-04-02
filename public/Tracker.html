@@ -287,6 +287,10 @@
 <a href="/index.html" class="back-link">← Back to Home</a>
 
 <script>
+    // Always display times in Eastern Time
+    const EST = { timeZone: 'America/New_York' };
+    const fmtTime = d => new Date(d).toLocaleTimeString('en-US', EST);
+    const fmtDateTime = d => new Date(d).toLocaleString('en-US', EST);
     const INTERVAL_MS = 10000;
     const LS_KEY = 'tracker_active_track';  // localStorage key
 
@@ -409,7 +413,7 @@
 
         const log = document.getElementById('pointLog');
         if (log.textContent === 'No points yet.') log.textContent = '';
-        log.textContent += `${new Date().toLocaleTimeString()} | ${lat.toFixed(5)}, ${lng.toFixed(5)}\n`;
+        log.textContent += `${fmtTime(new Date())} ET | ${lat.toFixed(5)}, ${lng.toFixed(5)}\n`;
         log.scrollTop = log.scrollHeight;
 
         try {
@@ -439,7 +443,7 @@
         try {
             const racer = document.getElementById('racerName').value.trim() || 'Unknown Racer';
             const name  = document.getElementById('trackName').value.trim() ||
-                          `${racer} – ${new Date().toLocaleString()}`;
+                          `${racer} – ${fmtDateTime(new Date())} ET`;
 
             if (existingId) {
                 trackId = existingId;
