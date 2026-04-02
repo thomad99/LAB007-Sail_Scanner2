@@ -430,6 +430,16 @@
                         </div>
                     </div>
 
+                    <div class="card">
+                        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
+                            <span>GPS / Modem Diagnostics</span>
+                            <button class="btn" style="padding:4px 12px;font-size:0.72rem;" onclick="loadGpsDiagnostics()">↻ Refresh</button>
+                        </div>
+                        <div id="gpsDiagBody">
+                            <div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</div>
+                        </div>
+                    </div>
+
                 </div>
 
                 <!-- SIM TAB -->
@@ -492,6 +502,16 @@
                             <div class="stat-box">
                                 <div class="stat-label">Last Seen</div>
                                 <div class="stat-val" style="font-size:0.8rem;">${d.last_seen?fmtTime(d.last_seen)+' ET':'—'}</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-label">SIM Signal</div>
+                                ${(()=>{ const s=d.sim_status||{}; const pct=s.signal_percent; if(!pct&&pct!==0) return `<div class="stat-val" style="color:rgba(255,255,255,0.3)">—</div>`; const filled=Math.round(pct/20); const bars='▌'.repeat(filled)+'▁'.repeat(5-filled); const col=pct>=60?'#2ecc71':pct>=30?'#f39c12':'#e74c3c'; return `<div class="stat-val" style="font-size:1.0rem;color:${col};letter-spacing:1px" title="${pct}%">${bars}</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">${pct}% · ${esc(s.network_type||'—')}</div>`; })()}
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-label">GPS Tracking</div>
+                                ${d.tracking_active
+                                    ? `<div class="stat-val" style="color:#2ecc71">▶ Active</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Last fix: ${d.last_gps_at?fmtTime(d.last_gps_at)+' ET':'—'}</div>`
+                                    : `<div class="stat-val" style="color:rgba(255,255,255,0.35)">⏹ Off</div>${d.last_gps_at?`<div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Last: ${fmtTime(d.last_gps_at)} ET</div>`:''}`}
                             </div>
                             <div class="stat-box">
                                 <div class="stat-label">Photos Stored</div>
@@ -656,7 +676,7 @@
 
         if (currentTab === 'photos') { loadPhotos(); initVideoButtons(); }
         if (currentTab === 'sim')    loadSimStatus();
-        if (currentTab === 'gps')    loadGpsTracks();
+        if (currentTab === 'gps')    { loadGpsTracks(); loadGpsDiagnostics(); }
     }
 
     function switchTab(tab) {
@@ -670,7 +690,7 @@
         if (panel) panel.classList.add('active');
         if (tab === 'photos') { loadPhotos(); initVideoButtons(); }
         if (tab === 'sim')    loadSimStatus();
-        if (tab === 'gps')    loadGpsTracks();
+        if (tab === 'gps')    { loadGpsTracks(); loadGpsDiagnostics(); }
     }
 
     // ── SIM status ────────────────────────────────────────────────────────────
@@ -1068,6 +1088,66 @@
     // ── GPS tracks tab ────────────────────────────────────────────────────────
     let gpsMap     = null;
     let gpsMapLayers = [];
+
+    async function loadGpsDiagnostics() {
+        const d = selectedDevice;
+        if (!d) return;
+        const el = document.getElementById('gpsDiagBody');
+        if (!el) return;
+        el.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</div>';
+        try {
+            const r = await fetch(`/api/pi/devices/${encodeURIComponent(d.device_id)}/gps-status`);
+            const g = r.ok ? await r.json() : {};
+
+            const boolBadge = (v, trueLabel='Yes', falseLabel='No') =>
+                v ? `<span style="background:#1a4a2e;color:#2ecc71;padding:2px 8px;border-radius:4px;font-size:0.78rem;">${trueLabel}</span>`
+                  : `<span style="background:#3a1a1a;color:#e74c3c;padding:2px 8px;border-radius:4px;font-size:0.78rem;">${falseLabel}</span>`;
+
+            const row = (label, val) =>
+                `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+                    <span style="font-size:0.82rem;color:rgba(255,255,255,0.5);">${label}</span>
+                    <span style="font-size:0.82rem;color:#fff;">${val}</span>
+                </div>`;
+
+            if (!g || !Object.keys(g).length) {
+                el.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">No diagnostics received yet — Pi will report on its next GPS poll.</div>';
+                return;
+            }
+
+            const reportedAt = g.reported_at ? fmtTime(g.reported_at) + ' ET' : '—';
+            const lastFixAt  = g.last_fix_at  ? fmtTime(g.last_fix_at)  + ' ET' : '—';
+            const posStr = (g.fix_valid && g.lat != null)
+                ? `${Number(g.lat).toFixed(5)}, ${Number(g.lng).toFixed(5)}`
+                : '—';
+            const speedStr = (g.speed_ms != null)
+                ? `${(g.speed_ms * 1.944).toFixed(1)} kn / ${(g.speed_ms * 3.6).toFixed(1)} km/h`
+                : '—';
+
+            let html = `<div style="margin-bottom:4px;font-size:0.7rem;color:rgba(255,255,255,0.3);">Reported at ${reportedAt}</div>`;
+            html += row('Serial Port Open', boolBadge(g.serial_open));
+            html += row('GPS Engine On',    boolBadge(g.gps_engine_on));
+            html += row('Fix Valid',        boolBadge(g.fix_valid, '✅ Yes', '⚠️ No fix'));
+            html += row('Position (lat, lng)', esc(posStr));
+            html += row('Speed', esc(speedStr));
+            html += row('Last Fix At', lastFixAt);
+            html += row('Fix Count',    g.fix_count    != null ? g.fix_count    : '—');
+            html += row('No-fix Count', g.no_fix_count != null ? g.no_fix_count : '—');
+            if (g.last_error) {
+                html += `<div style="margin-top:10px;padding:8px 12px;background:rgba(231,76,60,0.12);border:1px solid rgba(231,76,60,0.3);border-radius:6px;font-size:0.78rem;color:#e74c3c;">
+                    ⚠️ Last error: ${esc(String(g.last_error))}
+                </div>`;
+            }
+            if (Array.isArray(g.recent_errors) && g.recent_errors.length) {
+                html += `<div style="margin-top:10px;">
+                    <div style="font-size:0.72rem;color:rgba(255,255,255,0.35);margin-bottom:6px;">Recent Errors</div>
+                    <div style="font-family:monospace;font-size:0.72rem;color:#e74c3c;background:rgba(0,0,0,0.25);padding:8px;border-radius:6px;max-height:120px;overflow-y:auto;white-space:pre-wrap;">${g.recent_errors.map(e=>esc(e)).join('\n')}</div>
+                </div>`;
+            }
+            el.innerHTML = html;
+        } catch (e) {
+            el.innerHTML = `<div style="color:#e74c3c;font-size:0.82rem;">Failed to load: ${esc(e.message)}</div>`;
+        }
+    }
 
     async function loadGpsTracks() {
         const d = selectedDevice;

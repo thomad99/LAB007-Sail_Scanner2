@@ -5636,6 +5636,7 @@ async function createPiTables() {
     await pool.query(`ALTER TABLE pi_devices ADD COLUMN IF NOT EXISTS sim_status        JSONB DEFAULT '{}'`);
     await pool.query(`ALTER TABLE pi_devices ADD COLUMN IF NOT EXISTS ip_addresses      JSONB DEFAULT '{}'`);
     await pool.query(`ALTER TABLE pi_devices ADD COLUMN IF NOT EXISTS pending_commands  JSONB DEFAULT '[]'`);
+    await pool.query(`ALTER TABLE pi_devices ADD COLUMN IF NOT EXISTS gps_status       JSONB DEFAULT '{}'`);
     console.log('✓ PiSailBox tables ready');
 }
 
@@ -5683,11 +5684,12 @@ app.post('/api/pi/register', express.json(), async (req, res) => {
             INSERT INTO pi_devices (device_id, name, ip_address, ip_addresses, os_info, last_seen, config)
             VALUES ($1, $2, $3, $4, $5, NOW(), $6)
             ON CONFLICT (device_id) DO UPDATE SET
-                name         = COALESCE(EXCLUDED.name, pi_devices.name),
-                ip_address   = EXCLUDED.ip_address,
-                ip_addresses = EXCLUDED.ip_addresses,
-                os_info      = EXCLUDED.os_info,
-                last_seen    = NOW()
+                name             = COALESCE(EXCLUDED.name, pi_devices.name),
+                ip_address       = EXCLUDED.ip_address,
+                ip_addresses     = EXCLUDED.ip_addresses,
+                os_info          = EXCLUDED.os_info,
+                last_seen        = NOW(),
+                pending_commands = '[]'
             RETURNING *
         `, [device_id, name || device_id, displayIp, JSON.stringify(ip_addresses || {}),
             os_info || null, JSON.stringify(defaultPiConfig())]);
@@ -5830,6 +5832,32 @@ app.get('/api/pi/devices/:deviceId/sim-status', async (req, res) => {
         );
         if (!result.rows.length) return res.status(404).json({ error: 'Device not found' });
         res.json(result.rows[0].sim_status || {});
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GPS status — Pi reports diagnostic info
+app.post('/api/pi/devices/:deviceId/gps-status', express.json(), async (req, res) => {
+    try {
+        await pool.query(
+            `UPDATE pi_devices SET gps_status = $1, last_seen = NOW() WHERE device_id = $2`,
+            [JSON.stringify(req.body), req.params.deviceId]
+        );
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/pi/devices/:deviceId/gps-status', async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT gps_status FROM pi_devices WHERE device_id = $1`,
+            [req.params.deviceId]
+        );
+        if (!result.rows.length) return res.status(404).json({ error: 'Device not found' });
+        res.json(result.rows[0].gps_status || {});
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

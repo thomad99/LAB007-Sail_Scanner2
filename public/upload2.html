@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>LAB007 - Sail Scanner V2</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <script src="https://cdn.jsdelivr.net/npm/exif-js@2.3.0/exif.min.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+
+        html, body {
+            margin: 0; padding: 0;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #020053;
+            color: #fff;
+            min-height: 100vh;
+        }
+
+        /* ── Header ────────────────────────────────────────────── */
+        .page-header {
+            background: linear-gradient(135deg, #0033aa 0%, #020053 100%);
+            border-bottom: 2px solid rgba(0,102,204,0.5);
+            padding: 18px 32px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .page-header img { height: 44px; border-radius: 8px; }
+        .page-header h1 {
+            margin: 0; font-size: 1.4rem; font-weight: 700;
+            color: #fff;
+        }
+        .page-header .badge {
+            background: #0066cc; color: #fff;
+            font-size: 0.68rem; font-weight: 700;
+            padding: 3px 8px; border-radius: 10px;
+            letter-spacing: 0.05em; text-transform: uppercase;
+        }
+
+        /* ── Layout ─────────────────────────────────────────────── */
+        .main { max-width: 860px; margin: 0 auto; padding: 28px 20px 60px; }
+
+        /* ── Card ───────────────────────────────────────────────── */
+        .card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(0,102,204,0.35);
+            border-radius: 14px;
+            padding: 22px 24px;
+            margin-bottom: 20px;
+        }
+        .card-title {
+            font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em;
+            text-transform: uppercase; color: rgba(255,255,255,0.4);
+            margin-bottom: 16px;
+        }
+
+        /* ── Drop Zone ──────────────────────────────────────────── */
+        .drop-zone {
+            border: 2px dashed rgba(0,102,204,0.6);
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: rgba(0,102,204,0.05);
+        }
+        .drop-zone:hover, .drop-zone.over {
+            border-color: #0099ff;
+            background: rgba(0,153,255,0.1);
+        }
+        .drop-zone .dz-icon { font-size: 2.8rem; margin-bottom: 10px; }
+        .drop-zone .dz-label {
+            font-size: 1.05rem; font-weight: 600; color: #7ecfff;
+            margin-bottom: 6px;
+        }
+        .drop-zone .dz-sub { font-size: 0.83rem; color: rgba(255,255,255,0.35); }
+        #fileInput { display: none; }
+
+        /* ── Metadata fields ────────────────────────────────────── */
+        .meta-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+        @media (max-width: 600px) { .meta-grid { grid-template-columns: 1fr; } }
+
+        .field label {
+            display: block;
+            font-size: 0.78rem; color: rgba(255,255,255,0.55);
+            margin-bottom: 5px; font-weight: 600;
+        }
+        .field input, .field select {
+            width: 100%; padding: 9px 12px;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 7px;
+            color: #fff; font-size: 0.9rem;
+            outline: none; transition: border-color 0.15s;
+        }
+        .field input:focus, .field select:focus {
+            border-color: #0099ff;
+        }
+        .field input::placeholder { color: rgba(255,255,255,0.25); }
+
+        /* ── Collapsible more-fields ────────────────────────────── */
+        .more-toggle {
+            display: flex; align-items: center; gap: 8px;
+            cursor: pointer; user-select: none;
+            font-size: 0.82rem; color: #7ecfff;
+            padding: 8px 0; margin-top: 4px;
+            border: none; background: none; width: 100%;
+            text-align: left;
+        }
+        .more-toggle .arrow { transition: transform 0.2s; display: inline-block; }
+        .more-toggle.open .arrow { transform: rotate(180deg); }
+        .more-fields { display: none; margin-top: 14px; }
+        .more-fields.open { display: block; }
+
+        /* ── Scan button ─────────────────────────────────────────── */
+        .btn-scan {
+            width: 100%; padding: 14px;
+            background: linear-gradient(135deg, #0066cc, #0099ff);
+            color: #fff; font-size: 1.05rem; font-weight: 700;
+            border: none; border-radius: 10px; cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+            margin-top: 6px;
+        }
+        .btn-scan:hover { opacity: 0.9; }
+        .btn-scan:active { transform: scale(0.98); }
+        .btn-scan:disabled { opacity: 0.45; cursor: not-allowed; }
+
+        /* ── Progress bar ────────────────────────────────────────── */
+        .progress-wrap {
+            display: none;
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px; overflow: hidden;
+            height: 8px; margin: 14px 0;
+        }
+        .progress-bar {
+            height: 100%; width: 0%;
+            background: linear-gradient(90deg, #0066cc, #0099ff);
+            transition: width 0.3s ease;
+            border-radius: 8px;
+        }
+        .progress-label {
+            font-size: 0.82rem; color: rgba(255,255,255,0.5);
+            margin-bottom: 6px; display: none;
+        }
+
+        /* ── Results ─────────────────────────────────────────────── */
+        #results { margin-top: 4px; }
+
+        .result-item {
+            border-radius: 12px; padding: 16px 18px; margin-bottom: 14px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.04);
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+
+        .result-item .ri-header {
+            display: flex; align-items: flex-start;
+            justify-content: space-between; gap: 10px;
+            margin-bottom: 10px;
+        }
+        .result-item .ri-name {
+            font-size: 0.82rem; color: rgba(255,255,255,0.45);
+            word-break: break-all;
+        }
+        .result-item .ri-status {
+            font-size: 0.75rem; font-weight: 700; padding: 3px 9px;
+            border-radius: 20px; white-space: nowrap; flex-shrink: 0;
+        }
+        .status-scanning {
+            background: rgba(255,193,7,0.15); color: #ffc107;
+            border: 1px solid rgba(255,193,7,0.3);
+        }
+        .status-found {
+            background: rgba(46,204,113,0.15); color: #2ecc71;
+            border: 1px solid rgba(46,204,113,0.3);
+        }
+        .status-none {
+            background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.4);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .status-error {
+            background: rgba(231,76,60,0.15); color: #e74c3c;
+            border: 1px solid rgba(231,76,60,0.3);
+        }
+
+        .sail-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+        .sail-chip {
+            display: flex; align-items: center; gap: 6px;
+            background: rgba(0,153,255,0.15);
+            border: 1px solid rgba(0,153,255,0.3);
+            border-radius: 8px; padding: 6px 12px;
+        }
+        .sail-chip .sail-num {
+            font-size: 1.3rem; font-weight: 800; color: #7ecfff;
+        }
+        .sail-chip .sail-conf {
+            font-size: 0.73rem; color: rgba(255,255,255,0.4);
+        }
+
+        .sail-chip.high .sail-num { color: #2ecc71; }
+        .sail-chip.high { border-color: rgba(46,204,113,0.35); background: rgba(46,204,113,0.1); }
+        .sail-chip.low .sail-num { color: #ffc107; }
+        .sail-chip.low { border-color: rgba(255,193,7,0.3); background: rgba(255,193,7,0.08); }
+
+        /* thumbnail */
+        .ri-thumb {
+            width: 70px; height: 52px; object-fit: cover;
+            border-radius: 6px; flex-shrink: 0;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        /* ── Summary bar ─────────────────────────────────────────── */
+        .summary-bar {
+            display: none;
+            background: rgba(0,102,204,0.12);
+            border: 1px solid rgba(0,102,204,0.3);
+            border-radius: 10px; padding: 14px 18px;
+            margin-bottom: 18px;
+            gap: 24px; flex-wrap: wrap; align-items: center;
+        }
+        .summary-bar.show { display: flex; }
+        .sum-stat { text-align: center; }
+        .sum-num { font-size: 1.6rem; font-weight: 800; color: #7ecfff; line-height: 1; }
+        .sum-num.green { color: #2ecc71; }
+        .sum-lbl { font-size: 0.72rem; color: rgba(255,255,255,0.4); margin-top: 2px; }
+
+        /* ── Nav buttons ─────────────────────────────────────────── */
+        .nav-btns { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; justify-content: center; }
+        .nav-btn {
+            padding: 12px 22px; font-size: 0.9rem; font-weight: 700;
+            border: none; border-radius: 10px; cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        .nav-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+        .nav-btn-upload { background: #0066cc; color: #fff; }
+        .nav-btn-search { background: #27ae60; color: #fff; }
+
+        /* ── Scanning spinner on file icon ───────────────────────── */
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spin { display: inline-block; animation: spin 0.9s linear infinite; }
+    </style>
+</head>
+<body>
+
+<div class="page-header">
+    <img src="/Images/Sail_Logo_Trans.PNG" alt="Logo">
+    <h1>Sail Scanner</h1>
+    <span class="badge">V2 · Azure DI</span>
+</div>
+
+<div class="main">
+
+    <!-- ── Metadata card ────────────────────────────────────────── -->
+    <div class="card">
+        <div class="card-title">Event Details</div>
+
+        <!-- Always-visible fields -->
+        <div class="meta-grid">
+            <div class="field">
+                <label>Date</label>
+                <input type="date" id="metaDate">
+            </div>
+            <div class="field">
+                <label>Regatta Name</label>
+                <input type="text" id="metaRegatta" placeholder="e.g. Rolex Sydney Hobart">
+            </div>
+            <div class="field" style="grid-column: 1 / -1;">
+                <label>Location</label>
+                <input type="text" id="metaLocation" placeholder="e.g. Cowes, Isle of Wight">
+            </div>
+        </div>
+
+        <!-- Collapsible additional fields -->
+        <button class="more-toggle" id="moreToggle" onclick="toggleMoreFields()">
+            <span class="arrow">▼</span>
+            <span id="moreToggleLabel">More details</span>
+        </button>
+        <div class="more-fields" id="moreFields">
+            <div class="meta-grid">
+                <div class="field">
+                    <label>Yacht Club</label>
+                    <input type="text" id="metaYachtClub" placeholder="e.g. Royal Yacht Squadron">
+                </div>
+                <div class="field">
+                    <label>Photographer Name</label>
+                    <input type="text" id="metaPhotographer" placeholder="Your name">
+                </div>
+                <div class="field">
+                    <label>Photographer Website</label>
+                    <input type="url" id="metaWebsite" placeholder="https://...">
+                </div>
+                <div class="field">
+                    <label>Additional Tags</label>
+                    <input type="text" id="metaTags" placeholder="comma separated">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Upload card ───────────────────────────────────────────── -->
+    <div class="card">
+        <div class="card-title">Upload Photos</div>
+
+        <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()"
+             ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+            <div class="dz-icon">⛵</div>
+            <div class="dz-label">Drop photos here or tap to browse</div>
+            <div class="dz-sub">JPEG · PNG · WebP · multiple files supported</div>
+        </div>
+        <input type="file" id="fileInput" accept="image/*" multiple onchange="onFilePick(event)">
+
+        <button class="btn-scan" id="btnScan" onclick="startScan()" disabled>
+            🔍 Scan for Sail Numbers
+        </button>
+    </div>
+
+    <!-- ── Progress ─────────────────────────────────────────────── -->
+    <div class="progress-label" id="progressLabel">Scanning…</div>
+    <div class="progress-wrap" id="progressWrap">
+        <div class="progress-bar" id="progressBar"></div>
+    </div>
+
+    <!-- ── Summary ──────────────────────────────────────────────── -->
+    <div class="summary-bar" id="summaryBar">
+        <div class="sum-stat">
+            <div class="sum-num" id="sumTotal">0</div>
+            <div class="sum-lbl">Photos</div>
+        </div>
+        <div class="sum-stat">
+            <div class="sum-num green" id="sumFound">0</div>
+            <div class="sum-lbl">Sail Numbers Found</div>
+        </div>
+        <div class="sum-stat">
+            <div class="sum-num" id="sumNone">0</div>
+            <div class="sum-lbl">No Detection</div>
+        </div>
+    </div>
+
+    <!-- ── Results list ──────────────────────────────────────────── -->
+    <div id="results"></div>
+
+    <!-- ── Nav buttons (shown when done) ────────────────────────── -->
+    <div class="nav-btns" id="navBtns" style="display:none;">
+        <button class="nav-btn nav-btn-upload" onclick="resetPage()">📤 Upload More</button>
+        <button class="nav-btn nav-btn-search" onclick="window.location.href='PhotoSearch.html'">🔍 Search Photos</button>
+    </div>
+
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────
+let selectedFiles = [];
+let scanning = false;
+
+// ── Init ─────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    // Default date = today
+    const d = document.getElementById('metaDate');
+    d.value = new Date().toISOString().split('T')[0];
+
+    // Restore remembered values
+    restoreFields();
+});
+
+// ── File picking ──────────────────────────────────────────────────
+function onFilePick(e) { setFiles(Array.from(e.target.files)); }
+
+function onDragOver(e) {
+    e.preventDefault();
+    document.getElementById('dropZone').classList.add('over');
+}
+function onDragLeave() { document.getElementById('dropZone').classList.remove('over'); }
+function onDrop(e) {
+    e.preventDefault();
+    document.getElementById('dropZone').classList.remove('over');
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    if (files.length) setFiles(files);
+}
+
+function setFiles(files) {
+    selectedFiles = files;
+    const btn = document.getElementById('btnScan');
+    btn.disabled = files.length === 0;
+    btn.textContent = files.length === 1
+        ? `🔍 Scan 1 Photo`
+        : `🔍 Scan ${files.length} Photos`;
+
+    // Auto-populate location from EXIF of first image
+    if (files.length > 0) tryAutoLocation(files[0]);
+}
+
+async function tryAutoLocation(file) {
+    try {
+        await new Promise(resolve => {
+            EXIF.getData(file, async function () {
+                const lat  = EXIF.getTag(this, "GPSLatitude");
+                const lng  = EXIF.getTag(this, "GPSLongitude");
+                const latR = EXIF.getTag(this, "GPSLatitudeRef");
+                const lngR = EXIF.getTag(this, "GPSLongitudeRef");
+                const dt   = EXIF.getTag(this, "DateTimeOriginal") || EXIF.getTag(this, "DateTime");
+
+                if (lat && lng) {
+                    const latD = toDD(lat, latR), lngD = toDD(lng, lngR);
+                    try {
+                        const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latD}&lon=${lngD}&zoom=10`);
+                        const j = await r.json();
+                        if (j.display_name && !document.getElementById('metaLocation').value) {
+                            const parts = j.display_name.split(', ');
+                            document.getElementById('metaLocation').value =
+                                parts.length >= 3 ? `${parts[0]}, ${parts[parts.length-2]}, ${parts[parts.length-1]}` : j.display_name;
+                        }
+                    } catch(_) {}
+                }
+                if (dt) {
+                    const parsed = new Date(dt.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3'));
+                    if (!isNaN(parsed) && !document.getElementById('metaDate').value) {
+                        document.getElementById('metaDate').value = parsed.toISOString().split('T')[0];
+                    }
+                }
+                resolve();
+            });
+        });
+    } catch(_) {}
+}
+
+function toDD(dms, ref) {
+    const dd = dms[0] + dms[1]/60 + dms[2]/3600;
+    return (ref === 'S' || ref === 'W') ? -dd : dd;
+}
+
+// ── Scan ──────────────────────────────────────────────────────────
+async function startScan() {
+    if (!selectedFiles.length || scanning) return;
+    scanning = true;
+
+    saveFields();
+
+    const btn = document.getElementById('btnScan');
+    btn.disabled = true;
+
+    const resultsEl    = document.getElementById('results');
+    const progressWrap = document.getElementById('progressWrap');
+    const progressBar  = document.getElementById('progressBar');
+    const progressLbl  = document.getElementById('progressLabel');
+    const summaryBar   = document.getElementById('summaryBar');
+
+    resultsEl.innerHTML = '';
+    progressWrap.style.display = 'block';
+    progressLbl.style.display  = 'block';
+    summaryBar.classList.remove('show');
+    document.getElementById('navBtns').style.display = 'none';
+
+    let found = 0, none = 0;
+    const total = selectedFiles.length;
+
+    document.getElementById('sumTotal').textContent = total;
+    document.getElementById('sumFound').textContent = 0;
+    document.getElementById('sumNone').textContent  = 0;
+    summaryBar.classList.add('show');
+
+    for (let i = 0; i < total; i++) {
+        const file = selectedFiles[i];
+        progressLbl.textContent = `Scanning ${i+1} of ${total}: ${file.name}`;
+        progressBar.style.width  = `${Math.round((i / total) * 100)}%`;
+
+        // Create placeholder card
+        const card = document.createElement('div');
+        card.className = 'result-item';
+        card.id = `ri-${i}`;
+        card.innerHTML = buildCard(file, null, 'scanning');
+        resultsEl.appendChild(card);
+        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+        try {
+            const fd = new FormData();
+            fd.append('image', file);
+
+            const resp = await fetch('/api/liveview-scan', { method: 'POST', body: fd });
+            const data = await resp.json();
+
+            const sails = (data.sailNumbers || []).sort((a,b) => b.confidence - a.confidence);
+            const hasHigh = sails.some(s => s.confidence >= 0.7);
+
+            if (hasHigh || sails.length > 0) found++; else none++;
+
+            card.innerHTML = buildCard(file, sails, sails.length ? 'found' : 'none');
+        } catch(err) {
+            card.innerHTML = buildCard(file, null, 'error', err.message);
+            none++;
+        }
+
+        document.getElementById('sumFound').textContent = found;
+        document.getElementById('sumNone').textContent  = none;
+    }
+
+    progressBar.style.width  = '100%';
+    progressLbl.textContent = `✓ Scan complete — ${total} photo${total!==1?'s':''} processed`;
+
+    document.getElementById('navBtns').style.display = 'flex';
+    document.getElementById('btnScan').disabled = false;
+    scanning = false;
+}
+
+function buildCard(file, sails, status, errMsg) {
+    const thumb = status !== 'scanning' && file
+        ? `<img class="ri-thumb" src="${URL.createObjectURL(file)}" alt="">`
+        : '';
+
+    const statusLabel = {
+        scanning: '<span class="ri-status status-scanning"><span class="spin">⟳</span> Scanning…</span>',
+        found:    '<span class="ri-status status-found">✓ Found</span>',
+        none:     '<span class="ri-status status-none">— No sail detected</span>',
+        error:    '<span class="ri-status status-error">⚠ Error</span>'
+    }[status];
+
+    let body = '';
+    if (sails && sails.length > 0) {
+        body = `<div class="sail-chips">${sails.map(s => {
+            const pct  = (s.confidence * 100).toFixed(1);
+            const tier = s.confidence >= 0.7 ? 'high' : 'low';
+            return `<div class="sail-chip ${tier}">
+                <span class="sail-num">${s.number}</span>
+                <span class="sail-conf">${pct}%</span>
+            </div>`;
+        }).join('')}</div>`;
+    } else if (status === 'error') {
+        body = `<div style="font-size:0.8rem;color:rgba(231,76,60,0.8);margin-top:4px;">${errMsg||'Unknown error'}</div>`;
+    }
+
+    return `
+        <div class="ri-header">
+            <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+                ${thumb}
+                <span class="ri-name">${esc(file.name)}</span>
+            </div>
+            ${statusLabel}
+        </div>
+        ${body}
+    `;
+}
+
+// ── More-fields toggle ────────────────────────────────────────────
+function toggleMoreFields() {
+    const toggle = document.getElementById('moreToggle');
+    const fields = document.getElementById('moreFields');
+    const lbl    = document.getElementById('moreToggleLabel');
+    const open   = fields.classList.toggle('open');
+    toggle.classList.toggle('open', open);
+    lbl.textContent = open ? 'Hide details' : 'More details';
+}
+
+// ── Persist fields ────────────────────────────────────────────────
+const FIELDS = ['metaDate','metaRegatta','metaLocation','metaYachtClub','metaPhotographer','metaWebsite','metaTags'];
+
+function saveFields() {
+    FIELDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) localStorage.setItem('u2_' + id, el.value);
+    });
+}
+function restoreFields() {
+    FIELDS.forEach(id => {
+        const saved = localStorage.getItem('u2_' + id);
+        const el    = document.getElementById(id);
+        if (el && saved !== null) {
+            if (id === 'metaDate' && saved) el.value = saved;
+            else if (id !== 'metaDate') el.value = saved;
+        }
+    });
+    // Always ensure date has today's value if nothing stored
+    const d = document.getElementById('metaDate');
+    if (!d.value) d.value = new Date().toISOString().split('T')[0];
+}
+
+// ── Reset ─────────────────────────────────────────────────────────
+function resetPage() {
+    selectedFiles = [];
+    document.getElementById('fileInput').value = '';
+    document.getElementById('results').innerHTML = '';
+    document.getElementById('progressWrap').style.display = 'none';
+    document.getElementById('progressLabel').style.display = 'none';
+    document.getElementById('summaryBar').classList.remove('show');
+    document.getElementById('navBtns').style.display = 'none';
+    const btn = document.getElementById('btnScan');
+    btn.disabled = true;
+    btn.textContent = '🔍 Scan for Sail Numbers';
+    // Reset date to today
+    document.getElementById('metaDate').value = new Date().toISOString().split('T')[0];
+}
+
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = String(s || '');
+    return d.innerHTML;
+}
+</script>
+</body>
+</html>

@@ -45,12 +45,17 @@ class GPSReader:
     """
 
     def __init__(self, port, baud=115200):
-        self.port        = port
-        self.baud        = baud
-        self.ser         = None
-        self.lock        = threading.Lock()
-        self.current_fix = None
-        self._running    = False
+        self.port          = port
+        self.baud          = baud
+        self.ser           = None
+        self.lock          = threading.Lock()
+        self.current_fix   = None
+        self._running      = False
+        self.gps_engine_on = False
+        self.fix_count     = 0
+        self.no_fix_count  = 0
+        self.last_error    = None
+        self._recent_errors = []   # up to 10 recent error strings
 
     # ── Serial helpers ────────────────────────────────────────────────────────
 
@@ -91,7 +96,12 @@ class GPSReader:
                 raw = self.ser.read_all().decode(errors="ignore")
                 return raw.strip()
             except Exception as e:
-                log.warning(f"AT command failed ({cmd}): {e}")
+                msg = f"AT command failed ({cmd}): {e}"
+                log.warning(msg)
+                self.last_error = msg
+                self._recent_errors.append(msg)
+                if len(self._recent_errors) > 10:
+                    self._recent_errors.pop(0)
                 return ""
 
     # ── GPS init ──────────────────────────────────────────────────────────────
@@ -108,7 +118,12 @@ class GPSReader:
             log.warning(f"AT attempt {attempt+1}/5: no OK (got: {repr(resp[:40])})")
             time.sleep(2)
         else:
-            log.error("Modem not responding to AT after 5 attempts")
+            msg = "Modem not responding to AT after 5 attempts"
+            log.error(msg)
+            self.last_error = msg
+            self._recent_errors.append(msg)
+            if len(self._recent_errors) > 10:
+                self._recent_errors.pop(0)
             return False
 
         # Echo off
@@ -124,6 +139,7 @@ class GPSReader:
 
         time.sleep(2)
         log.info("GNSS engine powered on")
+        self.gps_engine_on = True
         return True
 
     # ── Parse +CGPSINFO ───────────────────────────────────────────────────────
@@ -198,6 +214,9 @@ class GPSReader:
         fix  = self._parse_cgpsinfo(resp)
         if fix:
             self.current_fix = fix
+            self.fix_count += 1
+        else:
+            self.no_fix_count += 1
         return fix
 
     def start(self, retry_interval=5):
@@ -221,6 +240,7 @@ class GPSReader:
 
     def stop(self):
         self._running = False
+        self.gps_engine_on = False
         try:
             self._send_at("AT+CGPS=0", wait_s=1.0)  # power off GPS
         except Exception:

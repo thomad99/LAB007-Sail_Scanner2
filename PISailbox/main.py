@@ -125,6 +125,28 @@ def _do_record_video(duration_s):
 
 # ── GPS tracking thread ───────────────────────────────────────────────────────
 
+def _build_gps_diag(current_track_id):
+    """Build GPS diagnostic dict to upload to the server."""
+    fix = gps_reader.current_fix if gps_reader else None
+    return {
+        "serial_open":    gps_reader.is_ready        if gps_reader else False,
+        "gps_engine_on":  gps_reader.gps_engine_on   if gps_reader else False,
+        "fix_valid":      bool(fix and fix.is_valid()),
+        "lat":            fix.lat   if fix else None,
+        "lng":            fix.lng   if fix else None,
+        "altitude":       fix.altitude if fix else None,
+        "speed_ms":       fix.speed    if fix else None,
+        "fix_count":      gps_reader.fix_count      if gps_reader else 0,
+        "no_fix_count":   gps_reader.no_fix_count   if gps_reader else 0,
+        "last_error":     gps_reader.last_error      if gps_reader else None,
+        "recent_errors":  list(gps_reader._recent_errors) if gps_reader else [],
+        "tracking_active": tracking_active.is_set(),
+        "track_id":       current_track_id,
+        "last_fix_at":    fix.utc if fix else None,
+        "reported_at":    datetime.datetime.utcnow().isoformat() + "Z",
+    }
+
+
 def gps_thread_fn():
     log.info("GPS thread started")
 
@@ -139,6 +161,7 @@ def gps_thread_fn():
                               password=device_config.get("sim_apn_pass", ""))
 
     current_track_id = None
+    next_diag_report = time.time()
 
     while not shutdown_event.is_set():
         poll_s = device_config.get("gps_poll_seconds", cfg.DEFAULT_CONFIG["gps_poll_seconds"])
@@ -177,6 +200,15 @@ def gps_thread_fn():
                 uploader_inst.stop_track()
                 log.info(f"⏹ Track STOPPED  id={current_track_id}  at {now_est.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                 current_track_id = None
+
+        # Report GPS diagnostics periodically (every ~60 s)
+        now = time.time()
+        if now >= next_diag_report:
+            next_diag_report = now + 60
+            try:
+                uploader_inst.report_gps_status(_build_gps_diag(current_track_id))
+            except Exception as _e:
+                log.debug(f"GPS diag upload error: {_e}")
 
         shutdown_event.wait(poll_s)
 

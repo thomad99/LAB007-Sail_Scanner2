@@ -290,6 +290,16 @@ class Uploader:
         except Exception as e:
             log.debug(f"SIM status upload failed: {e}")
 
+    def report_gps_status(self, status):
+        """Send GPS diagnostic dict to the server."""
+        try:
+            requests.post(
+                f"{self.server_url}/api/pi/devices/{self.device_id}/gps-status",
+                json=status, timeout=REQUEST_TIMEOUT
+            )
+        except Exception as e:
+            log.debug(f"GPS status upload failed: {e}")
+
     def flush_photo_queue(self):
         """Retry any queued photos."""
         with self._db() as db:
