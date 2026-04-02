@@ -195,7 +195,10 @@ class GPSReader:
 
             alt    = float(alt_raw)   if alt_raw    else None
             spd_ms = float(spd_raw) / 3.6 if spd_raw else None   # km/h → m/s
-            course = float(course_raw) if course_raw else None
+            try:
+                course = float(course_raw) if course_raw else None
+            except (ValueError, TypeError):
+                course = None   # course field sometimes contains '\r\nOK'
 
             return GPSFix(lat, lng,
                           altitude=alt,
@@ -210,7 +213,7 @@ class GPSReader:
 
     def get_fix(self):
         """Query GPS and return current fix, or None if no fix yet."""
-        resp = self._send_at("AT+CGPSINFO", wait_s=1.0)
+        resp = self._send_at("AT+CGPSINFO", wait_s=2.0)
         fix  = self._parse_cgpsinfo(resp)
         if fix:
             self.current_fix = fix

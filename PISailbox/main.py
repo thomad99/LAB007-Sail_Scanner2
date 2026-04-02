@@ -158,19 +158,24 @@ def gps_thread_fn():
 
     gps_reader.start()           # blocks until serial port opens successfully
 
-    # Serial is now open — safe to use AT commands
-    apn = device_config.get("sim_apn", "")
+    # Serial is now open — apply APN once and record it so _on_config_change
+    # doesn't re-apply it on every subsequent poll
+    global _last_applied_apn
+    apn  = device_config.get("sim_apn", "")
+    user = device_config.get("sim_apn_user", "")
+    pw   = device_config.get("sim_apn_pass", "")
     if apn:
         log.info("Applying APN after serial open")
-        sim_manager.apply_apn(apn,
-                              user=device_config.get("sim_apn_user", ""),
-                              password=device_config.get("sim_apn_pass", ""))
+        sim_manager.apply_apn(apn, user=user, password=pw)
+        _last_applied_apn = f"{apn}|{user}|{pw}"
 
     current_track_id = None
-    next_diag_report = time.time()
+    next_diag_report  = time.time()
+    next_gps_upload   = time.time()   # next batch upload to server
 
     while not shutdown_event.is_set():
-        poll_s = device_config.get("gps_poll_seconds", cfg.DEFAULT_CONFIG["gps_poll_seconds"])
+        poll_s    = device_config.get("gps_poll_seconds",            cfg.DEFAULT_CONFIG["gps_poll_seconds"])
+        upload_s  = device_config.get("gps_upload_interval_seconds", cfg.DEFAULT_CONFIG.get("gps_upload_interval_seconds", 60))
 
         if tracking_active.is_set():
             # Ensure we have an open track on the server
@@ -187,15 +192,21 @@ def gps_thread_fn():
                     shutdown_event.wait(5)
                     continue
 
-            # Read and upload GPS point
+            # Read GPS and store locally every poll_s seconds
             fix = gps_reader.get_fix()
             if fix and fix.is_valid():
-                log.debug(f"GPS: {fix}")
-                uploader_inst.upload_gps_point(fix)
+                log.info(f"GPS fix: lat={fix.lat:.5f} lng={fix.lng:.5f} spd={fix.speed}")
+                uploader_inst.queue_gps_point(fix)   # store locally
             else:
-                log.debug("Waiting for GPS fix…")
+                log.info("GPS: no fix yet — waiting for satellites")
 
-            uploader_inst.flush_gps_queue()
+            # Upload queued points to server every upload_s seconds
+            now = time.time()
+            if now >= next_gps_upload:
+                next_gps_upload = now + upload_s
+                queued = uploader_inst.flush_gps_queue()
+                if queued:
+                    log.info(f"GPS: uploaded {queued} point(s) to server")
 
         else:
             # Tracking inactive — if we had an open track, close it
@@ -310,13 +321,22 @@ def sim_thread_fn():
 
 # ── Config change handler ─────────────────────────────────────────────────────
 
+_last_applied_apn = None   # track last APN so we only re-apply when it changes
+
 def _on_config_change(new_cfg):
-    # Apply APN only if the serial port is already open
-    new_apn = new_cfg.get("sim_apn", "")
+    global _last_applied_apn
+    # Apply APN only when it has actually changed (not on every 30s config poll)
+    new_apn  = new_cfg.get("sim_apn", "")
+    new_user = new_cfg.get("sim_apn_user", "")
+    new_pass = new_cfg.get("sim_apn_pass", "")
+    apn_key  = f"{new_apn}|{new_user}|{new_pass}"
     if new_apn and sim_manager and gps_reader and gps_reader.is_ready:
-        sim_manager.apply_apn(new_apn,
-                              user=new_cfg.get("sim_apn_user", ""),
-                              password=new_cfg.get("sim_apn_pass", ""))
+        if apn_key != _last_applied_apn:
+            log.info(f"APN changed — applying: {new_apn}")
+            sim_manager.apply_apn(new_apn, user=new_user, password=new_pass)
+            _last_applied_apn = apn_key
+        else:
+            log.debug("APN unchanged — skipping re-apply")
     # Process any commands embedded in the config response
     commands = new_cfg.pop("__commands", []) or []
     if commands:

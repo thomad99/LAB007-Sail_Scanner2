@@ -369,8 +369,16 @@
                         </p>
                         <div class="config-grid">
                             <div class="field">
-                                <label>GPS upload interval (seconds)</label>
+                                <label>GPS capture interval (seconds)
+                                    <span style="font-size:0.7rem;color:rgba(255,255,255,0.35);display:block;">How often the Pi reads its GPS position</span>
+                                </label>
                                 <input type="number" id="cfgGpsPoll" value="${config.gps_poll_seconds||10}" min="5" max="300">
+                            </div>
+                            <div class="field">
+                                <label>GPS upload interval (seconds)
+                                    <span style="font-size:0.7rem;color:rgba(255,255,255,0.35);display:block;">How often captured points are sent to the server</span>
+                                </label>
+                                <input type="number" id="cfgGpsUpload" value="${config.gps_upload_interval_seconds||60}" min="10" max="3600">
                             </div>
                         </div>
                     </div>
@@ -876,7 +884,8 @@
         const existingConfig = typeof d.config === 'string' ? JSON.parse(d.config) : (d.config || {});
         const config = {
             auto_track:                     document.getElementById('cfgAutoTrack').checked,
-            gps_poll_seconds:               parseInt(document.getElementById('cfgGpsPoll').value)        || 10,
+            gps_poll_seconds:               parseInt(document.getElementById('cfgGpsPoll')?.value)        || 10,
+            gps_upload_interval_seconds:    parseInt(document.getElementById('cfgGpsUpload')?.value)      || 60,
             camera_enabled:                 document.getElementById('cfgCamEnabled').checked,
             camera_auto_photo:              (document.getElementById('cfgCamAutoPhoto')||{}).checked || false,
             photo_interval_seconds:         parseInt((document.getElementById('cfgPhotoInterval')||{}).value) || 30,

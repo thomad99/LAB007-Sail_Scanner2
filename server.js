@@ -5645,7 +5645,8 @@ async function createPiTables() {
 function defaultPiConfig() {
     return {
         auto_track: false,                  // start GPS tracking automatically on boot
-        gps_poll_seconds: 10,
+        gps_poll_seconds: 10,               // how often to read GPS position (seconds)
+        gps_upload_interval_seconds: 60,    // how often to send batched points to server
         camera_enabled: false,
         camera_auto_photo: false,
         photo_interval_seconds: 30,

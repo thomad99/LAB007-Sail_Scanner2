@@ -29,7 +29,8 @@ QUEUE_DB    = os.path.join(DATA_DIR, "queue.sqlite")
 
 # ── Defaults (overridden by server config) ────────────────────────────────────
 DEFAULT_CONFIG = {
-    "gps_poll_seconds":              10,
+    "gps_poll_seconds":              10,   # how often to read GPS (seconds)
+    "gps_upload_interval_seconds":   60,   # how often to upload batched points to server
     "camera_enabled":                False,
     "photo_interval_seconds":        30,
     "photo_session_minutes":         60,

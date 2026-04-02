@@ -161,8 +161,23 @@ class Uploader:
 
     # ── GPS point upload ──────────────────────────────────────────────────────
 
+    def queue_gps_point(self, fix):
+        """Store a GPS fix in the local SQLite queue (no immediate upload)."""
+        if not self._track_id:
+            log.debug("No active track, skipping GPS point")
+            return
+        payload = {
+            "lat":      fix.lat,
+            "lng":      fix.lng,
+            "accuracy": fix.accuracy,
+            "altitude": fix.altitude,
+            "speed":    fix.speed,
+            "heading":  fix.heading,
+        }
+        self._queue_gps(payload)
+
     def upload_gps_point(self, fix):
-        """Upload one GPS fix. Queues if upload fails."""
+        """Upload one GPS fix immediately. Queues if upload fails."""
         if not self._track_id:
             log.debug("No active track, skipping GPS point")
             return
@@ -188,7 +203,7 @@ class Uploader:
             resp.raise_for_status()
             return True
         except Exception as e:
-            log.debug(f"GPS upload failed: {e}")
+            log.warning(f"GPS upload failed (track={self._track_id}): {e}")
             return False
 
     def _queue_gps(self, payload):
@@ -199,21 +214,24 @@ class Uploader:
             )
 
     def flush_gps_queue(self):
-        """Retry any queued GPS points."""
+        """Upload all queued GPS points to server. Returns count of points sent."""
         if not self._track_id:
-            return
+            return 0
         with self._db() as db:
             rows = db.execute(
-                "SELECT id, payload FROM gps_queue WHERE attempts < 10 ORDER BY id LIMIT 50"
+                "SELECT id, payload FROM gps_queue WHERE attempts < 10 ORDER BY id LIMIT 200"
             ).fetchall()
+        sent = 0
         for row_id, payload_str in rows:
             payload = json.loads(payload_str)
             if self._post_gps(payload):
                 with self._db() as db:
                     db.execute("DELETE FROM gps_queue WHERE id=?", (row_id,))
+                sent += 1
             else:
                 with self._db() as db:
                     db.execute("UPDATE gps_queue SET attempts=attempts+1 WHERE id=?", (row_id,))
+        return sent
 
     # ── Photo upload ──────────────────────────────────────────────────────────
 
