@@ -272,7 +272,8 @@
             const online   = d.online;
             const tracking = d.tracking_active;
             const sel = selectedDevice && d.device_id === selectedDevice.device_id ? 'selected' : '';
-            const lastSeen = d.last_seen ? fmtDateTime(d.last_seen) + ' ET' : 'Never';
+            const lastSeen   = d.last_seen   ? fmtDateTime(d.last_seen)   + ' ET' : 'Never';
+            const lastGps    = d.last_gps_at ? fmtDateTime(d.last_gps_at) + ' ET' : '—';
             const trackBadge = tracking
                 ? `<span style="display:inline-block;padding:1px 7px;border-radius:20px;font-size:0.65rem;font-weight:bold;
                        background:rgba(46,204,113,0.18);border:1px solid rgba(46,204,113,0.4);color:#2ecc71;">
@@ -288,7 +289,8 @@
                     ${trackBadge}<br>
                     <span style="margin-top:3px;display:inline-block;">
                         ${online ? '● Online' : '○ Offline'} · ${esc(d.ip_address||'?')}<br>
-                        Last seen: ${lastSeen}
+                        Last seen: ${lastSeen}<br>
+                        Last GPS: ${lastGps}
                     </span>
                 </div>
             </div>`;

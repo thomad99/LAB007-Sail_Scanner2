@@ -5787,7 +5787,15 @@ app.get('/api/pi/devices', async (req, res) => {
                     SELECT 1 FROM tracks t
                     WHERE t.device_name = d.device_id
                     AND t.ended_at IS NULL
-                ) AS tracking_active
+                ) AS tracking_active,
+                (
+                    SELECT tp.recorded_at
+                    FROM track_points tp
+                    JOIN tracks t ON t.id = tp.track_id
+                    WHERE t.device_name = d.device_id
+                    ORDER BY tp.recorded_at DESC
+                    LIMIT 1
+                ) AS last_gps_at
             FROM pi_devices d
             ORDER BY d.last_seen DESC NULLS LAST
         `);

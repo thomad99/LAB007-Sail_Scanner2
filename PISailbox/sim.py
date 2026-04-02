@@ -164,6 +164,20 @@ class SIMManager:
 
     # ── APN configuration ─────────────────────────────────────────────────────
 
+    def get_iccid(self):
+        """Returns SIM ICCID. Try both AT+CCID and AT+ICCID."""
+        for cmd in ["AT+CCID", "AT+ICCID", "AT+CICCID"]:
+            resp = self._at(cmd, wait=0.8)
+            m = re.search(r'[\+]?(?:CCID|ICCID):\s*([0-9A-Fa-fF]+)', resp)
+            if m:
+                return m.group(1)
+            # Some firmware just returns the ICCID on its own line
+            lines = [l.strip() for l in resp.splitlines()
+                     if l.strip() and l.strip() not in ("OK",) and not l.startswith("AT+")]
+            if lines and re.match(r'^[0-9]{15,20}', lines[0]):
+                return lines[0]
+        return None
+
     def apply_apn(self, apn, user="", password=""):
         """
         Set the PDP context APN and reconnect.
