@@ -117,6 +117,12 @@ def handle_commands(commands):
             tracking_active.clear()
             video_active.clear()
 
+        elif cmd == 'test_sim':
+            t = threading.Thread(
+                target=_do_test_sim, daemon=True, name="cmd-test-sim"
+            )
+            t.start()
+
 def _do_capture_photo():
     fix = gps_reader.current_fix if gps_reader else None
     path = camera_handler.capture_photo(gps_fix=fix)
@@ -129,6 +135,43 @@ def _do_record_video(duration_s):
         camera_handler.record_video(duration_s)
     finally:
         video_active.clear()
+
+def _do_test_sim():
+    """Force a PPP/SIM upload attempt regardless of WiFi state. Reports result via gps_status."""
+    global _last_upload_via, _last_upload_at
+    log.info("SIM TEST: starting forced SIM upload test")
+    try:
+        # Queue a synthetic test point so there's something to upload
+        fix = gps_reader.current_fix if gps_reader else None
+        if fix:
+            uploader_inst.queue_gps_point(fix)
+
+        depth = uploader_inst.gps_queue_depth()
+        log.info(f"SIM TEST: {depth} point(s) in queue — pausing GPS and connecting PPP")
+
+        gps_reader.pause()
+        try:
+            if ppp_mgr.connect():
+                sent = uploader_inst.flush_gps_queue()
+                if sent > 0:
+                    log.info(f"SIM TEST: SUCCESS — uploaded {sent} point(s) via SIM")
+                    _last_upload_via = "SIM"
+                    _last_upload_at  = datetime.datetime.utcnow().isoformat() + "Z"
+                else:
+                    log.warning("SIM TEST: PPP connected but upload still failed (track issue?)")
+                ppp_mgr.disconnect()
+            else:
+                log.warning("SIM TEST: PPP failed to connect")
+        finally:
+            gps_reader.resume()
+
+        # Immediately push updated status so dashboard reflects result
+        try:
+            uploader_inst.report_gps_status(_build_gps_diag(None))
+        except Exception:
+            pass
+    except Exception as e:
+        log.error(f"SIM TEST error: {e}")
 
 # ── GPS tracking thread ───────────────────────────────────────────────────────
 

@@ -5932,7 +5932,7 @@ app.get('/api/pi/devices/:deviceId/config', async (req, res) => {
 app.post('/api/pi/devices/:deviceId/command', express.json(), async (req, res) => {
     try {
         const { command } = req.body;
-        const valid = ['start_track','stop_track','capture_photo','start_video','stop_video','restart'];
+        const valid = ['start_track','stop_track','capture_photo','start_video','stop_video','restart','test_sim'];
         if (!valid.includes(command)) {
             return res.status(400).json({ error: `Unknown command. Valid: ${valid.join(', ')}` });
         }

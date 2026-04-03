@@ -604,6 +604,16 @@
                         <div id="ipAddressesBlock">${renderIpAddresses(d)}</div>
                     </div>
                     <div class="card">
+                        <div class="card-title">SIM Connectivity Test</div>
+                        <p style="font-size:0.85rem;color:rgba(255,255,255,0.5);margin-bottom:12px;">
+                            Force the Pi to upload via SIM/PPP regardless of WiFi. Watch "Last Upload Via" above — it will change to 📡 SIM on success.
+                        </p>
+                        <button class="btn" id="btnTestSim" onclick="testSimUpload()" style="background:#e67e22;">
+                            📡 Test SIM Upload
+                        </button>
+                        <div id="simTestResult" style="margin-top:10px;font-size:0.85rem;color:rgba(255,255,255,0.6);"></div>
+                    </div>
+                    <div class="card">
                         <div class="card-title">GPS Tracks from this Device</div>
                         <p style="font-size:0.85rem;color:rgba(255,255,255,0.5);margin-bottom:12px;">
                             Live and historic GPS tracks from this Pi appear in the Tracker Dashboard.
@@ -1132,6 +1142,37 @@
             if (data.ok && cmd === 'stop_video')   setVideoButtons(false);
         } catch(e) {
             if (fb) { fb.textContent = '❌ ' + e.message; setTimeout(() => { if(fb) fb.textContent=''; }, 4000); }
+        }
+    }
+
+    async function testSimUpload() {
+        const d = selectedDevice;
+        if (!d) return;
+        const btn = document.getElementById('btnTestSim');
+        const result = document.getElementById('simTestResult');
+        btn.disabled = true;
+        btn.textContent = '⏳ Sending test command…';
+        result.textContent = 'Command sent — the Pi will attempt a PPP/SIM upload in the next poll cycle (~30s). Watch "Last Upload Via" on this page.';
+        try {
+            const r = await fetch(`/api/pi/devices/${d.device_id}/command`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command: 'test_sim' })
+            });
+            const data = await r.json();
+            if (data.ok) {
+                result.style.color = '#2ecc71';
+                result.textContent = '✅ Command queued. Refresh this page in ~30s to see the result in "Last Upload Via".';
+            } else {
+                result.style.color = '#e74c3c';
+                result.textContent = '❌ ' + (data.error || 'Unknown error');
+            }
+        } catch(e) {
+            result.style.color = '#e74c3c';
+            result.textContent = '❌ ' + e.message;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '📡 Test SIM Upload';
         }
     }
 
