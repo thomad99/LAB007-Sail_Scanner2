@@ -1201,6 +1201,121 @@ app.post('/api/liveview-scan', upload.single('image'), async (req, res) => {
     }
 });
 
+// ── Upload2: scan with Document Intelligence AND save to photo_metadata (like /api/scan) ──
+app.post('/api/scan2', upload.single('image'), async (req, res) => {
+    if (!req.file || !req.file.buffer) {
+        return res.status(400).json({ error: 'No image provided', sailNumbers: [] });
+    }
+    if (!documentIntelligenceEndpoint || !documentIntelligenceKey) {
+        return res.status(503).json({ error: 'Azure Document Intelligence not configured', sailNumbers: [] });
+    }
+
+    const originalFilename = req.file.originalname;
+    const metadata = {
+        date:                req.body.date               || new Date().toISOString().split('T')[0],
+        regatta_name:        req.body.regatta_name        || null,
+        photographer_name:   req.body.photographer_name   || null,
+        photographer_website:req.body.photographer_website|| null,
+        location:            req.body.location            || null,
+        additional_tags:     req.body.additional_tags
+                               ? req.body.additional_tags.split(',').map(t => t.trim())
+                               : [],
+        upload_timestamp:    new Date().toISOString(),
+    };
+
+    try {
+        // Duplicate check
+        const fileChecksum = generateFileChecksum(req.file.buffer);
+        const existing = await checkForDuplicate(fileChecksum);
+        if (existing) {
+            return res.status(409).json({
+                success: false,
+                error: 'Duplicate file detected',
+                existingFile: existing.filename,
+                message: 'This image has already been uploaded.'
+            });
+        }
+
+        // Scan with Document Intelligence
+        const analyzeResult = await analyzeWithDocumentIntelligence(req.file.buffer, req.file.mimetype || 'image/jpeg');
+        const sailNumbers    = extractSailNumbersFromDocumentIntelligence(analyzeResult);
+        const exifData       = extractExifData(req.file.buffer);
+
+        const processedFiles = [];
+
+        // Store one record per detected sail number (high-confidence first)
+        const validSails = sailNumbers.filter(s => isValidSailNumber(s.number) && (s.confidence || 0) >= 0.5);
+
+        if (validSails.length > 0) {
+            for (const sailData of validSails) {
+                try {
+                    const sailorInfo = await lookupSailorInDatabase(sailData.number);
+                    const sailorName = sailorInfo ? sanitizeForFilename(sailorInfo.sailorName) : 'NONAME';
+                    const newFilename = `${sailData.number}_${sailorName}_${originalFilename}`;
+                    const s3Key = `processed/${newFilename}`;
+                    await uploadToS3(req.file.buffer, s3Key, req.file.mimetype);
+                    processedFiles.push({ newFilename, sailNumber: sailData.number, confidence: sailData.confidence });
+                } catch (err) {
+                    console.error(`scan2: error saving sail ${sailData.number}:`, err.message);
+                }
+            }
+        } else {
+            // No sail detected — store as NOSAIL so photo is still searchable
+            const newFilename = `NOSAIL_NONAME_${originalFilename}`;
+            const s3Key = `processed/${newFilename}`;
+            try {
+                await uploadToS3(req.file.buffer, s3Key, req.file.mimetype);
+                processedFiles.push({ newFilename, sailNumber: 'NOSAIL', confidence: 0 });
+            } catch (err) {
+                console.error('scan2: error saving NOSAIL:', err.message);
+            }
+        }
+
+        // Insert into photo_metadata for each saved file
+        for (const file of processedFiles) {
+            try {
+                await pool.query(
+                    `INSERT INTO photo_metadata (
+                        filename, sail_number, date, regatta_name,
+                        photographer_name, photographer_website,
+                        location, additional_tags, file_checksum,
+                        photo_timestamp, gps_latitude, gps_longitude, gps_altitude,
+                        upload_timestamp
+                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+                    [
+                        file.newFilename,
+                        file.sailNumber,
+                        metadata.date,
+                        metadata.regatta_name,
+                        metadata.photographer_name,
+                        metadata.photographer_website,
+                        metadata.location,
+                        metadata.additional_tags,
+                        fileChecksum,
+                        exifData.photo_timestamp  || null,
+                        exifData.gps_latitude     || null,
+                        exifData.gps_longitude    || null,
+                        exifData.gps_altitude     || null,
+                        metadata.upload_timestamp,
+                    ]
+                );
+            } catch (dbErr) {
+                console.error('scan2: db insert error:', dbErr.message);
+            }
+        }
+
+        res.json({
+            success: true,
+            sailNumbers,
+            processedFiles,
+            originalFilename,
+        });
+    } catch (err) {
+        console.error('scan2 error:', err);
+        res.status(500).json({ error: err.message, sailNumbers: [] });
+    }
+});
+
 // Store LiveView scan results in Postgres (timestamp added server-side)
 app.post('/api/liveview-store-results', express.json(), async (req, res) => {
     const sailNumbers = req.body.sailNumbers;

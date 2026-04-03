@@ -285,10 +285,13 @@
         }
         list.innerHTML = devices.map(d => {
             const online   = d.online;
-            const tracking = d.tracking_active;
             const sel = selectedDevice && d.device_id === selectedDevice.device_id ? 'selected' : '';
             const lastSeen   = d.last_seen   ? fmtDateTime(d.last_seen)   + ' ET' : 'Never';
             const lastGps    = d.last_gps_at ? fmtDateTime(d.last_gps_at) + ' ET' : '—';
+            // "Tracking ON" only when there is an open track AND a GPS point was recorded
+            // within the last 5 minutes — avoids showing ON for auto_track sessions with no data
+            const recentGps  = d.last_gps_at && (Date.now() - new Date(d.last_gps_at).getTime()) < 5 * 60 * 1000;
+            const tracking   = d.tracking_active && recentGps;
             const trackBadge = tracking
                 ? `<span style="display:inline-block;padding:1px 7px;border-radius:20px;font-size:0.65rem;font-weight:bold;
                        background:rgba(46,204,113,0.18);border:1px solid rgba(46,204,113,0.4);color:#2ecc71;">
@@ -533,9 +536,13 @@
                             </div>
                             <div class="stat-box">
                                 <div class="stat-label">GPS Tracking</div>
-                                ${d.tracking_active
-                                    ? `<div class="stat-val" style="color:#2ecc71">▶ Active</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Last fix: ${d.last_gps_at?fmtTime(d.last_gps_at)+' ET':'—'}</div>`
-                                    : `<div class="stat-val" style="color:rgba(255,255,255,0.35)">⏹ Off</div>${d.last_gps_at?`<div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Last: ${fmtTime(d.last_gps_at)} ET</div>`:''}`}
+                                ${(()=>{
+                                    const recentGps = d.last_gps_at && (Date.now() - new Date(d.last_gps_at).getTime()) < 5*60*1000;
+                                    const liveTracking = d.tracking_active && recentGps;
+                                    return liveTracking
+                                        ? `<div class="stat-val" style="color:#2ecc71">▶ Active</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Last fix: ${fmtTime(d.last_gps_at)} ET</div>`
+                                        : `<div class="stat-val" style="color:rgba(255,255,255,0.35)">⏹ Off</div>${d.last_gps_at?`<div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Last: ${fmtTime(d.last_gps_at)} ET</div>`:''}`;
+                                })()}
                             </div>
                             <div class="stat-box">
                                 <div class="stat-label">Auto Photo Capture</div>

@@ -493,11 +493,25 @@ async function startScan() {
         card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
         try {
+            const meta = getMetadata();
             const fd = new FormData();
             fd.append('image', file);
+            // Send all metadata fields so the server can save to photo_metadata
+            fd.append('date',                 meta.date);
+            fd.append('regatta_name',         meta.regatta_name);
+            fd.append('location',             meta.location);
+            fd.append('photographer_name',    meta.photographer);
+            fd.append('photographer_website', meta.website);
+            fd.append('additional_tags',      meta.tags);
 
-            const resp = await fetch('/api/liveview-scan', { method: 'POST', body: fd });
+            const resp = await fetch('/api/scan2', { method: 'POST', body: fd });
             const data = await resp.json();
+
+            if (resp.status === 409) {
+                card.innerHTML = buildCard(file, [], 'none', `Duplicate — already uploaded as ${data.existingFile}`);
+                none++;
+                continue;
+            }
 
             const sails = (data.sailNumbers || []).sort((a,b) => b.confidence - a.confidence);
             const hasHigh = sails.some(s => s.confidence >= 0.7);
@@ -505,20 +519,6 @@ async function startScan() {
             if (hasHigh || sails.length > 0) found++; else none++;
 
             card.innerHTML = buildCard(file, sails, sails.length ? 'found' : 'none');
-
-            // Save to database (always, even when no sails detected so the scan is recorded)
-            try {
-                await fetch('/api/liveview-store-results', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        sailNumbers: sails.map(s => s.number),
-                        sessionId,
-                        filename: file.name,
-                        metadata: getMetadata(),
-                    })
-                });
-            } catch(_) { /* non-fatal — scan result still shown */ }
         } catch(err) {
             card.innerHTML = buildCard(file, null, 'error', err.message);
             none++;

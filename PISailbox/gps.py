@@ -247,12 +247,20 @@ class GPSReader:
         self._close()
 
     def resume(self):
-        """Reopen serial port after PPP has finished."""
+        """Reopen serial port after PPP has finished and re-enable GPS engine."""
         log.info("GPS: resuming serial port after PPP")
         try:
             self._open()
             self._send_at("ATE0", wait_s=0.5)   # echo off
-            self.gps_engine_on = True            # GPS engine stays on through PPP
+
+            # GPS engine was stopped by _modem_reset before PPP; restart it now
+            resp = self._send_at("AT+CGPS=1", wait_s=2.0)
+            if resp and 'ERROR' in resp:
+                log.warning(f"GPS re-enable after PPP got error: {resp}")
+            else:
+                self.gps_engine_on = True
+                log.info("GPS: engine re-enabled after PPP")
+
             log.info("GPS: serial port resumed")
         except Exception as e:
             log.warning(f"GPS resume failed: {e} — will retry on next poll")

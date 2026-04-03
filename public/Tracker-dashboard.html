@@ -339,6 +339,31 @@
 
             <div class="replay-legend" id="replayLegend" style="display:none;"></div>
 
+            <!-- Session stats bar -->
+            <div id="replayStats" style="display:none;
+                background:rgba(0,0,0,0.45); border-top:1px solid rgba(255,255,255,0.08);
+                padding:8px 16px; display:none; gap:24px; align-items:center; flex-wrap:wrap;">
+                <div style="display:flex;gap:6px;align-items:baseline;">
+                    <span style="font-size:0.68rem;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.06em;">Distance</span>
+                    <span id="rs-dist" style="font-size:1rem;font-weight:700;color:#7ecfff;">—</span>
+                    <span style="font-size:0.7rem;color:rgba(255,255,255,0.4);">nm</span>
+                </div>
+                <div style="display:flex;gap:6px;align-items:baseline;">
+                    <span style="font-size:0.68rem;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.06em;">Avg Speed</span>
+                    <span id="rs-avg" style="font-size:1rem;font-weight:700;color:#7ecfff;">—</span>
+                    <span style="font-size:0.7rem;color:rgba(255,255,255,0.4);">kts</span>
+                </div>
+                <div style="display:flex;gap:6px;align-items:baseline;">
+                    <span style="font-size:0.68rem;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.06em;">Peak Speed</span>
+                    <span id="rs-peak" style="font-size:1rem;font-weight:700;color:#f39c12;">—</span>
+                    <span style="font-size:0.7rem;color:rgba(255,255,255,0.4);">kts</span>
+                </div>
+                <div style="display:flex;gap:6px;align-items:baseline;">
+                    <span style="font-size:0.68rem;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.06em;">Duration</span>
+                    <span id="rs-dur" style="font-size:1rem;font-weight:700;color:#7ecfff;">—</span>
+                </div>
+            </div>
+
             <div class="playback-controls" id="pbControls" style="display:none;">
                 <div class="pb-row1">
                     <span class="pb-time" id="pbTimeLabel">00:00:00</span>
@@ -348,6 +373,11 @@
                 <div class="pb-row2">
                     <button class="btn-pb" id="pbPlayBtn" onclick="togglePlayback()">▶ Play</button>
                     <button class="btn-pb" onclick="resetPlayback()">⏮ Reset</button>
+                    <button class="btn-pb" onclick="jumpToPeakSpeed()" id="peakBtn"
+                            title="Jump to the moment of highest recorded speed"
+                            style="background:rgba(243,156,18,0.15);border-color:#f39c12;color:#f39c12;">
+                        🏁 Peak Speed
+                    </button>
                     <span class="speed-label">Speed:</span>
                     <button class="btn-pb" onclick="setSpeed(1)"  id="spd1" >1×</button>
                     <button class="btn-pb" onclick="setSpeed(5)"  id="spd5" >5×</button>
@@ -643,6 +673,14 @@ async function selectSession(idx) {
     stopPlayback();
     resetPlayback();
 
+    // Clear previous stats
+    ['rs-dist','rs-avg','rs-peak','rs-dur'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.textContent = '—';
+    });
+    window._hasPeakSpeed = false;
+    window._peakSpeedMs  = 0;
+    hideEl('replayStats');
+
     // Show map
     hideEl('r-map-ph');
     showEl('r-map');
@@ -680,6 +718,43 @@ async function selectSession(idx) {
     document.getElementById('pbEndLabel').textContent = formatDur(pbTotalMs);
     document.getElementById('pbTimeline').value = 0;
     document.getElementById('pbTimeLabel').textContent = '0:00:00';
+
+    // ── Compute session-wide stats ─────────────────────────────────────────
+    let totalDistNm = 0, allSpeeds = [], peakSpeedKts = 0, peakSpeedMs = 0;
+    const sessionStart = getSessionStartMs();
+
+    for (const [trackId, pts] of Object.entries(replayPoints)) {
+        for (let i = 1; i < pts.length; i++) {
+            totalDistNm += haversineNm(pts[i-1].lat, pts[i-1].lng, pts[i].lat, pts[i].lng);
+        }
+        pts.forEach(p => {
+            if (p.speed != null) {
+                const kts = p.speed * 1.94384;
+                if (kts < 100) {   // filter GPS noise
+                    allSpeeds.push(kts);
+                    if (kts > peakSpeedKts) {
+                        peakSpeedKts = kts;
+                        peakSpeedMs  = new Date(p.recorded_at).getTime() - sessionStart;
+                    }
+                }
+            }
+        });
+    }
+
+    const avgSpeedKts = allSpeeds.length
+        ? allSpeeds.reduce((a,b) => a+b, 0) / allSpeeds.length
+        : 0;
+
+    // Store peak offset for the jump button
+    window._peakSpeedMs = peakSpeedMs;
+    window._hasPeakSpeed = peakSpeedKts > 0;
+
+    document.getElementById('rs-dist').textContent = totalDistNm.toFixed(2);
+    document.getElementById('rs-avg').textContent  = avgSpeedKts > 0 ? avgSpeedKts.toFixed(1) : '—';
+    document.getElementById('rs-peak').textContent = peakSpeedKts > 0 ? peakSpeedKts.toFixed(1) : '—';
+    document.getElementById('rs-dur').textContent  = formatDur(pbTotalMs);
+    document.getElementById('peakBtn').disabled = !window._hasPeakSpeed;
+    showEl('replayStats', 'flex');
 
     // Render legend
     const legend = document.getElementById('replayLegend');
@@ -806,6 +881,43 @@ function setSpeed(s) {
         const el=document.getElementById('spd'+x);
         if(el) el.classList.toggle('active', x===s);
     });
+}
+
+function jumpToPeakSpeed() {
+    if (!window._hasPeakSpeed || !selectedSession) return;
+
+    stopPlayback();
+
+    // Jump the replay clock to 5 seconds before peak so you see it arrive
+    const jumpMs = Math.max(0, window._peakSpeedMs - 5000);
+    pbVirtualMs  = jumpMs;
+    applyReplayFrame(pbVirtualMs);
+
+    // Zoom the map to the peak-speed location
+    const sessionStart = getSessionStartMs();
+    const targetEpoch  = sessionStart + window._peakSpeedMs;
+    let   peakLat = null, peakLng = null;
+
+    for (const [trackId, pts] of Object.entries(replayPoints)) {
+        pts.forEach(p => {
+            if (p.speed != null) {
+                const kts = p.speed * 1.94384;
+                if (kts > 0 && Math.abs(new Date(p.recorded_at).getTime() - targetEpoch) < 2000) {
+                    peakLat = p.lat; peakLng = p.lng;
+                }
+            }
+        });
+    }
+
+    if (peakLat !== null && rMap) {
+        rMap.setView([peakLat, peakLng], 16, { animate: true });
+    }
+
+    // Flash the peak speed stat to draw the eye
+    const el = document.getElementById('rs-peak');
+    el.style.transition = 'color 0.2s';
+    el.style.color = '#fff';
+    setTimeout(() => { el.style.color = '#f39c12'; }, 300);
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────

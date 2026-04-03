@@ -67,21 +67,32 @@ def _cleanup_stale():
 
 def _modem_reset():
     """
-    Briefly open the serial port to verify the modem is in AT command mode
-    and hang up any active call, then close so pppd can take over.
+    Prepare the modem for a PPP data call:
+      - Hang up, reset
+      - STOP the GPS engine (AT+CGPS=0) — critical: the GPS engine
+        sharing the serial port blocks PPP from getting CONNECT
+      - Set APN so the chat script just needs to dial
     """
     import serial as _serial
-    PORT  = '/dev/ttyAMA0'
-    BAUD  = 115200
+    PORT = '/dev/ttyAMA0'
+    BAUD = 115200
     try:
         s = _serial.Serial(PORT, BAUD, timeout=2, rtscts=False, dsrdtr=False)
         time.sleep(0.5)
         s.reset_input_buffer()
-        # Hang up / reset
-        for cmd in [b'ATH\r\n', b'ATZ\r\n', b'AT\r\n']:
-            s.write(cmd); time.sleep(0.8)
+
+        cmds = [
+            (b'ATH\r\n',                                          0.8),
+            (b'ATZ\r\n',                                          1.0),   # full reset
+            (b'AT+CGPS=0\r\n',                                    2.0),   # STOP GPS engine
+            (b'AT+CGDCONT=1,"IP","iot.1nce.net"\r\n',            1.0),   # pre-set APN
+            (b'AT\r\n',                                           0.5),   # sanity check
+        ]
+        for cmd, wait in cmds:
+            s.write(cmd); time.sleep(wait)
             resp = s.read_all().decode(errors='ignore').strip()
-            log.info(f"PPP modem-reset [{cmd.strip()}] → {repr(resp)}")
+            log.info(f"PPP modem-reset [{cmd.strip().decode()}] → {repr(resp)}")
+
         s.close()
         time.sleep(0.5)
     except Exception as e:
@@ -102,13 +113,15 @@ def connect(provider='1nce', timeout=50):
 
     log.info(f"PPP: connecting via {provider}…")
     try:
-        # Write chat debug to /tmp/ppp-debug.log so we can diagnose failures
+        # Run pppd directly so we control all options and can capture output.
+        # nodetach is NOT used (runs as daemon); debug writes to syslog and logfile.
         subprocess.run(
-            ['pon', provider, 'debug', 'logfile', '/tmp/ppp-debug.log'],
+            ['/usr/sbin/pppd', 'call', provider,
+             'debug', 'logfile', '/tmp/ppp-debug.log'],
             timeout=10, capture_output=True
         )
     except Exception as e:
-        log.warning(f"PPP pon failed: {e}")
+        log.warning(f"PPP pppd failed: {e}")
         return False
 
     # Wait for ppp0 to get an IP
