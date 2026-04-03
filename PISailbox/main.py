@@ -205,25 +205,33 @@ def gps_thread_fn():
             now = time.time()
             if now >= next_gps_upload:
                 next_gps_upload = now + upload_s
-                if ppp_mgr.is_wifi_available():
-                    # WiFi is up — upload directly
-                    queued = uploader_inst.flush_gps_queue()
-                    if queued:
-                        log.info(f"GPS: uploaded {queued} point(s) via WiFi")
+                depth = uploader_inst.gps_queue_depth()
+                log.info(f"GPS: upload tick — {depth} point(s) in queue")
+
+                if depth == 0:
+                    pass  # nothing to do
+
                 else:
-                    # No WiFi — briefly connect PPP, upload, disconnect
-                    log.info("GPS: no WiFi — connecting PPP for upload")
-                    gps_reader.pause()
-                    try:
-                        if ppp_mgr.connect():
-                            queued = uploader_inst.flush_gps_queue()
-                            if queued:
-                                log.info(f"GPS: uploaded {queued} point(s) via PPP")
-                            ppp_mgr.disconnect()
-                        else:
-                            log.warning("GPS: PPP connect failed — points stay queued")
-                    finally:
-                        gps_reader.resume()
+                    # Step 1: try direct upload via whatever network is currently default
+                    sent = uploader_inst.flush_gps_queue()
+                    remaining = uploader_inst.gps_queue_depth()
+                    if sent > 0:
+                        log.info(f"GPS: uploaded {sent} point(s) via direct connection")
+
+                    # Step 2: if points still in queue the direct upload failed —
+                    # pause GPS serial port, connect PPP, retry, then resume
+                    if remaining > 0:
+                        log.info(f"GPS: {remaining} point(s) still queued — trying PPP fallback")
+                        gps_reader.pause()
+                        try:
+                            if ppp_mgr.connect():
+                                sent2 = uploader_inst.flush_gps_queue()
+                                log.info(f"GPS: uploaded {sent2} point(s) via PPP")
+                                ppp_mgr.disconnect()
+                            else:
+                                log.warning("GPS: PPP connect failed — points stay queued for next tick")
+                        finally:
+                            gps_reader.resume()
 
         else:
             # Tracking inactive — if we had an open track, close it

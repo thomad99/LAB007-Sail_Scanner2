@@ -12,11 +12,18 @@ import logging
 import datetime
 
 import requests
+import urllib3
 
 log = logging.getLogger(__name__)
 
 RETRY_INTERVAL = 30   # seconds between retry attempts
 REQUEST_TIMEOUT = 20  # seconds
+
+# Set to False if the server's SSL cert has a hostname mismatch (bare-domain vs www).
+# Fix the cert properly on the server; this is a temporary workaround.
+SSL_VERIFY = False
+if not SSL_VERIFY:
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class Uploader:
@@ -102,7 +109,7 @@ class Uploader:
         try:
             resp = requests.post(
                 f"{self.server_url}/api/pi/register",
-                json=payload, timeout=REQUEST_TIMEOUT
+                json=payload, timeout=REQUEST_TIMEOUT, verify=SSL_VERIFY
             )
             resp.raise_for_status()
             data = resp.json()
@@ -117,7 +124,7 @@ class Uploader:
         try:
             resp = requests.get(
                 f"{self.server_url}/api/pi/devices/{self.device_id}/config",
-                timeout=REQUEST_TIMEOUT
+                timeout=REQUEST_TIMEOUT, verify=SSL_VERIFY
             )
             resp.raise_for_status()
             return resp.json()
@@ -135,7 +142,7 @@ class Uploader:
             resp = requests.post(
                 f"{self.server_url}/api/tracks",
                 json={"name": name, "device_name": self.device_id},
-                timeout=REQUEST_TIMEOUT
+                timeout=REQUEST_TIMEOUT, verify=SSL_VERIFY
             )
             resp.raise_for_status()
             self._track_id = resp.json()["id"]
@@ -152,7 +159,7 @@ class Uploader:
         try:
             requests.patch(
                 f"{self.server_url}/api/tracks/{self._track_id}/stop",
-                timeout=REQUEST_TIMEOUT
+                timeout=REQUEST_TIMEOUT, verify=SSL_VERIFY
             )
             log.info(f"Track {self._track_id} stopped")
         except Exception as e:
@@ -198,7 +205,7 @@ class Uploader:
         try:
             resp = requests.post(
                 f"{self.server_url}/api/tracks/{self._track_id}/points",
-                json=payload, timeout=REQUEST_TIMEOUT
+                json=payload, timeout=REQUEST_TIMEOUT, verify=SSL_VERIFY
             )
             resp.raise_for_status()
             return True
@@ -212,6 +219,16 @@ class Uploader:
                 "INSERT INTO gps_queue (payload, created) VALUES (?, ?)",
                 (json.dumps(payload), datetime.datetime.utcnow().isoformat())
             )
+
+    def gps_queue_depth(self):
+        """Return how many GPS points are currently waiting in the local queue."""
+        try:
+            with self._db() as db:
+                return db.execute(
+                    "SELECT COUNT(*) FROM gps_queue WHERE attempts < 10"
+                ).fetchone()[0]
+        except Exception:
+            return 0
 
     def flush_gps_queue(self):
         """Upload all queued GPS points to server. Returns count of points sent."""
@@ -231,6 +248,7 @@ class Uploader:
             else:
                 with self._db() as db:
                     db.execute("UPDATE gps_queue SET attempts=attempts+1 WHERE id=?", (row_id,))
+                break   # first failure means network is down — stop trying, save PPP for next tick
         return sent
 
     # ── Photo upload ──────────────────────────────────────────────────────────
@@ -269,7 +287,7 @@ class Uploader:
                 f"{self.server_url}/api/pi/devices/{self.device_id}/photos",
                 files=files,
                 data={"meta": json.dumps(metas)},
-                timeout=60
+                timeout=60, verify=SSL_VERIFY
             )
             resp.raise_for_status()
             result = resp.json()
@@ -304,7 +322,7 @@ class Uploader:
         try:
             requests.post(
                 f"{self.server_url}/api/pi/devices/{self.device_id}/sim-status",
-                json=status, timeout=REQUEST_TIMEOUT
+                json=status, timeout=REQUEST_TIMEOUT, verify=SSL_VERIFY
             )
         except Exception as e:
             log.debug(f"SIM status upload failed: {e}")
@@ -314,7 +332,7 @@ class Uploader:
         try:
             requests.post(
                 f"{self.server_url}/api/pi/devices/{self.device_id}/gps-status",
-                json=status, timeout=REQUEST_TIMEOUT
+                json=status, timeout=REQUEST_TIMEOUT, verify=SSL_VERIFY
             )
         except Exception as e:
             log.debug(f"GPS status upload failed: {e}")
