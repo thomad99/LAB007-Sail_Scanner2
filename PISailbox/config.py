@@ -10,6 +10,12 @@ import socket
 # ── Server connection ─────────────────────────────────────────────────────────
 SERVER_URL = os.environ.get("PISAILBOX_SERVER", "https://lovesailing.ai")
 
+# SIM AT-HTTP uploads must use plain HTTP — the SIM7600G_V2.0.2 firmware has no
+# HTTPS support via AT commands (AT+HTTPSSL is not implemented).
+# Requires "Force HTTPS" to be DISABLED in the Render.com service settings.
+SIM_SERVER_URL = os.environ.get("PISAILBOX_SIM_SERVER",
+                                SERVER_URL.replace("https://", "http://"))
+
 # ── Device identity ───────────────────────────────────────────────────────────
 # Reads hostname; override with PISAILBOX_DEVICE_ID env var if needed.
 DEVICE_ID = os.environ.get("PISAILBOX_DEVICE_ID", socket.gethostname())

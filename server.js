@@ -1,5 +1,6 @@
 const express = require('express');
 const { Pool } = require('pg');
+const mqtt = require('mqtt');
 const path = require('path');
 const multer = require('multer');
 const { ComputerVisionClient } = require('@azure/cognitiveservices-computervision');
@@ -6398,6 +6399,53 @@ app.get('/api/tracks/sessions', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+// ── SIM MQTT subscriber ───────────────────────────────────────────────────────
+// Receives GPS points published by PiSailBox devices over cellular (SIM MQTT).
+// Pi publishes to: pisailbox/{device_id}/gps
+// Payload: { lat, lng, speed, altitude, accuracy, heading, track_id, ... }
+(function startMqttSubscriber() {
+    const BROKER = process.env.PISAILBOX_MQTT_BROKER || 'mqtt://broker.hivemq.com:1883';
+    const TOPIC  = 'pisailbox/+/gps';
+
+    const mqttClient = mqtt.connect(BROKER, {
+        clientId:      `lovesailing-server-${Math.random().toString(16).slice(2, 8)}`,
+        clean:         true,
+        reconnectPeriod: 5000,
+        connectTimeout:  15000,
+    });
+
+    mqttClient.on('connect', () => {
+        console.log(`MQTT: connected to ${BROKER}, subscribing to ${TOPIC}`);
+        mqttClient.subscribe(TOPIC, { qos: 1 }, (err) => {
+            if (err) console.error('MQTT subscribe error:', err);
+        });
+    });
+
+    mqttClient.on('reconnect', () => console.log('MQTT: reconnecting…'));
+    mqttClient.on('error',     (e) => console.error('MQTT error:', e.message));
+
+    mqttClient.on('message', async (topic, buffer) => {
+        try {
+            const data = JSON.parse(buffer.toString());
+            const { lat, lng, speed, altitude, accuracy, heading, track_id } = data;
+
+            if (!lat || !lng || !track_id) {
+                console.warn(`MQTT: incomplete payload on ${topic}:`, data);
+                return;
+            }
+
+            await pool.query(
+                `INSERT INTO track_points (track_id, lat, lng, accuracy, altitude, speed, heading)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+                [track_id, lat, lng, accuracy || null, altitude || null, speed || null, heading || null]
+            );
+            console.log(`MQTT: stored GPS point track=${track_id} lat=${lat} lng=${lng}`);
+        } catch (e) {
+            console.error('MQTT message handler error:', e.message);
+        }
+    });
+})();
 
 // ─────────────────────────────────────────────────────────────────────────────
 

@@ -137,35 +137,38 @@ def _do_record_video(duration_s):
         video_active.clear()
 
 def _do_test_sim():
-    """Force a PPP/SIM upload attempt regardless of WiFi state. Reports result via gps_status."""
+    """Force a SIM MQTT upload regardless of WiFi. Reports result via gps_status."""
     global _last_upload_via, _last_upload_at
-    log.info("SIM TEST: starting forced SIM upload test")
+    log.info("SIM TEST: starting forced SIM MQTT upload test")
     try:
-        # Queue a synthetic test point so there's something to upload
         fix = gps_reader.current_fix if gps_reader else None
         if fix:
             uploader_inst.queue_gps_point(fix)
 
         depth = uploader_inst.gps_queue_depth()
-        log.info(f"SIM TEST: {depth} point(s) in queue — pausing GPS and connecting PPP")
+        log.info(f"SIM TEST: {depth} point(s) in queue — pausing GPS for MQTT upload")
 
         gps_reader.pause()
         try:
-            if ppp_mgr.connect():
-                sent = uploader_inst.flush_gps_queue()
-                if sent > 0:
-                    log.info(f"SIM TEST: SUCCESS — uploaded {sent} point(s) via SIM")
-                    _last_upload_via = "SIM"
-                    _last_upload_at  = datetime.datetime.utcnow().isoformat() + "Z"
-                else:
-                    log.warning("SIM TEST: PPP connected but upload still failed (track issue?)")
-                ppp_mgr.disconnect()
+            import sim_mqtt
+            sent = sim_mqtt.flush_via_mqtt(
+                serial_port = cfg.GPS_SERIAL_PORT,
+                baud_rate   = cfg.GPS_BAUD_RATE,
+                device_id   = cfg.DEVICE_ID,
+                track_id    = uploader_inst._track_id,
+                db_path     = uploader_inst.db_path,
+            )
+            if sent > 0:
+                log.info(f"SIM TEST: SUCCESS — published {sent} point(s) via SIM MQTT")
+                _last_upload_via = "SIM"
+                _last_upload_at  = datetime.datetime.utcnow().isoformat() + "Z"
             else:
-                log.warning("SIM TEST: PPP failed to connect")
+                log.warning("SIM TEST: MQTT upload returned 0 — check track is active")
+        except Exception as e:
+            log.error(f"SIM TEST: MQTT error: {e}")
         finally:
             gps_reader.resume()
 
-        # Immediately push updated status so dashboard reflects result
         try:
             uploader_inst.report_gps_status(_build_gps_diag(None))
         except Exception:
@@ -271,20 +274,28 @@ def gps_thread_fn():
                         _last_upload_at  = datetime.datetime.utcnow().isoformat() + "Z"
 
                     # Step 2: if points still in queue the direct upload failed —
-                    # pause GPS serial port, connect PPP, retry, then resume
+                    # pause GPS serial port and publish via SIM MQTT (plain TCP,
+                    # no TLS required — works on this modem firmware)
                     if remaining > 0:
-                        log.info(f"GPS: {remaining} point(s) still queued — trying PPP fallback")
+                        log.info(f"GPS: {remaining} point(s) still queued — trying SIM MQTT fallback")
                         gps_reader.pause()
                         try:
-                            if ppp_mgr.connect():
-                                sent2 = uploader_inst.flush_gps_queue()
-                                if sent2 > 0:
-                                    log.info(f"GPS: uploaded {sent2} point(s) via SIM")
-                                    _last_upload_via = "SIM"
-                                    _last_upload_at  = datetime.datetime.utcnow().isoformat() + "Z"
-                                ppp_mgr.disconnect()
+                            import sim_mqtt
+                            sent2 = sim_mqtt.flush_via_mqtt(
+                                serial_port = cfg.GPS_SERIAL_PORT,
+                                baud_rate   = cfg.GPS_BAUD_RATE,
+                                device_id   = cfg.DEVICE_ID,
+                                track_id    = uploader_inst._track_id,
+                                db_path     = uploader_inst.db_path,
+                            )
+                            if sent2 > 0:
+                                log.info(f"GPS: published {sent2} point(s) via SIM MQTT")
+                                _last_upload_via = "SIM"
+                                _last_upload_at  = datetime.datetime.utcnow().isoformat() + "Z"
                             else:
-                                log.warning("GPS: PPP connect failed — points stay queued for next tick")
+                                log.warning("GPS: SIM MQTT upload failed — points stay queued")
+                        except Exception as _sim_e:
+                            log.error(f"GPS: SIM MQTT error: {_sim_e}")
                         finally:
                             gps_reader.resume()
 
