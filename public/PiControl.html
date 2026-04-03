@@ -13,12 +13,13 @@
 
         .topbar {
             display: flex; align-items: center; justify-content: space-between;
-            padding: 10px 20px; height: 56px;
+            padding: 10px 20px; min-height: 56px;
             background: rgba(0,0,0,0.4); border-bottom: 1px solid rgba(255,255,255,0.08);
+            flex-wrap: wrap; gap: 8px;
         }
-        .topbar-logo { height: 36px; }
-        .topbar-title { font-size: 1rem; font-weight: bold; letter-spacing: 2px; color: #7ecfff; }
-        .topbar-right { display: flex; gap: 8px; align-items: center; }
+        .topbar-logo { height: 36px; flex-shrink: 0; }
+        .topbar-title { font-size: 1rem; font-weight: bold; letter-spacing: 2px; color: #7ecfff; flex: 1; }
+        .topbar-right { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
         .btn {
             padding: 7px 14px; border-radius: 7px;
@@ -190,6 +191,59 @@
         .save-bar { display: flex; gap: 10px; align-items: center; margin-top: 16px; }
         .save-msg  { font-size: 0.82rem; color: #2ecc71; }
 
+        /* ── Mobile layout ───────────────────────────────────────────────── */
+        @media (max-width: 768px) {
+            html, body { overflow: auto; }
+
+            .topbar { padding: 8px 12px; height: auto; flex-wrap: wrap; gap: 6px; }
+            .topbar-title { font-size: 0.82rem; }
+            .topbar-right { gap: 5px; flex-wrap: wrap; }
+            .topbar-right .btn { font-size: 0.75rem; padding: 5px 10px; }
+
+            .layout { flex-direction: column; height: auto; overflow: visible; }
+
+            /* Sidebar becomes a collapsible header strip */
+            .sidebar {
+                width: 100%; min-width: unset;
+                border-right: none;
+                border-bottom: 1px solid rgba(255,255,255,0.08);
+                max-height: 56px; overflow: hidden; transition: max-height 0.3s ease;
+            }
+            .sidebar.expanded { max-height: 400px; }
+            .sidebar-header { cursor: pointer; padding: 14px 14px; }
+            .sidebar-header::after { content: ' ▼'; font-size: 0.65rem; color: rgba(255,255,255,0.3); }
+            .sidebar.expanded .sidebar-header::after { content: ' ▲'; }
+            .device-list { padding: 6px 8px 10px; max-height: 280px; overflow-y: auto; }
+
+            /* Main takes full width */
+            .main { flex: 1; min-height: 0; }
+
+            /* Tabs scroll horizontally */
+            .tabs { overflow-x: auto; padding: 0 8px; flex-wrap: nowrap; gap: 0; }
+            .tabs::-webkit-scrollbar { height: 3px; }
+            .tabs::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+            .tab { padding: 10px 12px; font-size: 0.75rem; flex-shrink: 0; }
+
+            /* Tab content scrolls normally */
+            .tab-content { overflow-y: auto; padding: 14px; }
+
+            /* Cards full-width with slightly less padding */
+            .card { padding: 14px; }
+
+            /* Status grid — 2 columns on mobile */
+            .status-grid { grid-template-columns: repeat(2, 1fr); }
+
+            /* Action buttons wrap and go full-width */
+            .btn-row { flex-wrap: wrap; }
+            .btn-row .btn { flex: 1; min-width: 120px; text-align: center; justify-content: center; }
+
+            /* GPS map shorter on mobile */
+            .gps-map { height: 220px; }
+
+            /* Photo grid 2 columns */
+            .photo-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
         /* GPS map */
         .gps-map { height: 320px; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }
         .track-row {
@@ -229,8 +283,8 @@
 <div class="layout">
 
     <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="sidebar-header">
+    <div class="sidebar" id="deviceSidebar">
+        <div class="sidebar-header" onclick="toggleSidebar()">
             <span>Pi Devices</span>
             <span id="devCount" style="color:rgba(255,255,255,0.22)">—</span>
         </div>
@@ -263,6 +317,18 @@
     let devices = [];
     let selectedDevice = null;
     let currentTab = 'status';
+
+    function toggleSidebar() {
+        if (window.innerWidth > 768) return;
+        document.getElementById('deviceSidebar').classList.toggle('expanded');
+    }
+
+    // Auto-expand sidebar on mobile when a device is selected so user can see it collapsed
+    function collapseSidebar() {
+        if (window.innerWidth <= 768) {
+            document.getElementById('deviceSidebar').classList.remove('expanded');
+        }
+    }
 
     // ── Load devices ──────────────────────────────────────────────────────────
     async function loadDevices() {
@@ -322,6 +388,7 @@
         document.querySelectorAll('.device-item').forEach(e => e.classList.remove('selected'));
         const el = document.getElementById('dev-' + deviceId);
         if (el) el.classList.add('selected');
+        collapseSidebar();   // auto-collapse device list on mobile after selection
         // Destroy old map so it re-initialises for the new device
         if (gpsMap) { gpsMap.remove(); gpsMap = null; gpsMapLayers = []; gpsSelectedTrack = null; }
         renderMainPanel();

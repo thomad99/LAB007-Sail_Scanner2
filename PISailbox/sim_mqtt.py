@@ -98,7 +98,7 @@ def flush_via_mqtt(serial_port, baud_rate, device_id, track_id, db_path):
     try:
         with sqlite3.connect(db_path) as db:
             rows = db.execute(
-                'SELECT id, payload FROM gps_queue WHERE attempts < 10 ORDER BY id LIMIT 50'
+                'SELECT id, payload FROM gps_queue WHERE attempts < 10 ORDER BY id LIMIT 5'
             ).fetchall()
     except Exception as e:
         log.warning(f'SIM-MQTT: cannot read queue: {e}')

@@ -229,30 +229,53 @@
 
         .mobile-menu .mobile-group {
             width: 80%;
-            background: rgba(255,255,255,0.06);
-            border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 14px;
-            padding: 10px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
             margin: 6px 0;
         }
 
-        .mobile-menu .mobile-group-label {
-            font-size: 0.7rem;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            color: rgba(255,255,255,0.35);
+        /* Tracker toggle button — looks like a regular menu item */
+        .mobile-tracker-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 20px;
+            font-size: 1.5em;
+            color: white;
+            width: 100%;
             text-align: center;
-            padding-bottom: 4px;
+            border-radius: 8px;
+            background-color: rgba(255,255,255,0.15);
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            transition: all 0.3s ease;
         }
+        .mobile-tracker-toggle:hover { background-color: rgba(255,255,255,0.25); }
+        .mobile-tracker-toggle .arrow {
+            font-size: 0.7em;
+            transition: transform 0.25s;
+            color: rgba(255,255,255,0.5);
+        }
+        .mobile-tracker-toggle.open .arrow { transform: rotate(90deg); }
 
-        .mobile-menu .mobile-group a {
+        /* Submenu — hidden by default, slides open */
+        .mobile-tracker-sub {
+            display: none;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 6px;
+            padding: 8px 10px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 12px;
+        }
+        .mobile-tracker-sub.open { display: flex; }
+        .mobile-tracker-sub a {
             width: 100%;
             margin: 0;
             padding: 14px 20px;
-            font-size: 1.2em;
+            font-size: 1.1em;
+            background: rgba(255,255,255,0.09);
         }
 
         .mobile-menu img {
@@ -375,10 +398,14 @@
         <a href="Find-regatta.html">Find Regatta</a>
         <a href="Chatbot.html">Chatbot</a>
         <div class="mobile-group">
-            <div class="mobile-group-label">Tracker</div>
-            <a href="Tracker.html">📍 Web Tracker</a>
-            <a href="Tracker-dashboard.html">🗺️ Track Dashboard</a>
-            <a href="PiControl.html">🥧 Pi Control</a>
+            <button class="mobile-tracker-toggle" id="trackerToggle" onclick="toggleTrackerSub()">
+                🗺️ Tracker <span class="arrow">▶</span>
+            </button>
+            <div class="mobile-tracker-sub" id="trackerSub">
+                <a href="Tracker.html">📍 Web Tracker</a>
+                <a href="Tracker-dashboard.html">🗺️ Track Dashboard</a>
+                <a href="PiControl.html">🥧 Pi Control</a>
+            </div>
         </div>
         <a href="Shop.html">Shop</a>
         <a href="game.html">GAME</a>
@@ -388,6 +415,13 @@
         function toggleMenu() {
             const mobileMenu = document.getElementById('mobileMenu');
             mobileMenu.style.display = mobileMenu.style.display === 'flex' ? 'none' : 'flex';
+        }
+
+        function toggleTrackerSub() {
+            const btn = document.getElementById('trackerToggle');
+            const sub = document.getElementById('trackerSub');
+            btn.classList.toggle('open');
+            sub.classList.toggle('open');
         }
 
         function openTrackerMenu() {

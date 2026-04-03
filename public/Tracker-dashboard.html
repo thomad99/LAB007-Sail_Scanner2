@@ -469,13 +469,20 @@ async function loadTracks() {
     const list = document.getElementById('trackList');
     if (allTracks.length===0){list.innerHTML='<div class="empty">No tracks yet.<br>Open Tracker on your device.</div>';return;}
     list.innerHTML = allTracks.map((t,i)=>{
-        const live = !t.ended_at;
+        // "live" = no ended_at AND last point within 10 minutes
+        const lastPt  = t.last_point_at ? new Date(t.last_point_at) : null;
+        const recent  = lastPt && (Date.now() - lastPt.getTime() < 10 * 60 * 1000);
+        const live    = !t.ended_at && recent;
+        const stale   = !t.ended_at && !recent;   // started but no recent data
         const date = fmtDate(t.started_at);
         const time = fmtTimeHM(t.started_at);
         const sel  = t.id===selectedTrackId?'selected':'';
+        const badge = live  ? '<span class="badge-live">LIVE</span>'
+                    : stale ? '<span class="badge-live" style="background:rgba(231,76,60,0.25);border-color:rgba(231,76,60,0.5);color:#e74c3c;">STALE</span>'
+                    : '';
         return `<div class="track-item ${sel}" id="ti-${t.id}" onclick="selectTrack(${t.id})">
-            <div class="track-item-name">${esc(t.name||'Track '+t.id)}${live?'<span class="badge-live">LIVE</span>':''}</div>
-            <div class="track-item-meta">📅 ${date} ${time} · ${t.point_count||0} pts${t.device_name?` · ${esc(t.device_name)}`:''}${t.ended_at?'':' · recording'}</div>
+            <div class="track-item-name">${esc(t.name||'Track '+t.id)}${badge}</div>
+            <div class="track-item-meta">📅 ${date} ${time} · ${t.point_count||0} pts${t.device_name?` · ${esc(t.device_name)}`:''}${live?' · recording':''}</div>
             <button class="del-btn" onclick="deleteTrack(event,${t.id})">✕</button>
         </div>`;
     }).join('');
@@ -601,14 +608,16 @@ async function refreshLive() {
         const col = trackColor(idx);
         bounds.push([racer.lat,racer.lng]);
 
-        // Build icon with racer initial
-        const initials = (racer.device_name||racer.name||'?').charAt(0).toUpperCase();
+        // Build icon: last 3 chars of device name (e.g. "007" from "sailbox007")
+        const rawName = (racer.device_name||racer.name||'?');
+        const label   = rawName.slice(-3).toUpperCase();
         const icon = L.divIcon({
-            html: `<div style="background:${col};width:32px;height:32px;border-radius:50%;
+            html: `<div style="background:${col};min-width:38px;height:32px;border-radius:16px;
                                border:2px solid #fff;display:flex;align-items:center;
-                               justify-content:center;font-weight:bold;font-size:14px;
-                               color:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.5);">${initials}</div>`,
-            iconSize:[32,32], iconAnchor:[16,16], className:''
+                               justify-content:center;font-weight:bold;font-size:12px;
+                               color:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.5);
+                               padding:0 6px;white-space:nowrap;">${label}</div>`,
+            iconSize:[38,32], iconAnchor:[19,16], className:''
         });
 
         const popupContent = `<b>${esc(racer.device_name||racer.name||'Racer '+racer.id)}</b>` +
@@ -705,8 +714,8 @@ async function selectSession(idx) {
         replayTrails[track.id] = L.polyline(ll,{color:col,weight:2,opacity:0.2}).addTo(rMap);
         ll.forEach(p=>allBounds.push(p));
 
-        // Create animated marker with racer initial
-        const initials = (track.device_name||track.name||'?').charAt(0).toUpperCase();
+        // Create animated marker with last 3 chars of device name (e.g. "007")
+        const initials = (track.device_name||track.name||'?').slice(-3).toUpperCase();
         const icon = makeRacerIcon(initials, col, false);
         replayMarkers[track.id] = L.marker(ll[0],{icon,zIndexOffset:100}).addTo(rMap);
     }));
@@ -769,14 +778,15 @@ async function selectSession(idx) {
 }
 
 function makeRacerIcon(initials, col, active) {
-    const size   = active ? 34 : 28;
+    const h      = active ? 34 : 28;
+    const fs     = active ? 13 : 11;
     const shadow = active ? '0 0 10px 3px '+col : '0 2px 5px rgba(0,0,0,0.4)';
     return L.divIcon({
-        html: `<div style="background:${col};width:${size}px;height:${size}px;border-radius:50%;
+        html: `<div style="background:${col};min-width:${h}px;height:${h}px;border-radius:${h/2}px;
                            border:2px solid #fff;display:flex;align-items:center;justify-content:center;
-                           font-weight:bold;font-size:${active?15:12}px;color:#fff;
-                           box-shadow:${shadow};transition:all 0.3s;">${initials}</div>`,
-        iconSize:[size,size], iconAnchor:[size/2,size/2], className:''
+                           font-weight:bold;font-size:${fs}px;color:#fff;padding:0 5px;
+                           box-shadow:${shadow};transition:all 0.3s;white-space:nowrap;">${initials}</div>`,
+        iconSize:[h+8,h], iconAnchor:[(h+8)/2,h/2], className:''
     });
 }
 
@@ -819,7 +829,7 @@ function applyReplayFrame(virtualMs) {
         if(!best) return;
 
         const col = trackColor(idx);
-        const initials = (track.device_name||track.name||'?').charAt(0).toUpperCase();
+        const initials = (track.device_name||track.name||'?').slice(-3).toUpperCase();
         const isActive = new Date(pts[pts.length-1].recorded_at).getTime()>=virtualEpoch-5000;
         const icon = makeRacerIcon(initials, col, isActive);
         if(replayMarkers[track.id]){

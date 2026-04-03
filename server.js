@@ -6342,6 +6342,7 @@ app.get('/api/tracks/live', async (req, res) => {
                 LIMIT 1
             ) p ON true
             WHERE t.ended_at IS NULL
+              AND p.recorded_at > NOW() - INTERVAL '10 minutes'
             ORDER BY t.started_at DESC
         `);
         res.json(result.rows);
