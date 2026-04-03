@@ -132,25 +132,30 @@ def _do_record_video(duration_s):
 
 # ── GPS tracking thread ───────────────────────────────────────────────────────
 
+_last_upload_via     = None   # "WiFi" | "SIM" | None
+_last_upload_at      = None   # ISO timestamp of last successful upload
+
 def _build_gps_diag(current_track_id):
     """Build GPS diagnostic dict to upload to the server."""
     fix = gps_reader.current_fix if gps_reader else None
     return {
-        "serial_open":    gps_reader.is_ready        if gps_reader else False,
-        "gps_engine_on":  gps_reader.gps_engine_on   if gps_reader else False,
-        "fix_valid":      bool(fix and fix.is_valid()),
-        "lat":            fix.lat   if fix else None,
-        "lng":            fix.lng   if fix else None,
-        "altitude":       fix.altitude if fix else None,
-        "speed_ms":       fix.speed    if fix else None,
-        "fix_count":      gps_reader.fix_count      if gps_reader else 0,
-        "no_fix_count":   gps_reader.no_fix_count   if gps_reader else 0,
-        "last_error":     gps_reader.last_error      if gps_reader else None,
-        "recent_errors":  list(gps_reader._recent_errors) if gps_reader else [],
-        "tracking_active": tracking_active.is_set(),
-        "track_id":       current_track_id,
-        "last_fix_at":    fix.utc if fix else None,
-        "reported_at":    datetime.datetime.utcnow().isoformat() + "Z",
+        "serial_open":      gps_reader.is_ready        if gps_reader else False,
+        "gps_engine_on":    gps_reader.gps_engine_on   if gps_reader else False,
+        "fix_valid":        bool(fix and fix.is_valid()),
+        "lat":              fix.lat   if fix else None,
+        "lng":              fix.lng   if fix else None,
+        "altitude":         fix.altitude if fix else None,
+        "speed_ms":         fix.speed    if fix else None,
+        "fix_count":        gps_reader.fix_count      if gps_reader else 0,
+        "no_fix_count":     gps_reader.no_fix_count   if gps_reader else 0,
+        "last_error":       gps_reader.last_error      if gps_reader else None,
+        "recent_errors":    list(gps_reader._recent_errors) if gps_reader else [],
+        "tracking_active":  tracking_active.is_set(),
+        "track_id":         current_track_id,
+        "last_fix_at":      datetime.datetime.utcnow().isoformat() + "Z" if fix else None,
+        "last_upload_via":  _last_upload_via,
+        "last_upload_at":   _last_upload_at,
+        "reported_at":      datetime.datetime.utcnow().isoformat() + "Z",
     }
 
 
@@ -212,11 +217,15 @@ def gps_thread_fn():
                     pass  # nothing to do
 
                 else:
+                    global _last_upload_via, _last_upload_at
+
                     # Step 1: try direct upload via whatever network is currently default
                     sent = uploader_inst.flush_gps_queue()
                     remaining = uploader_inst.gps_queue_depth()
                     if sent > 0:
                         log.info(f"GPS: uploaded {sent} point(s) via direct connection")
+                        _last_upload_via = "WiFi"
+                        _last_upload_at  = datetime.datetime.utcnow().isoformat() + "Z"
 
                     # Step 2: if points still in queue the direct upload failed —
                     # pause GPS serial port, connect PPP, retry, then resume
@@ -226,7 +235,10 @@ def gps_thread_fn():
                         try:
                             if ppp_mgr.connect():
                                 sent2 = uploader_inst.flush_gps_queue()
-                                log.info(f"GPS: uploaded {sent2} point(s) via PPP")
+                                if sent2 > 0:
+                                    log.info(f"GPS: uploaded {sent2} point(s) via SIM")
+                                    _last_upload_via = "SIM"
+                                    _last_upload_at  = datetime.datetime.utcnow().isoformat() + "Z"
                                 ppp_mgr.disconnect()
                             else:
                                 log.warning("GPS: PPP connect failed — points stay queued for next tick")

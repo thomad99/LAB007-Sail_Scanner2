@@ -16,9 +16,9 @@ DEVICE_ID = os.environ.get("PISAILBOX_DEVICE_ID", socket.gethostname())
 DEVICE_NAME = os.environ.get("PISAILBOX_NAME", DEVICE_ID)
 
 # ── SIM7600 serial port ───────────────────────────────────────────────────────
-# The SIM7600G-H HAT typically appears as /dev/ttyUSB2 for AT commands.
-# Change to /dev/ttyUSB1 or /dev/ttyS0 if GPS is not found.
-GPS_SERIAL_PORT = os.environ.get("GPS_PORT", "/dev/ttyUSB2")
+# On this Pi the HAT is wired via GPIO UART (/dev/ttyAMA0).
+# Override with GPS_PORT env var if the port is different on another unit.
+GPS_SERIAL_PORT = os.environ.get("GPS_PORT", "/dev/ttyAMA0")
 GPS_BAUD_RATE   = 115200
 
 # ── Local storage ─────────────────────────────────────────────────────────────

@@ -545,6 +545,18 @@
                                 })()}
                             </div>
                             <div class="stat-box">
+                                <div class="stat-label">Last Upload Via</div>
+                                ${(()=>{
+                                    const gs = d.gps_status || {};
+                                    const via = gs.last_upload_via;
+                                    const at  = gs.last_upload_at;
+                                    if (!via) return `<div class="stat-val" style="color:rgba(255,255,255,0.3)">—</div>`;
+                                    const col  = via === 'SIM' ? '#e67e22' : '#2ecc71';
+                                    const icon = via === 'SIM' ? '📡' : '📶';
+                                    return `<div class="stat-val" style="color:${col};font-size:1.1rem;">${icon} ${esc(via)}</div>${at ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">${fmtTime(at)} ET</div>` : ''}`;
+                                })()}
+                            </div>
+                            <div class="stat-box">
                                 <div class="stat-label">Auto Photo Capture</div>
                                 ${config.camera_enabled && config.camera_auto_photo
                                     ? `<div class="stat-val" style="color:#2ecc71">📸 ON</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Every ${config.photo_interval_seconds||30}s · ${config.photo_session_minutes||60}min session</div>`

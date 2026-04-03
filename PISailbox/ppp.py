@@ -113,15 +113,12 @@ def connect(provider='1nce', timeout=50):
 
     log.info(f"PPP: connecting via {provider}…")
     try:
-        # Run pppd directly so we control all options and can capture output.
-        # nodetach is NOT used (runs as daemon); debug writes to syslog and logfile.
         subprocess.run(
-            ['/usr/sbin/pppd', 'call', provider,
-             'debug', 'logfile', '/tmp/ppp-debug.log'],
+            ['pon', provider],
             timeout=10, capture_output=True
         )
     except Exception as e:
-        log.warning(f"PPP pppd failed: {e}")
+        log.warning(f"PPP pon failed: {e}")
         return False
 
     # Wait for ppp0 to get an IP
