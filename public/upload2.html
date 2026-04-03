@@ -54,6 +54,20 @@
             margin-bottom: 16px;
         }
 
+        /* ── Toggle switch ──────────────────────────────────────── */
+        .toggle { position: relative; width: 46px; height: 26px; display: inline-block; }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute; inset: 0; background: rgba(255,255,255,0.15);
+            border-radius: 26px; cursor: pointer; transition: 0.3s;
+        }
+        .toggle-slider:before {
+            content: ''; position: absolute; width: 20px; height: 20px;
+            left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.3s;
+        }
+        .toggle input:checked + .toggle-slider { background: #2ecc71; }
+        .toggle input:checked + .toggle-slider:before { transform: translateX(20px); }
+
         /* ── Drop Zone ──────────────────────────────────────────── */
         .drop-zone {
             border: 2px dashed rgba(0,102,204,0.6);
@@ -314,6 +328,20 @@
         </div>
         <input type="file" id="fileInput" accept="image/*" multiple onchange="onFilePick(event)">
 
+        <div style="display:flex;align-items:center;justify-content:space-between;
+                    margin-top:14px;padding:10px 14px;
+                    background:rgba(255,255,255,0.04);border-radius:9px;
+                    border:1px solid rgba(255,255,255,0.08);">
+            <div>
+                <div style="font-size:0.88rem;color:rgba(255,255,255,0.75);">Upload photos with no sail detected</div>
+                <div style="font-size:0.72rem;color:rgba(255,255,255,0.35);margin-top:2px;">When OFF, only photos with a detected sail number are saved</div>
+            </div>
+            <label class="toggle" style="flex-shrink:0;margin-left:16px;">
+                <input type="checkbox" id="toggleUploadNoSail" checked>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
         <button class="btn-scan" id="btnScan" onclick="startScan()" disabled>
             🔍 Scan for Sail Numbers
         </button>
@@ -341,8 +369,16 @@
         </div>
     </div>
 
-    <!-- ── Results list ──────────────────────────────────────────── -->
-    <div id="results"></div>
+    <!-- ── Details toggle ───────────────────────────────────────── -->
+    <div id="detailsToggleRow" style="display:none;text-align:center;margin:10px 0;">
+        <button onclick="toggleDetails()" style="background:none;border:none;color:rgba(255,255,255,0.4);
+            font-size:0.82rem;cursor:pointer;text-decoration:underline;" id="detailsToggleBtn">
+            ▶ Show scan details
+        </button>
+    </div>
+
+    <!-- ── Results list (hidden by default) ─────────────────────── -->
+    <div id="results" style="display:none;"></div>
 
     <!-- ── Nav buttons (shown when done) ────────────────────────── -->
     <div class="nav-btns" id="navBtns" style="display:none;">
@@ -490,10 +526,10 @@ async function startScan() {
         card.id = `ri-${i}`;
         card.innerHTML = buildCard(file, null, 'scanning');
         resultsEl.appendChild(card);
-        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
         try {
             const meta = getMetadata();
+            const uploadNoSail = document.getElementById('toggleUploadNoSail').checked;
             const fd = new FormData();
             fd.append('image', file);
             // Send all metadata fields so the server can save to photo_metadata
@@ -503,6 +539,7 @@ async function startScan() {
             fd.append('photographer_name',    meta.photographer);
             fd.append('photographer_website', meta.website);
             fd.append('additional_tags',      meta.tags);
+            fd.append('upload_no_sail',       uploadNoSail ? 'true' : 'false');
 
             const resp = await fetch('/api/scan2', { method: 'POST', body: fd });
             const data = await resp.json();
@@ -531,6 +568,7 @@ async function startScan() {
     progressBar.style.width  = '100%';
     progressLbl.textContent = `✓ Scan complete — ${total} photo${total!==1?'s':''} processed`;
 
+    document.getElementById('detailsToggleRow').style.display = 'block';
     document.getElementById('navBtns').style.display = 'flex';
     document.getElementById('btnScan').disabled = false;
     scanning = false;
@@ -608,10 +646,21 @@ function restoreFields() {
 }
 
 // ── Reset ─────────────────────────────────────────────────────────
+function toggleDetails() {
+    const el  = document.getElementById('results');
+    const btn = document.getElementById('detailsToggleBtn');
+    const open = el.style.display === 'none';
+    el.style.display  = open ? 'block' : 'none';
+    btn.textContent   = open ? '▼ Hide scan details' : '▶ Show scan details';
+}
+
 function resetPage() {
     selectedFiles = [];
     document.getElementById('fileInput').value = '';
     document.getElementById('results').innerHTML = '';
+    document.getElementById('results').style.display = 'none';
+    document.getElementById('detailsToggleRow').style.display = 'none';
+    document.getElementById('detailsToggleBtn').textContent = '▶ Show scan details';
     document.getElementById('progressWrap').style.display = 'none';
     document.getElementById('progressLabel').style.display = 'none';
     document.getElementById('summaryBar').classList.remove('show');

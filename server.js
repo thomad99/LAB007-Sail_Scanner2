@@ -1261,14 +1261,19 @@ app.post('/api/scan2', upload.single('image'), async (req, res) => {
                 }
             }
         } else {
-            // No sail detected — store as NOSAIL so photo is still searchable
-            const newFilename = `NOSAIL_NONAME_${originalFilename}`;
-            const s3Key = `processed/${newFilename}`;
-            try {
-                await uploadToS3(req.file.buffer, s3Key, req.file.mimetype);
-                processedFiles.push({ newFilename, sailNumber: 'NOSAIL', confidence: 0 });
-            } catch (err) {
-                console.error('scan2: error saving NOSAIL:', err.message);
+            // No sail detected — only save if upload_no_sail flag is true (default true)
+            const uploadNoSail = req.body.upload_no_sail !== 'false';
+            if (uploadNoSail) {
+                const newFilename = `NOSAIL_NONAME_${originalFilename}`;
+                const s3Key = `processed/${newFilename}`;
+                try {
+                    await uploadToS3(req.file.buffer, s3Key, req.file.mimetype);
+                    processedFiles.push({ newFilename, sailNumber: 'NOSAIL', confidence: 0 });
+                } catch (err) {
+                    console.error('scan2: error saving NOSAIL:', err.message);
+                }
+            } else {
+                console.log(`scan2: skipping NOSAIL save for ${originalFilename} (upload_no_sail=false)`);
             }
         }
 
