@@ -1382,8 +1382,10 @@
             const countEl = document.getElementById('gpsTrackCount');
             if (countEl) countEl.textContent = `(${tracks.length})`;
 
-            // Update Start/Stop button states based on whether an active track exists
-            const isTracking = tracks.some(t => !t.ended_at);
+            // Button state: prefer device's own tracking_active flag (from GPS diagnostics);
+            // fall back to open-track existence for devices that haven't reported yet.
+            const deviceTracking = d.gps_status && d.gps_status.tracking_active;
+            const isTracking = deviceTracking != null ? deviceTracking : tracks.some(t => !t.ended_at);
             setTrackingButtons(isTracking);
 
             if (!tracks.length) {

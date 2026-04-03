@@ -252,52 +252,37 @@ def gps_thread_fn():
             else:
                 log.info("GPS: no fix yet — waiting for satellites")
 
-            # Upload queued points every upload_s seconds
+            # Upload queued points every upload_s seconds — SIM MQTT only.
+            # WiFi is NOT used for GPS; all points go via the modem's AT+CMQTT stack
+            # so it's always clear whether the SIM path is working.
             now = time.time()
             if now >= next_gps_upload:
                 next_gps_upload = now + upload_s
                 depth = uploader_inst.gps_queue_depth()
                 log.info(f"GPS: upload tick — {depth} point(s) in queue")
 
-                if depth == 0:
-                    pass  # nothing to do
-
-                else:
+                if depth > 0:
                     global _last_upload_via, _last_upload_at
-
-                    # Step 1: try direct upload via whatever network is currently default
-                    sent = uploader_inst.flush_gps_queue()
-                    remaining = uploader_inst.gps_queue_depth()
-                    if sent > 0:
-                        log.info(f"GPS: uploaded {sent} point(s) via direct connection")
-                        _last_upload_via = "WiFi"
-                        _last_upload_at  = datetime.datetime.utcnow().isoformat() + "Z"
-
-                    # Step 2: if points still in queue the direct upload failed —
-                    # pause GPS serial port and publish via SIM MQTT (plain TCP,
-                    # no TLS required — works on this modem firmware)
-                    if remaining > 0:
-                        log.info(f"GPS: {remaining} point(s) still queued — trying SIM MQTT fallback")
-                        gps_reader.pause()
-                        try:
-                            import sim_mqtt
-                            sent2 = sim_mqtt.flush_via_mqtt(
-                                serial_port = cfg.GPS_SERIAL_PORT,
-                                baud_rate   = cfg.GPS_BAUD_RATE,
-                                device_id   = cfg.DEVICE_ID,
-                                track_id    = uploader_inst._track_id,
-                                db_path     = uploader_inst.db_path,
-                            )
-                            if sent2 > 0:
-                                log.info(f"GPS: published {sent2} point(s) via SIM MQTT")
-                                _last_upload_via = "SIM"
-                                _last_upload_at  = datetime.datetime.utcnow().isoformat() + "Z"
-                            else:
-                                log.warning("GPS: SIM MQTT upload failed — points stay queued")
-                        except Exception as _sim_e:
-                            log.error(f"GPS: SIM MQTT error: {_sim_e}")
-                        finally:
-                            gps_reader.resume()
+                    gps_reader.pause()
+                    try:
+                        import sim_mqtt
+                        sent = sim_mqtt.flush_via_mqtt(
+                            serial_port = cfg.GPS_SERIAL_PORT,
+                            baud_rate   = cfg.GPS_BAUD_RATE,
+                            device_id   = cfg.DEVICE_ID,
+                            track_id    = uploader_inst._track_id,
+                            db_path     = uploader_inst.db_path,
+                        )
+                        if sent > 0:
+                            log.info(f"GPS: published {sent} point(s) via SIM MQTT")
+                            _last_upload_via = "SIM"
+                            _last_upload_at  = datetime.datetime.utcnow().isoformat() + "Z"
+                        else:
+                            log.warning("GPS: SIM MQTT — 0 sent (check SIM connected and track active)")
+                    except Exception as _sim_e:
+                        log.error(f"GPS: SIM MQTT error: {_sim_e}")
+                    finally:
+                        gps_reader.resume()
 
         else:
             # Tracking inactive — if we had an open track, close it
@@ -428,6 +413,17 @@ def _on_config_change(new_cfg):
             _last_applied_apn = apn_key
         else:
             log.debug("APN unchanged — skipping re-apply")
+
+    # React to auto_track being toggled live in PiControl (not just at startup)
+    if new_cfg.get("auto_track", False) and not tracking_active.is_set():
+        log.info("auto_track became true — starting GPS tracking")
+        tracking_active.set()
+    elif not new_cfg.get("auto_track", False) and tracking_active.is_set():
+        # auto_track turned off AND no explicit start_track was issued — stop tracking
+        # (only if it was auto-started; manual start_track commands take precedence via
+        # tracking_active being set before this callback fires)
+        pass  # do not auto-stop; let the user explicitly press Stop Tracking
+
     # Process any commands embedded in the config response
     commands = new_cfg.pop("__commands", []) or []
     if commands:
