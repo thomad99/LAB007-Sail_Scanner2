@@ -31,7 +31,8 @@ GPS_BAUD_RATE   = 115200
 DATA_DIR    = os.path.expanduser("~/pisailbox_data")
 PHOTOS_DIR  = os.path.join(DATA_DIR, "photos")
 VIDEOS_DIR  = os.path.join(DATA_DIR, "videos")
-QUEUE_DB    = os.path.join(DATA_DIR, "queue.sqlite")
+QUEUE_DB      = os.path.join(DATA_DIR, "queue.sqlite")
+TRACK_ID_FILE = os.path.join(DATA_DIR, "current_track_id")   # persists track across WiFi loss
 
 # ── Defaults (overridden by server config) ────────────────────────────────────
 DEFAULT_CONFIG = {

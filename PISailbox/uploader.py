@@ -32,12 +32,13 @@ class Uploader:
     Failed requests are queued in a local SQLite database.
     """
 
-    def __init__(self, server_url, device_id, queue_db_path):
-        self.server_url = server_url.rstrip("/")
-        self.device_id  = device_id
-        self.db_path    = queue_db_path
-        self._lock      = threading.Lock()
-        self._track_id  = None  # active server-side track id
+    def __init__(self, server_url, device_id, queue_db_path, track_id_file=None):
+        self.server_url     = server_url.rstrip("/")
+        self.device_id      = device_id
+        self.db_path        = queue_db_path
+        self._track_id_file = track_id_file
+        self._lock          = threading.Lock()
+        self._track_id      = None  # active server-side track id
         self._init_db()
 
     # ── SQLite queue ──────────────────────────────────────────────────────────
@@ -134,6 +135,43 @@ class Uploader:
 
     # ── Track management ──────────────────────────────────────────────────────
 
+    # ── Track-id persistence ──────────────────────────────────────────────────
+    # Saves the active track id to disk so it survives WiFi loss and reboots.
+    # On startup without WiFi the last known track id is reused for SIM MQTT uploads.
+
+    def _save_track_id(self, track_id):
+        if self._track_id_file:
+            try:
+                with open(self._track_id_file, "w") as f:
+                    f.write(str(track_id))
+            except Exception as e:
+                log.warning(f"Could not save track_id to disk: {e}")
+
+    def _clear_track_id_file(self):
+        if self._track_id_file:
+            try:
+                os.remove(self._track_id_file)
+            except FileNotFoundError:
+                pass
+            except Exception as e:
+                log.warning(f"Could not clear track_id file: {e}")
+
+    def load_persisted_track_id(self):
+        """Return the last track id saved to disk, or None."""
+        if not self._track_id_file:
+            return None
+        try:
+            with open(self._track_id_file) as f:
+                tid = int(f.read().strip())
+                log.info(f"Loaded persisted track_id={tid} from disk")
+                self._track_id = tid
+                return tid
+        except FileNotFoundError:
+            return None
+        except Exception as e:
+            log.warning(f"Could not read persisted track_id: {e}")
+            return None
+
     def start_track(self, name=None):
         """Create a new GPS track on the server. Returns track id or None."""
         if name is None:
@@ -146,6 +184,7 @@ class Uploader:
             )
             resp.raise_for_status()
             self._track_id = resp.json()["id"]
+            self._save_track_id(self._track_id)
             log.info(f"Track started: id={self._track_id}")
             return self._track_id
         except Exception as e:
@@ -165,6 +204,7 @@ class Uploader:
         except Exception as e:
             log.warning(f"Failed to stop track: {e}")
         self._track_id = None
+        self._clear_track_id_file()
 
     # ── GPS point upload ──────────────────────────────────────────────────────
 

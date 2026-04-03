@@ -240,9 +240,16 @@ def gps_thread_fn():
                 if current_track_id:
                     log.info(f"▶ Track STARTED  id={current_track_id}  name='{track_name}'  at {now_est.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                 else:
-                    log.warning("Could not open track, will retry")
-                    shutdown_event.wait(5)
-                    continue
+                    # No WiFi — try the last track id saved to disk so SIM MQTT
+                    # can still upload points to an existing open track
+                    fallback = uploader_inst.load_persisted_track_id()
+                    if fallback:
+                        current_track_id = fallback
+                        log.warning(f"No network — resuming persisted track id={current_track_id} (SIM MQTT will upload when fix arrives)")
+                    else:
+                        log.warning("No network and no persisted track — will retry in 15s")
+                        shutdown_event.wait(15)
+                        continue
 
             # Read GPS and store locally every poll_s seconds
             fix = gps_reader.get_fix()
@@ -441,7 +448,8 @@ def main():
     os.makedirs(cfg.PHOTOS_DIR, exist_ok=True)
     os.makedirs(cfg.VIDEOS_DIR, exist_ok=True)
 
-    uploader_inst = Uploader(cfg.SERVER_URL, cfg.DEVICE_ID, cfg.QUEUE_DB)
+    uploader_inst = Uploader(cfg.SERVER_URL, cfg.DEVICE_ID, cfg.QUEUE_DB,
+                             track_id_file=cfg.TRACK_ID_FILE)
 
     # Register and get initial config — retry until network is up
     log.info("Waiting for network…")
