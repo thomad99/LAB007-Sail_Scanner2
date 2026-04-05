@@ -5938,11 +5938,46 @@ app.get('/api/pi/devices/:deviceId/config', async (req, res) => {
 app.post('/api/pi/devices/:deviceId/command', express.json(), async (req, res) => {
     try {
         const { command } = req.body;
+        const deviceId = req.params.deviceId;
         const valid = ['start_track','stop_track','capture_photo','start_video','stop_video','restart','test_sim'];
         if (!valid.includes(command)) {
             return res.status(400).json({ error: `Unknown command. Valid: ${valid.join(', ')}` });
         }
-        // Append to pending_commands array (avoid duplicates)
+
+        // start_track / stop_track: manage the track server-side so it works over SIM MQTT
+        if (command === 'start_track') {
+            // Create the track now so we can embed the id in the MQTT config
+            const now = new Date();
+            const etOffset = -5 * 60;  // ET = UTC-5 (close enough for name label)
+            const etTime = new Date(now.getTime() + etOffset * 60000);
+            const trackName = `${deviceId} — ${etTime.toISOString().slice(0,16).replace('T',' ')} ET`;
+            const trackResult = await pool.query(
+                `INSERT INTO tracks (name, device_name) VALUES ($1, $2) RETURNING id`,
+                [trackName, deviceId]
+            );
+            const trackId = trackResult.rows[0].id;
+            // Store active_track_id in config so Pi uses it via MQTT or HTTP poll
+            await pool.query(
+                `UPDATE pi_devices SET config = config || $1::jsonb WHERE device_id = $2`,
+                [JSON.stringify({ active_track_id: trackId }), deviceId]
+            );
+            console.log(`start_track: created track ${trackId} for ${deviceId}`);
+
+        } else if (command === 'stop_track') {
+            // End the active track on the server now
+            await pool.query(
+                `UPDATE tracks SET ended_at = NOW() WHERE device_name = $1 AND ended_at IS NULL`,
+                [deviceId]
+            );
+            // Clear active_track_id from config
+            await pool.query(
+                `UPDATE pi_devices SET config = config - 'active_track_id' WHERE device_id = $1`,
+                [deviceId]
+            );
+            console.log(`stop_track: ended active track(s) for ${deviceId}`);
+        }
+
+        // Add command to pending_commands (Pi picks up via HTTP poll or MQTT)
         await pool.query(
             `UPDATE pi_devices
              SET pending_commands = (
@@ -5952,9 +5987,13 @@ app.post('/api/pi/devices/:deviceId/command', express.json(), async (req, res) =
                  ) v
              )
              WHERE device_id = $2`,
-            [JSON.stringify([command]), req.params.deviceId]
+            [JSON.stringify([command]), deviceId]
         );
-        res.json({ ok: true, command, note: 'Pi will receive this on next config poll (~10s)' });
+
+        // Push updated config+commands to Pi via MQTT (works without WiFi)
+        await publishMqttDeviceConfig(deviceId);
+
+        res.json({ ok: true, command, note: 'Sent via MQTT and queued for HTTP poll' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -5963,11 +6002,14 @@ app.post('/api/pi/devices/:deviceId/command', express.json(), async (req, res) =
 // Update device config (from admin panel)
 app.put('/api/pi/devices/:deviceId/config', express.json(), async (req, res) => {
     try {
+        const deviceId = req.params.deviceId;
         const result = await pool.query(
             `UPDATE pi_devices SET config = $1 WHERE device_id = $2 RETURNING *`,
-            [JSON.stringify(req.body), req.params.deviceId]
+            [JSON.stringify(req.body), deviceId]
         );
         if (!result.rows.length) return res.status(404).json({ error: 'Device not found' });
+        // Push updated config to Pi via MQTT so it picks it up even without WiFi
+        await publishMqttDeviceConfig(deviceId);
         res.json({ ok: true, config: result.rows[0].config });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -6406,52 +6448,98 @@ app.get('/api/tracks/sessions', async (req, res) => {
     }
 });
 
-// ── SIM MQTT subscriber ───────────────────────────────────────────────────────
-// Receives GPS points published by PiSailBox devices over cellular (SIM MQTT).
-// Pi publishes to: pisailbox/{device_id}/gps
-// Payload: { lat, lng, speed, altitude, accuracy, heading, track_id, ... }
-(function startMqttSubscriber() {
-    const BROKER = process.env.PISAILBOX_MQTT_BROKER || 'mqtt://broker.hivemq.com:1883';
-    const TOPIC  = 'pisailbox/+/gps';
+// ── SIM MQTT manager ─────────────────────────────────────────────────────────
+// Bidirectional MQTT bridge for PiSailBox devices.
+//
+// Pi → server:  pisailbox/{id}/gps     GPS track points
+//               pisailbox/{id}/status  device diagnostics (updates last_seen / gps_status)
+// Server → Pi:  pisailbox/{id}/config  RETAINED — full config + active_track_id + __commands
+//               Pi subscribes each cycle and picks up any changes without WiFi.
 
-    const mqttClient = mqtt.connect(BROKER, {
-        clientId:      `lovesailing-server-${Math.random().toString(16).slice(2, 8)}`,
-        clean:         true,
+let pisailboxMqtt = null;
+
+(function startMqttManager() {
+    const BROKER = process.env.PISAILBOX_MQTT_BROKER || 'mqtt://broker.hivemq.com:1883';
+
+    pisailboxMqtt = mqtt.connect(BROKER, {
+        clientId:        `lovesailing-server-${Math.random().toString(16).slice(2, 8)}`,
+        clean:           true,
         reconnectPeriod: 5000,
         connectTimeout:  15000,
     });
 
-    mqttClient.on('connect', () => {
-        console.log(`MQTT: connected to ${BROKER}, subscribing to ${TOPIC}`);
-        mqttClient.subscribe(TOPIC, { qos: 1 }, (err) => {
-            if (err) console.error('MQTT subscribe error:', err);
-        });
+    pisailboxMqtt.on('connect', () => {
+        console.log(`MQTT: connected to ${BROKER}`);
+        pisailboxMqtt.subscribe('pisailbox/+/gps',    { qos: 1 }, (err) => { if (err) console.error('MQTT sub gps error:', err); });
+        pisailboxMqtt.subscribe('pisailbox/+/status', { qos: 0 }, (err) => { if (err) console.error('MQTT sub status error:', err); });
     });
 
-    mqttClient.on('reconnect', () => console.log('MQTT: reconnecting…'));
-    mqttClient.on('error',     (e) => console.error('MQTT error:', e.message));
+    pisailboxMqtt.on('reconnect', () => console.log('MQTT: reconnecting…'));
+    pisailboxMqtt.on('error',     (e) => console.error('MQTT error:', e.message));
 
-    mqttClient.on('message', async (topic, buffer) => {
+    pisailboxMqtt.on('message', async (topic, buffer) => {
         try {
-            const data = JSON.parse(buffer.toString());
-            const { lat, lng, speed, altitude, accuracy, heading, track_id } = data;
+            const parts    = topic.split('/');
+            const deviceId = parts[1];
+            const msgType  = parts[2];
+            const data     = JSON.parse(buffer.toString());
 
-            if (!lat || !lng || !track_id) {
-                console.warn(`MQTT: incomplete payload on ${topic}:`, data);
-                return;
+            if (msgType === 'gps') {
+                const { lat, lng, speed, altitude, accuracy, heading, track_id } = data;
+                if (!lat || !lng || !track_id) {
+                    console.warn(`MQTT: incomplete GPS payload on ${topic}:`, data);
+                    return;
+                }
+                await pool.query(
+                    `INSERT INTO track_points (track_id, lat, lng, accuracy, altitude, speed, heading)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+                    [track_id, lat, lng, accuracy || null, altitude || null, speed || null, heading || null]
+                );
+                console.log(`MQTT: GPS point track=${track_id} lat=${lat} lng=${lng}`);
+
+            } else if (msgType === 'status') {
+                // Pi publishes status (gps diagnostics, tracking_active, etc.)
+                // Update last_seen + gps_status in DB
+                await pool.query(
+                    `UPDATE pi_devices SET last_seen = NOW(), gps_status = $1 WHERE device_id = $2`,
+                    [JSON.stringify(data), deviceId]
+                );
+                console.log(`MQTT: status from ${deviceId} — tracking=${data.tracking_active} fix=${data.fix_valid}`);
             }
-
-            await pool.query(
-                `INSERT INTO track_points (track_id, lat, lng, accuracy, altitude, speed, heading)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-                [track_id, lat, lng, accuracy || null, altitude || null, speed || null, heading || null]
-            );
-            console.log(`MQTT: stored GPS point track=${track_id} lat=${lat} lng=${lng}`);
         } catch (e) {
             console.error('MQTT message handler error:', e.message);
         }
     });
 })();
+
+// Publish retained config + commands to the Pi's MQTT config topic.
+// Pi subscribes each cycle and reacts to any changes, even without WiFi.
+async function publishMqttDeviceConfig(deviceId) {
+    if (!pisailboxMqtt || !pisailboxMqtt.connected) {
+        console.log(`MQTT: not connected, skipping config publish for ${deviceId}`);
+        return;
+    }
+    try {
+        const result = await pool.query(
+            `SELECT config, pending_commands FROM pi_devices WHERE device_id = $1`,
+            [deviceId]
+        );
+        if (!result.rows.length) return;
+
+        const row      = result.rows[0];
+        const config   = typeof row.config === 'string' ? JSON.parse(row.config) : (row.config || {});
+        const commands = Array.isArray(row.pending_commands) ? row.pending_commands : [];
+
+        const payload  = JSON.stringify({ ...config, __commands: commands });
+
+        pisailboxMqtt.publish(`pisailbox/${deviceId}/config`, payload, { retain: true, qos: 1 }, (err) => {
+            if (err) console.error(`MQTT: config publish failed for ${deviceId}:`, err);
+            else     console.log(`MQTT: published retained config for ${deviceId} (track=${config.active_track_id || 'none'})`);
+        });
+    } catch (e) {
+        console.error('publishMqttDeviceConfig error:', e.message);
+    }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 

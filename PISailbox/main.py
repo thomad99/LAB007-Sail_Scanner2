@@ -205,6 +205,58 @@ def _build_gps_diag(current_track_id):
     }
 
 
+_last_processed_cmd_id = None   # dedup one-shot MQTT commands
+
+
+def _apply_mqtt_config(mqtt_cfg, current_track_id):
+    """
+    Process config + commands received from the server via MQTT retained message.
+    Updates device_config, handles active_track_id, and fires commands.
+    Called from the GPS thread after each MQTT cycle.
+    """
+    global _last_processed_cmd_id
+    if not mqtt_cfg:
+        return
+
+    # Apply config settings (fires _on_config_change callback, handles auto_track, APN, etc.)
+    device_config.update(mqtt_cfg)
+
+    # Apply server-assigned active_track_id if it has changed
+    server_track_id = mqtt_cfg.get("active_track_id")
+    if server_track_id and server_track_id != uploader_inst._track_id:
+        log.info(f"MQTT config: server assigned track_id={server_track_id} — adopting")
+        uploader_inst._track_id = server_track_id
+        uploader_inst._save_track_id(server_track_id)
+    elif not server_track_id and uploader_inst._track_id:
+        # Server cleared the track (stop_track was pressed)
+        log.info("MQTT config: server cleared active_track_id — stopping track")
+        uploader_inst._track_id = None
+        uploader_inst._clear_track_id_file()
+
+    # Process one-shot commands embedded in __commands
+    commands = mqtt_cfg.get("__commands", [])
+    if isinstance(commands, list) and commands:
+        # Each command may be a plain string or {"cmd": "...", "cmd_id": "..."}
+        for item in commands:
+            if isinstance(item, dict):
+                cmd    = item.get("cmd", "")
+                cmd_id = item.get("cmd_id")
+                if cmd_id and cmd_id == _last_processed_cmd_id:
+                    continue   # already processed this one
+            else:
+                cmd    = item
+                cmd_id = None
+
+            # skip track commands — handled via active_track_id above
+            if cmd in ('start_track', 'stop_track'):
+                continue
+
+            log.info(f"MQTT command: {cmd}")
+            handle_commands([cmd])
+            if cmd_id:
+                _last_processed_cmd_id = cmd_id
+
+
 def gps_thread_fn():
     log.info("GPS thread started")
 
@@ -236,20 +288,30 @@ def gps_thread_fn():
                 est = zoneinfo.ZoneInfo("America/New_York")
                 now_est = datetime.datetime.now(est)
                 track_name = f"{cfg.DEVICE_ID} — {now_est.strftime('%Y-%m-%d %H:%M')} ET"
-                current_track_id = uploader_inst.start_track(name=track_name)
-                if current_track_id:
-                    log.info(f"▶ Track STARTED  id={current_track_id}  name='{track_name}'  at {now_est.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+
+                # Prefer server-assigned track_id (set by command handler, arrives via
+                # HTTP config poll or MQTT config topic)
+                server_track_id = device_config.get("active_track_id") or uploader_inst._track_id
+                if server_track_id:
+                    current_track_id = server_track_id
+                    uploader_inst._track_id = server_track_id
+                    uploader_inst._save_track_id(server_track_id)
+                    log.info(f"▶ Track RESUMED  id={current_track_id}  (server-assigned)")
                 else:
-                    # No WiFi — try the last track id saved to disk so SIM MQTT
-                    # can still upload points to an existing open track
-                    fallback = uploader_inst.load_persisted_track_id()
-                    if fallback:
-                        current_track_id = fallback
-                        log.warning(f"No network — resuming persisted track id={current_track_id} (SIM MQTT will upload when fix arrives)")
+                    # Fall back to creating a track via HTTP (needs WiFi)
+                    current_track_id = uploader_inst.start_track(name=track_name)
+                    if current_track_id:
+                        log.info(f"▶ Track STARTED  id={current_track_id}  name='{track_name}'  at {now_est.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                     else:
-                        log.warning("No network and no persisted track — will retry in 15s")
-                        shutdown_event.wait(15)
-                        continue
+                        # No WiFi and no server assignment — try persisted id
+                        fallback = uploader_inst.load_persisted_track_id()
+                        if fallback:
+                            current_track_id = fallback
+                            log.warning(f"No network — resuming persisted track id={current_track_id} (SIM MQTT will upload when fix arrives)")
+                        else:
+                            log.warning("No network and no persisted track — will retry in 15s")
+                            shutdown_event.wait(15)
+                            continue
 
             # Read GPS and store locally every poll_s seconds
             fix = gps_reader.get_fix()
@@ -268,28 +330,37 @@ def gps_thread_fn():
                 depth = uploader_inst.gps_queue_depth()
                 log.info(f"GPS: upload tick — {depth} point(s) in queue")
 
-                if depth > 0:
-                    global _last_upload_via, _last_upload_at
-                    gps_reader.pause()
-                    try:
-                        import sim_mqtt
-                        sent = sim_mqtt.flush_via_mqtt(
-                            serial_port = cfg.GPS_SERIAL_PORT,
-                            baud_rate   = cfg.GPS_BAUD_RATE,
-                            device_id   = cfg.DEVICE_ID,
-                            track_id    = uploader_inst._track_id,
-                            db_path     = uploader_inst.db_path,
-                        )
-                        if sent > 0:
-                            log.info(f"GPS: published {sent} point(s) via SIM MQTT")
-                            _last_upload_via = "SIM"
-                            _last_upload_at  = datetime.datetime.utcnow().isoformat() + "Z"
-                        else:
-                            log.warning("GPS: SIM MQTT — 0 sent (check SIM connected and track active)")
-                    except Exception as _sim_e:
-                        log.error(f"GPS: SIM MQTT error: {_sim_e}")
-                    finally:
-                        gps_reader.resume()
+                global _last_upload_via, _last_upload_at
+
+                # Build a compact status payload to publish alongside GPS data
+                _status = _build_gps_diag(current_track_id)
+
+                gps_reader.pause()
+                try:
+                    import sim_mqtt
+                    mqtt_result = sim_mqtt.flush_via_mqtt(
+                        serial_port    = cfg.GPS_SERIAL_PORT,
+                        baud_rate      = cfg.GPS_BAUD_RATE,
+                        device_id      = cfg.DEVICE_ID,
+                        track_id       = uploader_inst._track_id,
+                        db_path        = uploader_inst.db_path,
+                        status_payload = _status,
+                    )
+                    sent = mqtt_result["sent"]
+                    if sent > 0:
+                        log.info(f"GPS: published {sent} point(s) via SIM MQTT")
+                        _last_upload_via = "SIM"
+                        _last_upload_at  = datetime.datetime.utcnow().isoformat() + "Z"
+                    elif depth > 0:
+                        log.warning("GPS: SIM MQTT — 0 sent (check SIM connected and track active)")
+
+                    # Apply any config / commands the server pushed via retained MQTT
+                    _apply_mqtt_config(mqtt_result.get("config"), current_track_id)
+
+                except Exception as _sim_e:
+                    log.error(f"GPS: SIM MQTT error: {_sim_e}")
+                finally:
+                    gps_reader.resume()
 
         else:
             # Tracking inactive — if we had an open track, close it
