@@ -1212,9 +1212,12 @@ app.post('/api/scan2', upload.single('image'), async (req, res) => {
     }
 
     const originalFilename = req.file.originalname;
+    const uploadNoSail = req.body.upload_no_sail !== 'false';
+
     const metadata = {
         date:                req.body.date               || new Date().toISOString().split('T')[0],
         regatta_name:        req.body.regatta_name        || null,
+        yacht_club:          req.body.yacht_club          || null,
         photographer_name:   req.body.photographer_name   || null,
         photographer_website:req.body.photographer_website|| null,
         location:            req.body.location            || null,
@@ -1255,20 +1258,31 @@ app.post('/api/scan2', upload.single('image'), async (req, res) => {
                     const newFilename = `${sailData.number}_${sailorName}_${originalFilename}`;
                     const s3Key = `processed/${newFilename}`;
                     await uploadToS3(req.file.buffer, s3Key, req.file.mimetype);
-                    processedFiles.push({ newFilename, sailNumber: sailData.number, confidence: sailData.confidence });
+                    // file_checksum is UNIQUE — one row per output file, not per source bytes
+                    const rowChecksum = `${fileChecksum}::${newFilename}`;
+                    processedFiles.push({
+                        newFilename,
+                        sailNumber: sailData.number,
+                        confidence: sailData.confidence,
+                        rowChecksum,
+                    });
                 } catch (err) {
                     console.error(`scan2: error saving sail ${sailData.number}:`, err.message);
                 }
             }
         } else {
-            // No sail detected — only save if upload_no_sail flag is true (default true)
-            const uploadNoSail = req.body.upload_no_sail !== 'false';
+            // No qualifying sail — save as NOSAIL when allowed (default on)
             if (uploadNoSail) {
                 const newFilename = `NOSAIL_NONAME_${originalFilename}`;
                 const s3Key = `processed/${newFilename}`;
                 try {
                     await uploadToS3(req.file.buffer, s3Key, req.file.mimetype);
-                    processedFiles.push({ newFilename, sailNumber: 'NOSAIL', confidence: 0 });
+                    processedFiles.push({
+                        newFilename,
+                        sailNumber: 'NOSAIL',
+                        confidence: 0,
+                        rowChecksum: fileChecksum,
+                    });
                 } catch (err) {
                     console.error('scan2: error saving NOSAIL:', err.message);
                 }
@@ -1277,27 +1291,47 @@ app.post('/api/scan2', upload.single('image'), async (req, res) => {
             }
         }
 
+        // If every S3 write failed but user wants no-sail saves, store one NOSAIL copy
+        if (processedFiles.length === 0 && uploadNoSail) {
+            const newFilename = `NOSAIL_NONAME_${originalFilename}`;
+            const s3Key = `processed/${newFilename}`;
+            try {
+                await uploadToS3(req.file.buffer, s3Key, req.file.mimetype);
+                processedFiles.push({
+                    newFilename,
+                    sailNumber: 'NOSAIL',
+                    confidence: 0,
+                    rowChecksum: fileChecksum,
+                });
+                console.log(`scan2: fallback NOSAIL save for ${originalFilename} (after failed sail uploads or empty queue)`);
+            } catch (err) {
+                console.error('scan2: fallback NOSAIL save failed:', err.message);
+            }
+        }
+
         // Insert into photo_metadata for each saved file
         for (const file of processedFiles) {
             try {
+                const rowChecksum = file.rowChecksum || `${fileChecksum}::${file.newFilename}`;
                 await pool.query(
                     `INSERT INTO photo_metadata (
-                        filename, sail_number, date, regatta_name,
+                        filename, sail_number, date, regatta_name, yacht_club,
                         photographer_name, photographer_website,
                         location, additional_tags, file_checksum,
                         photo_timestamp, gps_latitude, gps_longitude, gps_altitude,
                         upload_timestamp
-                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
                     [
                         file.newFilename,
                         file.sailNumber,
                         metadata.date,
                         metadata.regatta_name,
+                        metadata.yacht_club,
                         metadata.photographer_name,
                         metadata.photographer_website,
                         metadata.location,
                         metadata.additional_tags,
-                        fileChecksum,
+                        rowChecksum,
                         exifData.photo_timestamp  || null,
                         exifData.gps_latitude     || null,
                         exifData.gps_longitude    || null,
@@ -3696,8 +3730,10 @@ async function checkForDuplicate(checksum) {
             return null;
         }
 
+        // Match raw checksum or scan2 multi-sail form "hash::outputFilename"
         const result = await pool.query(
-            'SELECT filename FROM photo_metadata WHERE file_checksum = $1',
+            `SELECT filename FROM photo_metadata
+             WHERE file_checksum = $1 OR file_checksum LIKE $1 || '::%'`,
             [checksum]
         );
         return result.rows.length > 0 ? result.rows[0] : null;

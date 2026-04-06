@@ -535,6 +535,7 @@ async function startScan() {
             // Send all metadata fields so the server can save to photo_metadata
             fd.append('date',                 meta.date);
             fd.append('regatta_name',         meta.regatta_name);
+            fd.append('yacht_club',           meta.yacht_club);
             fd.append('location',             meta.location);
             fd.append('photographer_name',    meta.photographer);
             fd.append('photographer_website', meta.website);
