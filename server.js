@@ -6098,7 +6098,8 @@ app.get('/api/pi/devices', async (req, res) => {
 // Pi reports SIM / modem status (called periodically by the Pi)
 app.post('/api/pi/devices/:deviceId/sim-status', express.json(), async (req, res) => {
     try {
-        const status = req.body || {};
+        const incoming = req.body && typeof req.body === 'object' ? req.body : {};
+        const status = { ...incoming, reported_at: new Date().toISOString() };
         await pool.query(
             `UPDATE pi_devices SET sim_status = $1, last_seen = NOW() WHERE device_id = $2`,
             [JSON.stringify(status), req.params.deviceId]

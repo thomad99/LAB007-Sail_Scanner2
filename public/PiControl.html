@@ -620,7 +620,7 @@
                                     if (!via) return `<div class="stat-val" style="color:rgba(255,255,255,0.3)">—</div>`;
                                     const col  = via === 'SIM' ? '#e67e22' : '#2ecc71';
                                     const icon = via === 'SIM' ? '📡' : '📶';
-                                    return `<div class="stat-val" style="color:${col};font-size:1.1rem;">${icon} ${esc(via)}</div>${at ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">${fmtTime(at)} ET</div>` : ''}`;
+                                    return `<div class="stat-val" style="color:${col};font-size:1.1rem;">${icon} ${esc(via)}</div>${at ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">${fmtDateTime(at)} ET</div>` : ''}`;
                                 })()}
                             </div>
                             <div class="stat-box">
@@ -656,7 +656,7 @@
                                     const h = Math.floor(uptimeMs / 3600000);
                                     const m = Math.floor((uptimeMs % 3600000) / 60000);
                                     const uptimeStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
-                                    return `<div class="stat-val" style="font-size:0.75rem;">${fmtTime(d.service_started_at)} ET</div>
+                                    return `<div class="stat-val" style="font-size:0.75rem;">${fmtDateTime(d.service_started_at)} ET</div>
                                             <div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Up ${uptimeStr}</div>`;
                                 })()}
                             </div>
@@ -862,8 +862,16 @@
             const dbm   = s.signal_dbm   != null ? `${s.signal_dbm} dBm` : '—';
             const reg   = s.registration || '—';
             const regOk = s.registered;
+            const lastComms = s.reported_at
+                ? fmtDateTime(s.reported_at) + ' ET'
+                : '—';
 
             body.innerHTML = `
+                <div style="font-size:0.78rem;color:rgba(255,255,255,0.45);margin-bottom:12px;padding:10px 12px;background:rgba(0,0,0,0.2);border-radius:8px;border:1px solid rgba(255,255,255,0.06);">
+                    <strong style="color:rgba(255,255,255,0.65);">Last SIM communication</strong>
+                    <div style="margin-top:4px;color:#a8d4ff;font-size:0.85rem;">${esc(lastComms)}</div>
+                    <div style="font-size:0.68rem;color:rgba(255,255,255,0.3);margin-top:6px;">Server time when the Pi last sent modem/SIM status (HTTP).</div>
+                </div>
                 <div class="status-grid" style="margin-bottom:14px;">
                     <div class="stat-box">
                         <div class="stat-label">Signal</div>
