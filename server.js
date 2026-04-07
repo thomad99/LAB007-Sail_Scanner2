@@ -6127,9 +6127,11 @@ app.get('/api/pi/devices/:deviceId/sim-status', async (req, res) => {
 // GPS status — Pi reports diagnostic info
 app.post('/api/pi/devices/:deviceId/gps-status', express.json(), async (req, res) => {
     try {
+        const incoming = req.body && typeof req.body === 'object' ? req.body : {};
+        const status = { ...incoming, received_at: new Date().toISOString() };
         await pool.query(
             `UPDATE pi_devices SET gps_status = $1, last_seen = NOW() WHERE device_id = $2`,
-            [JSON.stringify(req.body), req.params.deviceId]
+            [JSON.stringify(status), req.params.deviceId]
         );
         res.json({ ok: true });
     } catch (err) {
@@ -6536,10 +6538,10 @@ let pisailboxMqtt = null;
 
             } else if (msgType === 'status') {
                 // Pi publishes status (gps diagnostics, tracking_active, etc.)
-                // Update last_seen + gps_status in DB
+                const merged = { ...data, received_at: new Date().toISOString() };
                 await pool.query(
                     `UPDATE pi_devices SET last_seen = NOW(), gps_status = $1 WHERE device_id = $2`,
-                    [JSON.stringify(data), deviceId]
+                    [JSON.stringify(merged), deviceId]
                 );
                 console.log(`MQTT: status from ${deviceId} — tracking=${data.tracking_active} fix=${data.fix_valid}`);
             }

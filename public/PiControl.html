@@ -1327,8 +1327,11 @@
                 return;
             }
 
-            const reportedAt = g.reported_at ? fmtTime(g.reported_at) + ' ET' : '—';
-            const lastFixAt  = g.last_fix_at  ? fmtTime(g.last_fix_at)  + ' ET' : '—';
+            // received_at = server time when diagnostics last arrived (HTTP or MQTT); authoritative for "last check-in"
+            const reportedAt = (g.received_at || g.reported_at)
+                ? fmtDateTime(g.received_at || g.reported_at) + ' ET'
+                : '—';
+            const lastFixAt  = g.last_fix_at  ? fmtDateTime(g.last_fix_at)  + ' ET' : '—';
             const posStr = (g.fix_valid && g.lat != null)
                 ? `${Number(g.lat).toFixed(5)}, ${Number(g.lng).toFixed(5)}`
                 : '—';
@@ -1336,7 +1339,11 @@
                 ? `${(g.speed_ms * 1.944).toFixed(1)} kn / ${(g.speed_ms * 3.6).toFixed(1)} km/h`
                 : '—';
 
-            let html = `<div style="margin-bottom:4px;font-size:0.7rem;color:rgba(255,255,255,0.3);">Reported at ${reportedAt}</div>`;
+            let html = `<div style="margin-bottom:6px;font-size:0.72rem;color:rgba(255,255,255,0.45);">
+                <div><strong style="color:rgba(255,255,255,0.55);">Last GPS diagnostics received</strong></div>
+                <div style="margin-top:3px;color:#a8d4ff;">${reportedAt}</div>
+                <div style="margin-top:4px;font-size:0.65rem;color:rgba(255,255,255,0.28);">Server time when the Pi last sent this block (HTTP or SIM). Next update within ~60s while tracking.</div>
+            </div>`;
             html += row('Serial Port Open', boolBadge(g.serial_open));
             html += row('GPS Engine On',    boolBadge(g.gps_engine_on));
             html += row('Fix Valid',        boolBadge(g.fix_valid, '✅ Yes', '⚠️ No fix'));

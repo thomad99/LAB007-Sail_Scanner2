@@ -8,6 +8,7 @@ This module uses AT+CGPS / AT+CGPSINFO command set
   +CGPSINFO: DDMM.MMMM,N/S,DDDMM.MMMM,E/W,DDMMYY,HHMMSS.S,alt,speed_kmh,course
 """
 
+import datetime
 import serial
 import threading
 import time
@@ -54,6 +55,7 @@ class GPSReader:
         self.gps_engine_on = False
         self.fix_count     = 0
         self.no_fix_count  = 0
+        self.last_fix_at_iso = None   # UTC ISO when we last read a valid fix from the modem
         self.last_error    = None
         self._recent_errors = []   # up to 10 recent error strings
 
@@ -218,6 +220,9 @@ class GPSReader:
         if fix:
             self.current_fix = fix
             self.fix_count += 1
+            self.last_fix_at_iso = datetime.datetime.now(datetime.timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
         else:
             self.no_fix_count += 1
         return fix

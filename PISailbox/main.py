@@ -198,9 +198,10 @@ def _build_gps_diag(current_track_id):
         "recent_errors":    list(gps_reader._recent_errors) if gps_reader else [],
         "tracking_active":  tracking_active.is_set(),
         "track_id":         current_track_id,
-        "last_fix_at":      datetime.datetime.utcnow().isoformat() + "Z" if fix else None,
+        "last_fix_at":      gps_reader.last_fix_at_iso if gps_reader and fix and fix.is_valid() else None,
         "last_upload_via":  _last_upload_via,
         "last_upload_at":   _last_upload_at,
+        # Device-local time when this payload was assembled (for clock-skew debugging)
         "reported_at":      datetime.datetime.utcnow().isoformat() + "Z",
     }
 
