@@ -65,7 +65,8 @@ class DeviceConfig:
 
     def _poll_loop(self):
         while True:
-            time.sleep(cfg.CONFIG_POLL_SECONDS)
+            interval = max(5, int(self.get("config_poll_interval_seconds", cfg.CONFIG_POLL_SECONDS)))
+            time.sleep(interval)
             new = self._uploader.fetch_config()
             if new:
                 # Commands are embedded under __commands — strip before storing config

@@ -1,420 +1,938 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PiSailBox Control - Love Sailing</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body { height: 100%; background: #020053; color: #fff; font-family: Arial, sans-serif; overflow: hidden; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html,
+        body {
+            height: 100%;
+            background: #020053;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
 
         .topbar {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 10px 20px; min-height: 56px;
-            background: rgba(0,0,0,0.4); border-bottom: 1px solid rgba(255,255,255,0.08);
-            flex-wrap: wrap; gap: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 20px;
+            min-height: 56px;
+            background: rgba(0, 0, 0, 0.4);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            flex-wrap: wrap;
+            gap: 8px;
         }
-        .topbar-logo { height: 36px; flex-shrink: 0; }
-        .topbar-title { font-size: 1rem; font-weight: bold; letter-spacing: 2px; color: #7ecfff; flex: 1; }
-        .topbar-right { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+        .topbar-logo {
+            height: 36px;
+            flex-shrink: 0;
+        }
+
+        .topbar-title {
+            font-size: 1rem;
+            font-weight: bold;
+            letter-spacing: 2px;
+            color: #7ecfff;
+            flex: 1;
+        }
+
+        .topbar-right {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
 
         .btn {
-            padding: 7px 14px; border-radius: 7px;
-            border: 1px solid rgba(255,255,255,0.18);
-            background: rgba(255,255,255,0.07); color: #fff;
-            font-size: 0.82rem; cursor: pointer; text-decoration: none;
-            white-space: nowrap; transition: all 0.15s;
+            padding: 7px 14px;
+            border-radius: 7px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(255, 255, 255, 0.07);
+            color: #fff;
+            font-size: 0.82rem;
+            cursor: pointer;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: all 0.15s;
         }
-        .btn:hover { background: rgba(255,255,255,0.15); border-color: #7ecfff; }
-        .btn.primary { background: rgba(126,207,255,0.15); border-color: #7ecfff; color: #7ecfff; }
-        .btn.success { background: rgba(46,204,113,0.15); border-color: #2ecc71; color: #2ecc71; }
-        .btn.danger  { background: rgba(231,76,60,0.15);  border-color: #e74c3c; color: #e74c3c; }
-        .btn.danger:hover { background: rgba(231,76,60,0.3); }
-        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-        .layout { display: flex; height: calc(100vh - 56px); overflow: hidden; }
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: #7ecfff;
+        }
+
+        .btn.primary {
+            background: rgba(126, 207, 255, 0.15);
+            border-color: #7ecfff;
+            color: #7ecfff;
+        }
+
+        .btn.success {
+            background: rgba(46, 204, 113, 0.15);
+            border-color: #2ecc71;
+            color: #2ecc71;
+        }
+
+        .btn.danger {
+            background: rgba(231, 76, 60, 0.15);
+            border-color: #e74c3c;
+            color: #e74c3c;
+        }
+
+        .btn.danger:hover {
+            background: rgba(231, 76, 60, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .layout {
+            display: flex;
+            height: calc(100vh - 56px);
+            overflow: hidden;
+        }
 
         /* ── Device list sidebar ─────────────────────────────────────────── */
         .sidebar {
-            width: 280px; min-width: 240px; display: flex; flex-direction: column;
-            border-right: 1px solid rgba(255,255,255,0.08); overflow: hidden;
+            width: 280px;
+            min-width: 240px;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid rgba(255, 255, 255, 0.08);
+            overflow: hidden;
         }
+
         .sidebar-header {
-            padding: 12px 14px 8px; font-size: 0.68rem; text-transform: uppercase;
-            letter-spacing: 1.5px; color: rgba(255,255,255,0.35);
-            border-bottom: 1px solid rgba(255,255,255,0.07);
-            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 14px 8px;
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: rgba(255, 255, 255, 0.35);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
-        .device-list { flex: 1; overflow-y: auto; padding: 8px; }
-        .device-list::-webkit-scrollbar { width: 4px; }
-        .device-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+        .device-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .device-list::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .device-list::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+        }
 
         .device-item {
-            padding: 12px 13px; border-radius: 10px; cursor: pointer;
-            margin-bottom: 6px; border: 1px solid transparent; transition: all 0.12s;
+            padding: 12px 13px;
+            border-radius: 10px;
+            cursor: pointer;
+            margin-bottom: 6px;
+            border: 1px solid transparent;
+            transition: all 0.12s;
         }
-        .device-item:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); }
-        .device-item.selected { background: rgba(126,207,255,0.1); border-color: rgba(126,207,255,0.35); }
 
-        .device-name { font-size: 0.95rem; font-weight: bold; }
-        .device-meta { font-size: 0.72rem; color: rgba(255,255,255,0.38); margin-top: 4px; }
+        .device-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .device-item.selected {
+            background: rgba(126, 207, 255, 0.1);
+            border-color: rgba(126, 207, 255, 0.35);
+        }
+
+        .device-name {
+            font-size: 0.95rem;
+            font-weight: bold;
+        }
+
+        .device-meta {
+            font-size: 0.72rem;
+            color: rgba(255, 255, 255, 0.38);
+            margin-top: 4px;
+        }
 
         .status-dot {
-            display: inline-block; width: 8px; height: 8px;
-            border-radius: 50%; margin-right: 5px; vertical-align: middle;
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+            vertical-align: middle;
         }
-        .status-dot.online  { background: #2ecc71; animation: pulse 2s infinite; }
-        .status-dot.offline { background: #e74c3c; }
-        @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
 
-        .empty-state { padding: 40px 14px; text-align: center; color: rgba(255,255,255,0.28); font-size: 0.88rem; line-height: 1.7; }
+        .status-dot.online {
+            background: #2ecc71;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.offline {
+            background: #e74c3c;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: 0.4
+            }
+        }
+
+        .empty-state {
+            padding: 40px 14px;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.28);
+            font-size: 0.88rem;
+            line-height: 1.7;
+        }
 
         /* ── Main panel ──────────────────────────────────────────────────── */
-        .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
 
         .tabs {
-            display: flex; border-bottom: 1px solid rgba(255,255,255,0.08);
-            background: rgba(0,0,0,0.2); padding: 0 18px; flex-shrink: 0;
+            display: flex;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(0, 0, 0, 0.2);
+            padding: 0 18px;
+            flex-shrink: 0;
         }
+
         .tab {
-            padding: 12px 18px; font-size: 0.82rem; font-weight: bold;
-            color: rgba(255,255,255,0.4); cursor: pointer; border-bottom: 2px solid transparent;
-            transition: all 0.15s; white-space: nowrap;
+            padding: 12px 18px;
+            font-size: 0.82rem;
+            font-weight: bold;
+            color: rgba(255, 255, 255, 0.4);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.15s;
+            white-space: nowrap;
         }
-        .tab.active { color: #7ecfff; border-bottom-color: #7ecfff; }
-        .tab:hover:not(.active) { color: #fff; }
 
-        .tab-content { flex: 1; overflow-y: auto; padding: 20px; }
-        .tab-content::-webkit-scrollbar { width: 5px; }
-        .tab-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+        .tab.active {
+            color: #7ecfff;
+            border-bottom-color: #7ecfff;
+        }
 
-        .tab-panel { display: none; }
-        .tab-panel.active { display: block; }
+        .tab:hover:not(.active) {
+            color: #fff;
+        }
+
+        .tab-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .tab-content::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .tab-content::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+        }
+
+        .tab-panel {
+            display: none;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
 
         /* ── Cards ───────────────────────────────────────────────────────── */
         .card {
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 12px; padding: 18px; margin-bottom: 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 16px;
         }
+
         .card-title {
-            font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1.5px;
-            color: rgba(255,255,255,0.4); margin-bottom: 14px;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: rgba(255, 255, 255, 0.4);
+            margin-bottom: 14px;
         }
 
         /* ── Config form ─────────────────────────────────────────────────── */
-        .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-        @media(max-width:700px) { .config-grid { grid-template-columns: 1fr; } }
-
-        .field { display: flex; flex-direction: column; gap: 5px; }
-        .field label { font-size: 0.78rem; color: rgba(255,255,255,0.55); }
-        .field input, .field select {
-            background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 7px; color: #fff; font-size: 0.92rem; padding: 9px 12px;
-            outline: none; transition: border-color 0.2s;
+        .config-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
         }
-        .field input:focus, .field select:focus { border-color: #7ecfff; }
-        .field input[type=number] { -moz-appearance: textfield; }
-        .field input:disabled, .field select:disabled { opacity: 0.4; }
+
+        @media(max-width:700px) {
+            .config-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .field label {
+            font-size: 0.78rem;
+            color: rgba(255, 255, 255, 0.55);
+        }
+
+        .field input,
+        .field select {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 7px;
+            color: #fff;
+            font-size: 0.92rem;
+            padding: 9px 12px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .field input:focus,
+        .field select:focus {
+            border-color: #7ecfff;
+        }
+
+        .field input[type=number] {
+            -moz-appearance: textfield;
+        }
+
+        .field input:disabled,
+        .field select:disabled {
+            opacity: 0.4;
+        }
 
         /* Toggle switch */
-        .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; }
-        .toggle-label { font-size: 0.88rem; color: rgba(255,255,255,0.7); }
-        .toggle { position: relative; width: 46px; height: 26px; }
-        .toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 0;
+        }
+
+        .toggle-label {
+            font-size: 0.88rem;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .toggle {
+            position: relative;
+            width: 46px;
+            height: 26px;
+        }
+
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
         .toggle-slider {
-            position: absolute; inset: 0; background: rgba(255,255,255,0.15);
-            border-radius: 26px; cursor: pointer; transition: 0.3s;
+            position: absolute;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 26px;
+            cursor: pointer;
+            transition: 0.3s;
         }
+
         .toggle-slider:before {
-            content: ''; position: absolute; width: 20px; height: 20px;
-            left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.3s;
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            left: 3px;
+            bottom: 3px;
+            background: #fff;
+            border-radius: 50%;
+            transition: 0.3s;
         }
-        .toggle input:checked + .toggle-slider { background: #2ecc71; }
-        .toggle input:checked + .toggle-slider:before { transform: translateX(20px); }
+
+        .toggle input:checked+.toggle-slider {
+            background: #2ecc71;
+        }
+
+        .toggle input:checked+.toggle-slider:before {
+            transform: translateX(20px);
+        }
 
         /* Status grid */
-        .status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 12px;
+        }
+
         .stat-box {
-            background: rgba(0,0,0,0.25); border-radius: 9px; padding: 12px;
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 9px;
+            padding: 12px;
             text-align: center;
         }
-        .stat-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.35); margin-bottom: 5px; }
-        .stat-val   { font-size: 1.1rem; font-weight: bold; color: #7ecfff; }
+
+        .stat-label {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: rgba(255, 255, 255, 0.35);
+            margin-bottom: 5px;
+        }
+
+        .stat-val {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #7ecfff;
+        }
 
         /* Photo gallery */
-        .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+        .photo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 10px;
+        }
+
         .photo-thumb {
-            border-radius: 8px; overflow: hidden; aspect-ratio: 4/3;
-            background: rgba(0,0,0,0.3); cursor: pointer; position: relative;
+            border-radius: 8px;
+            overflow: hidden;
+            aspect-ratio: 4/3;
+            background: rgba(0, 0, 0, 0.3);
+            cursor: pointer;
+            position: relative;
             transition: outline 0.1s;
         }
-        .photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.2s; }
-        .photo-thumb:hover img { transform: scale(1.05); }
+
+        .photo-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            transition: transform 0.2s;
+        }
+
+        .photo-thumb:hover img {
+            transform: scale(1.05);
+        }
+
         .photo-thumb .photo-time {
-            position: absolute; bottom: 0; left: 0; right: 0;
-            background: rgba(0,0,0,0.7); font-size: 0.65rem; padding: 3px 6px;
-            color: rgba(255,255,255,0.7);
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.7);
+            font-size: 0.65rem;
+            padding: 3px 6px;
+            color: rgba(255, 255, 255, 0.7);
         }
-        .photo-thumb.selected { outline: 3px solid #2ecc71; }
+
+        .photo-thumb.selected {
+            outline: 3px solid #2ecc71;
+        }
+
         .photo-thumb .sel-check {
-            display: none; position: absolute; top: 6px; left: 6px;
-            width: 20px; height: 20px; border-radius: 50%;
-            background: rgba(0,0,0,0.55); border: 2px solid rgba(255,255,255,0.5);
-            align-items: center; justify-content: center; font-size: 0.75rem; color: #fff;
+            display: none;
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.55);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            color: #fff;
         }
-        .select-mode .photo-thumb .sel-check { display: flex; }
-        .photo-thumb.selected .sel-check { background: #2ecc71; border-color: #2ecc71; }
+
+        .select-mode .photo-thumb .sel-check {
+            display: flex;
+        }
+
+        .photo-thumb.selected .sel-check {
+            background: #2ecc71;
+            border-color: #2ecc71;
+        }
+
         .gallery-toolbar {
-            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-            margin-bottom: 12px; min-height: 34px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+            min-height: 34px;
         }
-        .gallery-toolbar .sel-count { font-size: 0.82rem; color: rgba(255,255,255,0.45); margin-left: auto; }
+
+        .gallery-toolbar .sel-count {
+            font-size: 0.82rem;
+            color: rgba(255, 255, 255, 0.45);
+            margin-left: auto;
+        }
 
         /* Lightbox */
         .lightbox {
-            display: none; position: fixed; inset: 0; z-index: 9999;
-            background: rgba(0,0,0,0.92); align-items: center; justify-content: center; flex-direction: column;
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: rgba(0, 0, 0, 0.92);
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
         }
-        .lightbox.show { display: flex; }
-        .lightbox img { max-width: 90vw; max-height: 80vh; border-radius: 8px; }
-        .lightbox-close { position: absolute; top: 20px; right: 24px; font-size: 2rem; cursor: pointer; color: #fff; }
-        .lightbox-caption { color: rgba(255,255,255,0.5); font-size: 0.82rem; margin-top: 10px; }
+
+        .lightbox.show {
+            display: flex;
+        }
+
+        .lightbox img {
+            max-width: 90vw;
+            max-height: 80vh;
+            border-radius: 8px;
+        }
+
+        .lightbox-close {
+            position: absolute;
+            top: 20px;
+            right: 24px;
+            font-size: 2rem;
+            cursor: pointer;
+            color: #fff;
+        }
+
+        .lightbox-caption {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.82rem;
+            margin-top: 10px;
+        }
 
         /* Placeholder */
-        .placeholder { padding: 60px 20px; text-align: center; color: rgba(255,255,255,0.2); font-size: 0.9rem; line-height: 1.8; }
-        .placeholder svg { opacity: 0.15; margin-bottom: 14px; }
+        .placeholder {
+            padding: 60px 20px;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.2);
+            font-size: 0.9rem;
+            line-height: 1.8;
+        }
 
-        .save-bar { display: flex; gap: 10px; align-items: center; margin-top: 16px; }
-        .save-msg  { font-size: 0.82rem; color: #2ecc71; }
+        .placeholder svg {
+            opacity: 0.15;
+            margin-bottom: 14px;
+        }
+
+        .save-bar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 16px;
+        }
+
+        .save-msg {
+            font-size: 0.82rem;
+            color: #2ecc71;
+        }
 
         /* ── Mobile layout ───────────────────────────────────────────────── */
         @media (max-width: 768px) {
-            html, body { overflow: auto; }
 
-            .topbar { padding: 8px 12px; height: auto; flex-wrap: wrap; gap: 6px; }
-            .topbar-title { font-size: 0.82rem; }
-            .topbar-right { gap: 5px; flex-wrap: wrap; }
-            .topbar-right .btn { font-size: 0.75rem; padding: 5px 10px; }
+            html,
+            body {
+                overflow: auto;
+            }
 
-            .layout { flex-direction: column; height: auto; overflow: visible; }
+            .topbar {
+                padding: 8px 12px;
+                height: auto;
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+
+            .topbar-title {
+                font-size: 0.82rem;
+            }
+
+            .topbar-right {
+                gap: 5px;
+                flex-wrap: wrap;
+            }
+
+            .topbar-right .btn {
+                font-size: 0.75rem;
+                padding: 5px 10px;
+            }
+
+            .layout {
+                flex-direction: column;
+                height: auto;
+                overflow: visible;
+            }
 
             /* Sidebar becomes a collapsible header strip */
             .sidebar {
-                width: 100%; min-width: unset;
+                width: 100%;
+                min-width: unset;
                 border-right: none;
-                border-bottom: 1px solid rgba(255,255,255,0.08);
-                max-height: 56px; overflow: hidden; transition: max-height 0.3s ease;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                max-height: 56px;
+                overflow: hidden;
+                transition: max-height 0.3s ease;
             }
-            .sidebar.expanded { max-height: 400px; }
-            .sidebar-header { cursor: pointer; padding: 14px 14px; }
-            .sidebar-header::after { content: ' ▼'; font-size: 0.65rem; color: rgba(255,255,255,0.3); }
-            .sidebar.expanded .sidebar-header::after { content: ' ▲'; }
-            .device-list { padding: 6px 8px 10px; max-height: 280px; overflow-y: auto; }
+
+            .sidebar.expanded {
+                max-height: 400px;
+            }
+
+            .sidebar-header {
+                cursor: pointer;
+                padding: 14px 14px;
+            }
+
+            .sidebar-header::after {
+                content: ' ▼';
+                font-size: 0.65rem;
+                color: rgba(255, 255, 255, 0.3);
+            }
+
+            .sidebar.expanded .sidebar-header::after {
+                content: ' ▲';
+            }
+
+            .device-list {
+                padding: 6px 8px 10px;
+                max-height: 280px;
+                overflow-y: auto;
+            }
 
             /* Main takes full width */
-            .main { flex: 1; min-height: 0; }
+            .main {
+                flex: 1;
+                min-height: 0;
+            }
 
             /* Tabs scroll horizontally */
-            .tabs { overflow-x: auto; padding: 0 8px; flex-wrap: nowrap; gap: 0; }
-            .tabs::-webkit-scrollbar { height: 3px; }
-            .tabs::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
-            .tab { padding: 10px 12px; font-size: 0.75rem; flex-shrink: 0; }
+            .tabs {
+                overflow-x: auto;
+                padding: 0 8px;
+                flex-wrap: nowrap;
+                gap: 0;
+            }
+
+            .tabs::-webkit-scrollbar {
+                height: 3px;
+            }
+
+            .tabs::-webkit-scrollbar-thumb {
+                background: rgba(255, 255, 255, 0.15);
+            }
+
+            .tab {
+                padding: 10px 12px;
+                font-size: 0.75rem;
+                flex-shrink: 0;
+            }
 
             /* Tab content scrolls normally */
-            .tab-content { overflow-y: auto; padding: 14px; }
+            .tab-content {
+                overflow-y: auto;
+                padding: 14px;
+            }
 
             /* Cards full-width with slightly less padding */
-            .card { padding: 14px; }
+            .card {
+                padding: 14px;
+            }
 
             /* Status grid — 2 columns on mobile */
-            .status-grid { grid-template-columns: repeat(2, 1fr); }
+            .status-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
 
             /* Action buttons wrap and go full-width */
-            .btn-row { flex-wrap: wrap; }
-            .btn-row .btn { flex: 1; min-width: 120px; text-align: center; justify-content: center; }
+            .btn-row {
+                flex-wrap: wrap;
+            }
+
+            .btn-row .btn {
+                flex: 1;
+                min-width: 120px;
+                text-align: center;
+                justify-content: center;
+            }
 
             /* GPS map shorter on mobile */
-            .gps-map { height: 220px; }
+            .gps-map {
+                height: 220px;
+            }
 
             /* Photo grid 2 columns */
-            .photo-grid { grid-template-columns: repeat(2, 1fr); }
+            .photo-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
         }
 
         /* GPS map */
-        .gps-map { height: 320px; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }
+        .gps-map {
+            height: 320px;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
         .track-row {
-            display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
-            padding: 9px 12px; border-radius: 8px; margin-bottom: 6px; cursor: pointer;
-            background: rgba(255,255,255,0.04); border: 1px solid transparent; transition: all 0.12s;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 9px 12px;
+            border-radius: 8px;
+            margin-bottom: 6px;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid transparent;
+            transition: all 0.12s;
         }
-        .track-row:hover  { background: rgba(255,255,255,0.09); border-color: rgba(126,207,255,0.3); }
-        .track-row.active { background: rgba(126,207,255,0.1);  border-color: rgba(126,207,255,0.4); }
-        .track-name  { font-size: 0.88rem; font-weight: bold; }
-        .track-meta  { font-size: 0.72rem; color: rgba(255,255,255,0.4); margin-top: 2px; }
+
+        .track-row:hover {
+            background: rgba(255, 255, 255, 0.09);
+            border-color: rgba(126, 207, 255, 0.3);
+        }
+
+        .track-row.active {
+            background: rgba(126, 207, 255, 0.1);
+            border-color: rgba(126, 207, 255, 0.4);
+        }
+
+        .track-name {
+            font-size: 0.88rem;
+            font-weight: bold;
+        }
+
+        .track-meta {
+            font-size: 0.72rem;
+            color: rgba(255, 255, 255, 0.4);
+            margin-top: 2px;
+        }
+
         .track-badge {
-            font-size: 0.68rem; padding: 2px 8px; border-radius: 20px; white-space: nowrap;
-            background: rgba(46,204,113,0.15); border: 1px solid rgba(46,204,113,0.3); color: #2ecc71;
+            font-size: 0.68rem;
+            padding: 2px 8px;
+            border-radius: 20px;
+            white-space: nowrap;
+            background: rgba(46, 204, 113, 0.15);
+            border: 1px solid rgba(46, 204, 113, 0.3);
+            color: #2ecc71;
         }
-        .track-badge.ended { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); color: rgba(255,255,255,0.4); }
+
+        .track-badge.ended {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.4);
+        }
+
         .ip-tag {
-            display: inline-flex; align-items: center; gap: 5px;
-            padding: 4px 10px; margin: 3px;
-            background: rgba(126,207,255,0.08); border: 1px solid rgba(126,207,255,0.2);
-            border-radius: 20px; font-size: 0.75rem; color: rgba(255,255,255,0.75);
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            margin: 3px;
+            background: rgba(126, 207, 255, 0.08);
+            border: 1px solid rgba(126, 207, 255, 0.2);
+            border-radius: 20px;
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.75);
         }
-        .ip-tag .iface { font-size: 0.65rem; color: rgba(126,207,255,0.7); text-transform: uppercase; }
+
+        .ip-tag .iface {
+            font-size: 0.65rem;
+            color: rgba(126, 207, 255, 0.7);
+            text-transform: uppercase;
+        }
     </style>
 </head>
+
 <body>
 
-<div class="topbar">
-    <a href="/index.html"><img src="/Images/LOVE SAILING LOGO.JPEG" class="topbar-logo" alt="Love Sailing"></a>
-    <div class="topbar-title">🥧 PISAILBOX CONTROL</div>
-    <div class="topbar-right">
-        <button class="btn" onclick="loadDevices()">↻ Refresh</button>
-        <a href="/Tracker-dashboard.html" class="btn primary">📍 Tracker Map</a>
-    </div>
-</div>
-
-<div class="layout">
-
-    <!-- Sidebar -->
-    <div class="sidebar" id="deviceSidebar">
-        <div class="sidebar-header" onclick="toggleSidebar()">
-            <span>Pi Devices</span>
-            <span id="devCount" style="color:rgba(255,255,255,0.22)">—</span>
-        </div>
-        <div class="device-list" id="deviceList">
-            <div class="empty-state">Loading…</div>
+    <div class="topbar">
+        <a href="/index.html"><img src="/Images/LOVE SAILING LOGO.JPEG" class="topbar-logo" alt="Love Sailing"></a>
+        <div class="topbar-title">🥧 PISAILBOX CONTROL</div>
+        <div class="topbar-right">
+            <button class="btn" onclick="loadDevices()">↻ Refresh</button>
+            <a href="/Tracker-dashboard.html" class="btn primary">📍 Tracker Map</a>
         </div>
     </div>
 
-    <!-- Main panel -->
-    <div class="main" id="mainPanel">
-        <div class="placeholder">
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
-                <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="7" x2="15" y2="7"/>
-                <line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="12" y2="15"/>
-            </svg>
-            <div>Select a Pi device from the left to manage it</div>
+    <div class="layout">
+
+        <!-- Sidebar -->
+        <div class="sidebar" id="deviceSidebar">
+            <div class="sidebar-header" onclick="toggleSidebar()">
+                <span>Pi Devices</span>
+                <span id="devCount" style="color:rgba(255,255,255,0.22)">—</span>
+            </div>
+            <div class="device-list" id="deviceList">
+                <div class="empty-state">Loading…</div>
+            </div>
         </div>
+
+        <!-- Main panel -->
+        <div class="main" id="mainPanel">
+            <div class="placeholder">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
+                    <rect x="5" y="2" width="14" height="20" rx="2" />
+                    <line x1="9" y1="7" x2="15" y2="7" />
+                    <line x1="9" y1="11" x2="15" y2="11" />
+                    <line x1="9" y1="15" x2="12" y2="15" />
+                </svg>
+                <div>Select a Pi device from the left to manage it</div>
+            </div>
+        </div>
+
     </div>
 
-</div>
+    <!-- Lightbox -->
+    <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+        <span class="lightbox-close">✕</span>
+        <img id="lightboxImg" src="" alt="">
+        <div class="lightbox-caption" id="lightboxCaption"></div>
+    </div>
 
-<!-- Lightbox -->
-<div class="lightbox" id="lightbox" onclick="closeLightbox()">
-    <span class="lightbox-close">✕</span>
-    <img id="lightboxImg" src="" alt="">
-    <div class="lightbox-caption" id="lightboxCaption"></div>
-</div>
+    <script>
+        let devices = [];
+        let selectedDevice = null;
+        let currentTab = 'status';
 
-<script>
-    let devices = [];
-    let selectedDevice = null;
-    let currentTab = 'status';
-
-    function toggleSidebar() {
-        if (window.innerWidth > 768) return;
-        document.getElementById('deviceSidebar').classList.toggle('expanded');
-    }
-
-    // Auto-expand sidebar on mobile when a device is selected so user can see it collapsed
-    function collapseSidebar() {
-        if (window.innerWidth <= 768) {
-            document.getElementById('deviceSidebar').classList.remove('expanded');
+        function toggleSidebar() {
+            if (window.innerWidth > 768) return;
+            document.getElementById('deviceSidebar').classList.toggle('expanded');
         }
-    }
 
-    // ── Load devices ──────────────────────────────────────────────────────────
-    async function loadDevices() {
-        try {
-            const resp = await fetch('/api/pi/devices');
-            devices = await resp.json();
-            document.getElementById('devCount').textContent = devices.length;
-            renderDeviceList();
-        } catch(e) {
-            document.getElementById('deviceList').innerHTML =
-                `<div class="empty-state">Error: ${e.message}</div>`;
+        // Auto-expand sidebar on mobile when a device is selected so user can see it collapsed
+        function collapseSidebar() {
+            if (window.innerWidth <= 768) {
+                document.getElementById('deviceSidebar').classList.remove('expanded');
+            }
         }
-    }
 
-    function renderDeviceList() {
-        const list = document.getElementById('deviceList');
-        if (!devices.length) {
-            list.innerHTML = '<div class="empty-state">No Pi devices registered yet.<br>Install PiSailBox and it will appear here.</div>';
-            return;
+        // ── Load devices ──────────────────────────────────────────────────────────
+        async function loadDevices() {
+            try {
+                const resp = await fetch('/api/pi/devices');
+                devices = await resp.json();
+                document.getElementById('devCount').textContent = devices.length;
+                renderDeviceList();
+            } catch (e) {
+                document.getElementById('deviceList').innerHTML =
+                    `<div class="empty-state">Error: ${e.message}</div>`;
+            }
         }
-        list.innerHTML = devices.map(d => {
-            const online   = d.online;
-            const sel = selectedDevice && d.device_id === selectedDevice.device_id ? 'selected' : '';
-            const lastSeen   = d.last_seen   ? fmtDateTime(d.last_seen)   + ' ET' : 'Never';
-            const lastGps    = d.last_gps_at ? fmtDateTime(d.last_gps_at) + ' ET' : '—';
-            // "Tracking ON" only when there is an open track AND a GPS point was recorded
-            // within the last 5 minutes — avoids showing ON for auto_track sessions with no data
-            const recentGps  = d.last_gps_at && (Date.now() - new Date(d.last_gps_at).getTime()) < 5 * 60 * 1000;
-            const tracking   = d.tracking_active && recentGps;
-            const trackBadge = tracking
-                ? `<span style="display:inline-block;padding:1px 7px;border-radius:20px;font-size:0.65rem;font-weight:bold;
+
+        function renderDeviceList() {
+            const list = document.getElementById('deviceList');
+            if (!devices.length) {
+                list.innerHTML = '<div class="empty-state">No Pi devices registered yet.<br>Install PiSailBox and it will appear here.</div>';
+                return;
+            }
+            list.innerHTML = devices.map(d => {
+                const online = d.online;
+                const sel = selectedDevice && d.device_id === selectedDevice.device_id ? 'selected' : '';
+                const lastSeen = d.last_seen ? fmtDateTime(d.last_seen) + ' ET' : 'Never';
+                const lastGps = d.last_gps_at ? fmtDateTime(d.last_gps_at) + ' ET' : '—';
+                // "Tracking ON" only when there is an open track AND a GPS point was recorded
+                // within the last 5 minutes — avoids showing ON for auto_track sessions with no data
+                const recentGps = d.last_gps_at && (Date.now() - new Date(d.last_gps_at).getTime()) < 5 * 60 * 1000;
+                const tracking = d.tracking_active && recentGps;
+                const trackBadge = tracking
+                    ? `<span style="display:inline-block;padding:1px 7px;border-radius:20px;font-size:0.65rem;font-weight:bold;
                        background:rgba(46,204,113,0.18);border:1px solid rgba(46,204,113,0.4);color:#2ecc71;">
                        📍 Tracking ON</span>`
-                : `<span style="display:inline-block;padding:1px 7px;border-radius:20px;font-size:0.65rem;
+                    : `<span style="display:inline-block;padding:1px 7px;border-radius:20px;font-size:0.65rem;
                        background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.3);">
                        📍 Tracking OFF</span>`;
-            return `<div class="device-item ${sel}" onclick="selectDevice('${esc(d.device_id)}')" id="dev-${esc(d.device_id)}">
+                return `<div class="device-item ${sel}" onclick="selectDevice('${esc(d.device_id)}')" id="dev-${esc(d.device_id)}">
                 <div class="device-name">
-                    <span class="status-dot ${online?'online':'offline'}"></span>${esc(d.name||d.device_id)}
+                    <span class="status-dot ${online ? 'online' : 'offline'}"></span>${esc(d.name || d.device_id)}
                 </div>
                 <div class="device-meta" style="margin-top:5px;">
                     ${trackBadge}<br>
                     <span style="margin-top:3px;display:inline-block;">
-                        ${online ? '● Online' : '○ Offline'} · ${esc(d.ip_address||'?')}<br>
+                        ${online ? '● Online' : '○ Offline'} · ${esc(d.ip_address || '?')}<br>
                         Last seen: ${lastSeen}<br>
                         Last GPS: ${lastGps}
                     </span>
                 </div>
             </div>`;
-        }).join('');
-    }
+            }).join('');
+        }
 
-    // ── Select a device ───────────────────────────────────────────────────────
-    function selectDevice(deviceId) {
-        selectedDevice = devices.find(d => d.device_id === deviceId);
-        if (!selectedDevice) return;
-        document.querySelectorAll('.device-item').forEach(e => e.classList.remove('selected'));
-        const el = document.getElementById('dev-' + deviceId);
-        if (el) el.classList.add('selected');
-        collapseSidebar();   // auto-collapse device list on mobile after selection
-        // Destroy old map so it re-initialises for the new device
-        if (gpsMap) { gpsMap.remove(); gpsMap = null; gpsMapLayers = []; gpsSelectedTrack = null; }
-        renderMainPanel();
-    }
+        // ── Select a device ───────────────────────────────────────────────────────
+        function selectDevice(deviceId) {
+            selectedDevice = devices.find(d => d.device_id === deviceId);
+            if (!selectedDevice) return;
+            document.querySelectorAll('.device-item').forEach(e => e.classList.remove('selected'));
+            const el = document.getElementById('dev-' + deviceId);
+            if (el) el.classList.add('selected');
+            collapseSidebar();   // auto-collapse device list on mobile after selection
+            // Destroy old map so it re-initialises for the new device
+            if (gpsMap) { gpsMap.remove(); gpsMap = null; gpsMapLayers = []; gpsSelectedTrack = null; }
+            renderMainPanel();
+        }
 
-    function renderMainPanel() {
-        const d = selectedDevice;
-        const config = (typeof d.config === 'string' ? JSON.parse(d.config) : d.config) || {};
-        document.getElementById('mainPanel').innerHTML = `
+        function renderMainPanel() {
+            const d = selectedDevice;
+            const config = (typeof d.config === 'string' ? JSON.parse(d.config) : d.config) || {};
+            document.getElementById('mainPanel').innerHTML = `
             <div class="tabs">
-                <div class="tab ${currentTab==='status'?'active':''}" onclick="switchTab('status')">📊 Status</div>
-                <div class="tab ${currentTab==='sim'?'active':''}"    onclick="switchTab('sim')">📶 SIM</div>
-                <div class="tab ${currentTab==='gps'?'active':''}"    onclick="switchTab('gps')">📍 GPS</div>
-                <div class="tab ${currentTab==='photos'?'active':''}" onclick="switchTab('photos')">📷 Photos</div>
-                <div class="tab ${currentTab==='config'?'active':''}" onclick="switchTab('config')">⚙️ Config</div>
+                <div class="tab ${currentTab === 'status' ? 'active' : ''}" onclick="switchTab('status')">📊 Status</div>
+                <div class="tab ${currentTab === 'sim' ? 'active' : ''}"    onclick="switchTab('sim')">📶 SIM</div>
+                <div class="tab ${currentTab === 'gps' ? 'active' : ''}"    onclick="switchTab('gps')">📍 GPS</div>
+                <div class="tab ${currentTab === 'photos' ? 'active' : ''}" onclick="switchTab('photos')">📷 Photos</div>
+                <div class="tab ${currentTab === 'config' ? 'active' : ''}" onclick="switchTab('config')">⚙️ Config</div>
             </div>
             <div class="tab-content">
 
                 <!-- CONFIG TAB -->
-                <div class="tab-panel ${currentTab==='config'?'active':''}" id="tab-config">
+                <div class="tab-panel ${currentTab === 'config' ? 'active' : ''}" id="tab-config">
                     <div class="card">
                         <div class="card-title">Device Identity</div>
                         <div class="config-grid">
                             <div class="field">
                                 <label>Display Name</label>
-                                <input type="text" id="cfgName" value="${esc(d.name||d.device_id)}"
+                                <input type="text" id="cfgName" value="${esc(d.name || d.device_id)}"
                                        placeholder="e.g. Sailbox-1">
                             </div>
                             <div class="field">
@@ -429,7 +947,7 @@
                         <div class="toggle-row">
                             <span class="toggle-label">Auto-track on boot</span>
                             <label class="toggle">
-                                <input type="checkbox" id="cfgAutoTrack" ${config.auto_track?'checked':''}>
+                                <input type="checkbox" id="cfgAutoTrack" ${config.auto_track ? 'checked' : ''}>
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
@@ -442,13 +960,13 @@
                                 <label>GPS capture interval (seconds)
                                     <span style="font-size:0.7rem;color:rgba(255,255,255,0.35);display:block;">How often the Pi reads its GPS position</span>
                                 </label>
-                                <input type="number" id="cfgGpsPoll" value="${config.gps_poll_seconds||10}" min="5" max="300">
+                                <input type="number" id="cfgGpsPoll" value="${config.gps_poll_seconds || 10}" min="5" max="300">
                             </div>
                             <div class="field">
                                 <label>GPS upload interval (seconds)
                                     <span style="font-size:0.7rem;color:rgba(255,255,255,0.35);display:block;">How often captured points are sent to the server</span>
                                 </label>
-                                <input type="number" id="cfgGpsUpload" value="${config.gps_upload_interval_seconds||60}" min="10" max="3600">
+                                <input type="number" id="cfgGpsUpload" value="${config.gps_upload_interval_seconds || 60}" min="10" max="3600">
                             </div>
                         </div>
                     </div>
@@ -458,7 +976,7 @@
                         <div class="toggle-row">
                             <span class="toggle-label">Camera Enabled</span>
                             <label class="toggle">
-                                <input type="checkbox" id="cfgCamEnabled" ${config.camera_enabled?'checked':''}>
+                                <input type="checkbox" id="cfgCamEnabled" ${config.camera_enabled ? 'checked' : ''}>
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
@@ -488,7 +1006,7 @@
                 </div>
 
                 <!-- GPS TAB -->
-                <div class="tab-panel ${currentTab==='gps'?'active':''}" id="tab-gps">
+                <div class="tab-panel ${currentTab === 'gps' ? 'active' : ''}" id="tab-gps">
 
                     <div class="card">
                         <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
@@ -537,7 +1055,7 @@
                 </div>
 
                 <!-- SIM TAB -->
-                <div class="tab-panel ${currentTab==='sim'?'active':''}" id="tab-sim">
+                <div class="tab-panel ${currentTab === 'sim' ? 'active' : ''}" id="tab-sim">
 
                     <div class="card">
                         <div class="card-title">Live SIM / Modem Status
@@ -559,21 +1077,21 @@
                             <div class="field">
                                 <label>APN</label>
                                 <input type="text" id="simApn"
-                                       value="${esc(config.sim_apn||'')}"
+                                       value="${esc(config.sim_apn || '')}"
                                        placeholder="e.g. internet / hologram / 3internet">
                             </div>
                             <div class="field">
                                 <label>APN Username <span style="color:rgba(255,255,255,0.25)">(optional)</span></label>
-                                <input type="text" id="simApnUser" value="${esc(config.sim_apn_user||'')}" placeholder="leave blank if not required">
+                                <input type="text" id="simApnUser" value="${esc(config.sim_apn_user || '')}" placeholder="leave blank if not required">
                             </div>
                             <div class="field">
                                 <label>APN Password <span style="color:rgba(255,255,255,0.25)">(optional)</span></label>
-                                <input type="password" id="simApnPass" value="${esc(config.sim_apn_pass||'')}" placeholder="leave blank if not required">
+                                <input type="password" id="simApnPass" value="${esc(config.sim_apn_pass || '')}" placeholder="leave blank if not required">
                             </div>
                             <div class="field">
                                 <label>SIM status report interval (seconds)</label>
                                 <input type="number" id="simStatusInterval"
-                                       value="${config.sim_status_interval_seconds||60}" min="15" max="3600">
+                                       value="${config.sim_status_interval_seconds || 60}" min="15" max="3600">
                             </div>
                         </div>
                         <div class="save-bar">
@@ -585,7 +1103,7 @@
                 </div>
 
                 <!-- STATUS TAB -->
-                <div class="tab-panel ${currentTab==='status'?'active':''}" id="tab-status">
+                <div class="tab-panel ${currentTab === 'status' ? 'active' : ''}" id="tab-status">
                     <div class="card">
                         <div class="card-title">Live Status</div>
                         <div class="status-grid">
@@ -595,70 +1113,70 @@
                             </div>
                             <div class="stat-box">
                                 <div class="stat-label">Last Seen</div>
-                                <div class="stat-val" style="font-size:0.8rem;">${d.last_seen?fmtTime(d.last_seen)+' ET':'—'}</div>
+                                <div class="stat-val" style="font-size:0.8rem;">${d.last_seen ? fmtTime(d.last_seen) + ' ET' : '—'}</div>
                             </div>
                             <div class="stat-box">
                                 <div class="stat-label">SIM Signal</div>
-                                ${(()=>{ const s=d.sim_status||{}; const pct=s.signal_percent; if(!pct&&pct!==0) return `<div class="stat-val" style="color:rgba(255,255,255,0.3)">—</div>`; const filled=Math.round(pct/20); const bars='▌'.repeat(filled)+'▁'.repeat(5-filled); const col=pct>=60?'#2ecc71':pct>=30?'#f39c12':'#e74c3c'; return `<div class="stat-val" style="font-size:1.0rem;color:${col};letter-spacing:1px" title="${pct}%">${bars}</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">${pct}% · ${esc(s.network_type||'—')}</div>`; })()}
+                                ${(() => { const s = d.sim_status || {}; const pct = s.signal_percent; if (!pct && pct !== 0) return `<div class="stat-val" style="color:rgba(255,255,255,0.3)">—</div>`; const filled = Math.round(pct / 20); const bars = '▌'.repeat(filled) + '▁'.repeat(5 - filled); const col = pct >= 60 ? '#2ecc71' : pct >= 30 ? '#f39c12' : '#e74c3c'; return `<div class="stat-val" style="font-size:1.0rem;color:${col};letter-spacing:1px" title="${pct}%">${bars}</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">${pct}% · ${esc(s.network_type || '—')}</div>`; })()}
                             </div>
                             <div class="stat-box">
                                 <div class="stat-label">GPS Tracking</div>
-                                ${(()=>{
-                                    const recentGps = d.last_gps_at && (Date.now() - new Date(d.last_gps_at).getTime()) < 5*60*1000;
-                                    const liveTracking = d.tracking_active && recentGps;
-                                    return liveTracking
-                                        ? `<div class="stat-val" style="color:#2ecc71">▶ Active</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Last fix: ${fmtTime(d.last_gps_at)} ET</div>`
-                                        : `<div class="stat-val" style="color:rgba(255,255,255,0.35)">⏹ Off</div>${d.last_gps_at?`<div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Last: ${fmtTime(d.last_gps_at)} ET</div>`:''}`;
-                                })()}
+                                ${(() => {
+                    const recentGps = d.last_gps_at && (Date.now() - new Date(d.last_gps_at).getTime()) < 5 * 60 * 1000;
+                    const liveTracking = d.tracking_active && recentGps;
+                    return liveTracking
+                        ? `<div class="stat-val" style="color:#2ecc71">▶ Active</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Last fix: ${fmtTime(d.last_gps_at)} ET</div>`
+                        : `<div class="stat-val" style="color:rgba(255,255,255,0.35)">⏹ Off</div>${d.last_gps_at ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Last: ${fmtTime(d.last_gps_at)} ET</div>` : ''}`;
+                })()}
                             </div>
                             <div class="stat-box">
                                 <div class="stat-label">Last Upload Via</div>
-                                ${(()=>{
-                                    const gs = d.gps_status || {};
-                                    const via = gs.last_upload_via;
-                                    const at  = gs.last_upload_at;
-                                    if (!via) return `<div class="stat-val" style="color:rgba(255,255,255,0.3)">—</div>`;
-                                    const col  = via === 'SIM' ? '#e67e22' : '#2ecc71';
-                                    const icon = via === 'SIM' ? '📡' : '📶';
-                                    return `<div class="stat-val" style="color:${col};font-size:1.1rem;">${icon} ${esc(via)}</div>${at ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">${fmtDateTime(at)} ET</div>` : ''}`;
-                                })()}
+                                ${(() => {
+                    const gs = d.gps_status || {};
+                    const via = gs.last_upload_via;
+                    const at = gs.last_upload_at;
+                    if (!via) return `<div class="stat-val" style="color:rgba(255,255,255,0.3)">—</div>`;
+                    const col = via === 'SIM' ? '#e67e22' : '#2ecc71';
+                    const icon = via === 'SIM' ? '📡' : '📶';
+                    return `<div class="stat-val" style="color:${col};font-size:1.1rem;">${icon} ${esc(via)}</div>${at ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">${fmtDateTime(at)} ET</div>` : ''}`;
+                })()}
                             </div>
                             <div class="stat-box">
                                 <div class="stat-label">Auto Photo Capture</div>
                                 ${config.camera_enabled && config.camera_auto_photo
-                                    ? `<div class="stat-val" style="color:#2ecc71">📸 ON</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Every ${config.photo_interval_seconds||30}s · ${config.photo_session_minutes||60}min session</div>`
-                                    : config.camera_enabled
-                                        ? `<div class="stat-val" style="color:rgba(255,255,255,0.35)">⏸ Off</div>`
-                                        : `<div class="stat-val" style="color:rgba(255,255,255,0.2)">🚫 Camera disabled</div>`}
+                    ? `<div class="stat-val" style="color:#2ecc71">📸 ON</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Every ${config.photo_interval_seconds || 30}s · ${config.photo_session_minutes || 60}min session</div>`
+                    : config.camera_enabled
+                        ? `<div class="stat-val" style="color:rgba(255,255,255,0.35)">⏸ Off</div>`
+                        : `<div class="stat-val" style="color:rgba(255,255,255,0.2)">🚫 Camera disabled</div>`}
                             </div>
                             <div class="stat-box">
                                 <div class="stat-label">Auto Video Capture</div>
                                 ${config.camera_enabled && config.video_auto_record
-                                    ? `<div class="stat-val" style="color:#2ecc71">🎥 ON</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Every ${config.video_interval_minutes||10}min · ${config.video_duration_seconds||60}s clips</div>`
-                                    : config.camera_enabled
-                                        ? `<div class="stat-val" style="color:rgba(255,255,255,0.35)">⏸ Off</div>`
-                                        : `<div class="stat-val" style="color:rgba(255,255,255,0.2)">🚫 Camera disabled</div>`}
+                    ? `<div class="stat-val" style="color:#2ecc71">🎥 ON</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Every ${config.video_interval_minutes || 10}min · ${config.video_duration_seconds || 60}s clips</div>`
+                    : config.camera_enabled
+                        ? `<div class="stat-val" style="color:rgba(255,255,255,0.35)">⏸ Off</div>`
+                        : `<div class="stat-val" style="color:rgba(255,255,255,0.2)">🚫 Camera disabled</div>`}
                             </div>
                             <div class="stat-box">
                                 <div class="stat-label">Photos Stored</div>
-                                <div class="stat-val">${d.photo_count||0}</div>
+                                <div class="stat-val">${d.photo_count || 0}</div>
                             </div>
                             <div class="stat-box">
                                 <div class="stat-label">OS</div>
-                                <div class="stat-val" style="font-size:0.72rem;">${esc((d.os_info||'—').substring(0,30))}</div>
+                                <div class="stat-val" style="font-size:0.72rem;">${esc((d.os_info || '—').substring(0, 30))}</div>
                             </div>
                             <div class="stat-box">
                                 <div class="stat-label">Service Started</div>
-                                ${(()=>{
-                                    if (!d.service_started_at) return `<div class="stat-val" style="color:rgba(255,255,255,0.3)">—</div>`;
-                                    const start = new Date(d.service_started_at);
-                                    const uptimeMs = Date.now() - start.getTime();
-                                    const h = Math.floor(uptimeMs / 3600000);
-                                    const m = Math.floor((uptimeMs % 3600000) / 60000);
-                                    const uptimeStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
-                                    return `<div class="stat-val" style="font-size:0.75rem;">${fmtDateTime(d.service_started_at)} ET</div>
+                                ${(() => {
+                    if (!d.service_started_at) return `<div class="stat-val" style="color:rgba(255,255,255,0.3)">—</div>`;
+                    const start = new Date(d.service_started_at);
+                    const uptimeMs = Date.now() - start.getTime();
+                    const h = Math.floor(uptimeMs / 3600000);
+                    const m = Math.floor((uptimeMs % 3600000) / 60000);
+                    const uptimeStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
+                    return `<div class="stat-val" style="font-size:0.75rem;">${fmtDateTime(d.service_started_at)} ET</div>
                                             <div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Up ${uptimeStr}</div>`;
-                                })()}
+                })()}
                             </div>
                             <div class="stat-box">
                                 <div class="stat-label">Registered</div>
@@ -690,7 +1208,7 @@
                 </div>
 
                 <!-- PHOTOS TAB -->
-                <div class="tab-panel ${currentTab==='photos'?'active':''}" id="tab-photos">
+                <div class="tab-panel ${currentTab === 'photos' ? 'active' : ''}" id="tab-photos">
 
                     <!-- ── Manual Camera Controls ─────────────────────────────── -->
                     <div class="card">
@@ -728,7 +1246,7 @@
                             <label class="toggle">
                                 <input type="checkbox" id="cfgCamAutoPhoto"
                                        onchange="updatePhotoScheduleSection()"
-                                       ${config.camera_auto_photo?'checked':''}>
+                                       ${config.camera_auto_photo ? 'checked' : ''}>
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
@@ -736,22 +1254,22 @@
                             When on, Pi automatically takes photos on the schedule below and uploads them in batches.
                         </p>
                         <div id="photoScheduleSection"
-                             style="transition:opacity 0.2s;${config.camera_auto_photo?'':'opacity:0.35;pointer-events:none;'}">
+                             style="transition:opacity 0.2s;${config.camera_auto_photo ? '' : 'opacity:0.35;pointer-events:none;'}">
                             <div class="config-grid">
                                 <div class="field">
                                     <label>Photo interval (seconds)</label>
                                     <input type="number" id="cfgPhotoInterval"
-                                           value="${config.photo_interval_seconds||30}" min="5" max="3600">
+                                           value="${config.photo_interval_seconds || 30}" min="5" max="3600">
                                 </div>
                                 <div class="field">
                                     <label>Session duration (minutes)</label>
                                     <input type="number" id="cfgPhotoDuration"
-                                           value="${config.photo_session_minutes||60}" min="1" max="1440">
+                                           value="${config.photo_session_minutes || 60}" min="1" max="1440">
                                 </div>
                                 <div class="field">
                                     <label>Upload batch every (minutes)</label>
                                     <input type="number" id="cfgPhotoUpload"
-                                           value="${config.photo_upload_interval_minutes||5}" min="1" max="60">
+                                           value="${config.photo_upload_interval_minutes || 5}" min="1" max="60">
                                 </div>
                             </div>
                         </div>
@@ -765,7 +1283,7 @@
                             <label class="toggle">
                                 <input type="checkbox" id="cfgVideoAutoRecord"
                                        onchange="updateVideoScheduleSection()"
-                                       ${config.video_auto_record?'checked':''}>
+                                       ${config.video_auto_record ? 'checked' : ''}>
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
@@ -774,17 +1292,17 @@
                             Manual <strong>Start / Stop Video</strong> above always works (when camera enabled).
                         </p>
                         <div id="videoScheduleSection"
-                             style="transition:opacity 0.2s;${config.video_auto_record?'':'opacity:0.35;pointer-events:none;'}">
+                             style="transition:opacity 0.2s;${config.video_auto_record ? '' : 'opacity:0.35;pointer-events:none;'}">
                             <div class="config-grid">
                                 <div class="field">
                                     <label>Record every (minutes)</label>
                                     <input type="number" id="cfgVideoInterval"
-                                           value="${config.video_interval_minutes||10}" min="1" max="1440">
+                                           value="${config.video_interval_minutes || 10}" min="1" max="1440">
                                 </div>
                                 <div class="field">
                                     <label>Recording duration (seconds)</label>
                                     <input type="number" id="cfgVideoDuration"
-                                           value="${config.video_duration_seconds||60}" min="5" max="3600">
+                                           value="${config.video_duration_seconds || 60}" min="5" max="3600">
                                 </div>
                             </div>
                         </div>
@@ -823,50 +1341,50 @@
 
             </div>`;
 
-        if (currentTab === 'photos') { loadPhotos(); initVideoButtons(); }
-        if (currentTab === 'sim')    loadSimStatus();
-        if (currentTab === 'gps')    { loadGpsTracks(); loadGpsDiagnostics(); }
-    }
+            if (currentTab === 'photos') { loadPhotos(); initVideoButtons(); }
+            if (currentTab === 'sim') loadSimStatus();
+            if (currentTab === 'gps') { loadGpsTracks(); loadGpsDiagnostics(); }
+        }
 
-    function switchTab(tab) {
-        currentTab = tab;
-        const tabOrder = ['status','sim','gps','photos','config'];
-        document.querySelectorAll('.tab').forEach((t, i) => {
-            t.classList.toggle('active', tabOrder[i] === tab);
-        });
-        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-        const panel = document.getElementById('tab-' + tab);
-        if (panel) panel.classList.add('active');
-        if (tab === 'photos') { loadPhotos(); initVideoButtons(); }
-        if (tab === 'sim')    loadSimStatus();
-        if (tab === 'gps')    { loadGpsTracks(); loadGpsDiagnostics(); }
-    }
+        function switchTab(tab) {
+            currentTab = tab;
+            const tabOrder = ['status', 'sim', 'gps', 'photos', 'config'];
+            document.querySelectorAll('.tab').forEach((t, i) => {
+                t.classList.toggle('active', tabOrder[i] === tab);
+            });
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            const panel = document.getElementById('tab-' + tab);
+            if (panel) panel.classList.add('active');
+            if (tab === 'photos') { loadPhotos(); initVideoButtons(); }
+            if (tab === 'sim') loadSimStatus();
+            if (tab === 'gps') { loadGpsTracks(); loadGpsDiagnostics(); }
+        }
 
-    // ── SIM status ────────────────────────────────────────────────────────────
-    async function loadSimStatus() {
-        const d = selectedDevice;
-        if (!d) return;
-        const body = document.getElementById('simStatusBody');
-        if (!body) return;
+        // ── SIM status ────────────────────────────────────────────────────────────
+        async function loadSimStatus() {
+            const d = selectedDevice;
+            if (!d) return;
+            const body = document.getElementById('simStatusBody');
+            if (!body) return;
 
-        try {
-            const resp = await fetch(`/api/pi/devices/${encodeURIComponent(d.device_id)}/sim-status`);
-            const s = await resp.json();
-            if (!s || !Object.keys(s).length) {
-                body.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">No SIM data received yet. Pi will report status every ' +
-                    ((d.config && (d.config.sim_status_interval_seconds||60)) || 60) + ' seconds.</div>';
-                return;
-            }
-            const pct   = s.signal_percent != null ? s.signal_percent : null;
-            const bars  = pct == null ? '—' : signalBars(pct);
-            const dbm   = s.signal_dbm   != null ? `${s.signal_dbm} dBm` : '—';
-            const reg   = s.registration || '—';
-            const regOk = s.registered;
-            const lastComms = s.reported_at
-                ? fmtDateTime(s.reported_at) + ' ET'
-                : '—';
+            try {
+                const resp = await fetch(`/api/pi/devices/${encodeURIComponent(d.device_id)}/sim-status`);
+                const s = await resp.json();
+                if (!s || !Object.keys(s).length) {
+                    body.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">No SIM data received yet. Pi will report status every ' +
+                        ((d.config && (d.config.sim_status_interval_seconds || 60)) || 60) + ' seconds.</div>';
+                    return;
+                }
+                const pct = s.signal_percent != null ? s.signal_percent : null;
+                const bars = pct == null ? '—' : signalBars(pct);
+                const dbm = s.signal_dbm != null ? `${s.signal_dbm} dBm` : '—';
+                const reg = s.registration || '—';
+                const regOk = s.registered;
+                const lastComms = s.reported_at
+                    ? fmtDateTime(s.reported_at) + ' ET'
+                    : '—';
 
-            body.innerHTML = `
+                body.innerHTML = `
                 <div style="font-size:0.78rem;color:rgba(255,255,255,0.45);margin-bottom:12px;padding:10px 12px;background:rgba(0,0,0,0.2);border-radius:8px;border:1px solid rgba(255,255,255,0.06);">
                     <strong style="color:rgba(255,255,255,0.65);">Last SIM communication</strong>
                     <div style="margin-top:4px;color:#a8d4ff;font-size:0.85rem;">${esc(lastComms)}</div>
@@ -876,23 +1394,23 @@
                     <div class="stat-box">
                         <div class="stat-label">Signal</div>
                         <div class="stat-val" style="font-size:1.4rem;">${bars}</div>
-                        <div style="font-size:0.7rem;color:rgba(255,255,255,0.3);margin-top:2px;">${pct != null ? pct+'%' : ''} ${dbm}</div>
+                        <div style="font-size:0.7rem;color:rgba(255,255,255,0.3);margin-top:2px;">${pct != null ? pct + '%' : ''} ${dbm}</div>
                     </div>
                     <div class="stat-box">
                         <div class="stat-label">Network</div>
-                        <div class="stat-val" style="font-size:0.9rem;">${esc(s.network_type||'—')}</div>
+                        <div class="stat-val" style="font-size:0.9rem;">${esc(s.network_type || '—')}</div>
                     </div>
                     <div class="stat-box">
                         <div class="stat-label">Operator</div>
-                        <div class="stat-val" style="font-size:0.85rem;">${esc(s.operator||'—')}</div>
+                        <div class="stat-val" style="font-size:0.85rem;">${esc(s.operator || '—')}</div>
                     </div>
                     <div class="stat-box">
                         <div class="stat-label">Registration</div>
-                        <div class="stat-val" style="font-size:0.78rem;color:${regOk?'#2ecc71':'#e74c3c'}">${esc(reg)}</div>
+                        <div class="stat-val" style="font-size:0.78rem;color:${regOk ? '#2ecc71' : '#e74c3c'}">${esc(reg)}</div>
                     </div>
                     <div class="stat-box">
                         <div class="stat-label">Modem IP</div>
-                        <div class="stat-val" style="font-size:0.8rem;">${esc(s.ip_address||'—')}</div>
+                        <div class="stat-val" style="font-size:0.8rem;">${esc(s.ip_address || '—')}</div>
                     </div>
                     <div class="stat-box">
                         <div class="stat-label">Roaming</div>
@@ -900,738 +1418,755 @@
                     </div>
                 </div>
                 <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
-                    ${simRow('Active APN',  s.apn_active)}
-                    ${simRow('ICCID',       s.iccid)}
-                    ${simRow('IMEI',        s.imei)}
+                    ${simRow('Active APN', s.apn_active)}
+                    ${simRow('ICCID', s.iccid)}
+                    ${simRow('IMEI', s.imei)}
                 </table>`;
-        } catch(e) {
-            if (body) body.innerHTML = `<div style="color:#e74c3c;font-size:0.85rem;">Error: ${e.message}</div>`;
+            } catch (e) {
+                if (body) body.innerHTML = `<div style="color:#e74c3c;font-size:0.85rem;">Error: ${e.message}</div>`;
+            }
         }
-    }
 
-    function simRow(label, value) {
-        if (!value) return '';
-        return `<tr>
+        function simRow(label, value) {
+            if (!value) return '';
+            return `<tr>
             <td style="padding:6px 10px 6px 0;color:rgba(255,255,255,0.4);white-space:nowrap;">${label}</td>
             <td style="padding:6px 0;color:#fff;font-family:monospace;word-break:break-all;">${esc(value)}</td>
         </tr>`;
-    }
+        }
 
-    function signalBars(pct) {
-        if (pct == null) return '—';
-        const filled = Math.round(pct / 20);  // 0–5 bars
-        let html = '';
-        for (let i = 1; i <= 5; i++) {
-            const on = i <= filled;
-            html += `<span style="display:inline-block;width:7px;height:${6+i*3}px;margin:0 1px;
-                background:${on ? (pct>60?'#2ecc71':pct>30?'#f39c12':'#e74c3c') : 'rgba(255,255,255,0.12)'};
+        function signalBars(pct) {
+            if (pct == null) return '—';
+            const filled = Math.round(pct / 20);  // 0–5 bars
+            let html = '';
+            for (let i = 1; i <= 5; i++) {
+                const on = i <= filled;
+                html += `<span style="display:inline-block;width:7px;height:${6 + i * 3}px;margin:0 1px;
+                background:${on ? (pct > 60 ? '#2ecc71' : pct > 30 ? '#f39c12' : '#e74c3c') : 'rgba(255,255,255,0.12)'};
                 border-radius:2px;vertical-align:bottom;"></span>`;
-        }
-        return html;
-    }
-
-    function refreshSim() { loadSimStatus(); }
-
-    // ── Save SIM / APN config ─────────────────────────────────────────────────
-    async function saveSimConfig() {
-        const d = selectedDevice;
-        if (!d) return;
-
-        const apn      = document.getElementById('simApn').value.trim();
-        const apnUser  = document.getElementById('simApnUser').value.trim();
-        const apnPass  = document.getElementById('simApnPass').value;
-        const interval = parseInt(document.getElementById('simStatusInterval').value) || 60;
-
-        const config = Object.assign(
-            {},
-            typeof d.config === 'string' ? JSON.parse(d.config) : d.config,
-            {
-                sim_apn:                     apn,
-                sim_apn_user:                apnUser,
-                sim_apn_pass:                apnPass,
-                sim_status_interval_seconds: interval
             }
-        );
-
-        try {
-            await fetch(`/api/pi/devices/${encodeURIComponent(d.device_id)}/config`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(config)
-            });
-            d.config = config;
-            const msg = document.getElementById('simSaveMsg');
-            msg.textContent = '✅ Saved — Pi will apply APN within ~30s';
-            setTimeout(() => { if(msg) msg.textContent = ''; }, 5000);
-        } catch(e) {
-            alert('Save failed: ' + e.message);
-        }
-    }
-
-    // ── Save config ───────────────────────────────────────────────────────────
-    async function saveConfig() {
-        const d = selectedDevice;
-        if (!d) return;
-
-        // Update name
-        const newName = document.getElementById('cfgName').value.trim();
-        if (newName && newName !== d.name) {
-            await fetch(`/api/pi/devices/${encodeURIComponent(d.device_id)}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: newName })
-            });
-            d.name = newName;
+            return html;
         }
 
-        // Preserve existing SIM config fields that live on the SIM tab
-        const existingConfig = typeof d.config === 'string' ? JSON.parse(d.config) : (d.config || {});
-        const config = {
-            auto_track:                     document.getElementById('cfgAutoTrack').checked,
-            gps_poll_seconds:               parseInt(document.getElementById('cfgGpsPoll')?.value)        || 10,
-            gps_upload_interval_seconds:    parseInt(document.getElementById('cfgGpsUpload')?.value)      || 60,
-            camera_enabled:                 document.getElementById('cfgCamEnabled').checked,
-            camera_auto_photo:              (document.getElementById('cfgCamAutoPhoto')||{}).checked || false,
-            photo_interval_seconds:         parseInt((document.getElementById('cfgPhotoInterval')||{}).value) || 30,
-            photo_session_minutes:          parseInt((document.getElementById('cfgPhotoDuration')||{}).value) || 60,
-            photo_upload_interval_minutes:  parseInt((document.getElementById('cfgPhotoUpload')||{}).value)   || 5,
-            video_auto_record:              (document.getElementById('cfgVideoAutoRecord')||{}).checked || false,
-            video_interval_minutes:         parseInt((document.getElementById('cfgVideoInterval')||{}).value) || 10,
-            video_duration_seconds:         parseInt((document.getElementById('cfgVideoDuration')||{}).value) || 60,
-            // Carry over SIM fields unchanged
-            sim_apn:                        existingConfig.sim_apn                     || '',
-            sim_apn_user:                   existingConfig.sim_apn_user                || '',
-            sim_apn_pass:                   existingConfig.sim_apn_pass                || '',
-            sim_status_interval_seconds:    existingConfig.sim_status_interval_seconds || 60
-        };
+        function refreshSim() { loadSimStatus(); }
 
-        try {
-            const resp = await fetch(`/api/pi/devices/${encodeURIComponent(d.device_id)}/config`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(config)
-            });
-            await resp.json();
-            d.config = config;
-            // Update whichever save message is visible
-            ['saveMsg','saveMsgCapture'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) { el.textContent = '✅ Saved — Pi picks up in ~' + config.gps_poll_seconds + 's';
-                          setTimeout(() => { if(el) el.textContent = ''; }, 5000); }
-            });
-            await loadDevices();
-        } catch(e) {
-            alert('Save failed: ' + e.message);
+        // ── Save SIM / APN config ─────────────────────────────────────────────────
+        async function saveSimConfig() {
+            const d = selectedDevice;
+            if (!d) return;
+
+            const apn = document.getElementById('simApn').value.trim();
+            const apnUser = document.getElementById('simApnUser').value.trim();
+            const apnPass = document.getElementById('simApnPass').value;
+            const interval = parseInt(document.getElementById('simStatusInterval').value) || 60;
+
+            const config = Object.assign(
+                {},
+                typeof d.config === 'string' ? JSON.parse(d.config) : d.config,
+                {
+                    sim_apn: apn,
+                    sim_apn_user: apnUser,
+                    sim_apn_pass: apnPass,
+                    sim_status_interval_seconds: interval
+                }
+            );
+
+            try {
+                await fetch(`/api/pi/devices/${encodeURIComponent(d.device_id)}/config`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                d.config = config;
+                const msg = document.getElementById('simSaveMsg');
+                msg.textContent = '✅ Saved — Pi will apply APN within ~30s';
+                setTimeout(() => { if (msg) msg.textContent = ''; }, 5000);
+            } catch (e) {
+                alert('Save failed: ' + e.message);
+            }
         }
-    }
 
-    async function saveAutoCaptureConfig() {
-        await saveConfig();
-    }
+        // ── Save config ───────────────────────────────────────────────────────────
+        async function saveConfig() {
+            const d = selectedDevice;
+            if (!d) return;
 
-    // ── Load photos ───────────────────────────────────────────────────────────
-    let _photoData      = [];   // [{id, storage_path, captured_at, ...}]
-    let _selectedIds    = new Set();
+            // Update name
+            const newName = document.getElementById('cfgName').value.trim();
+            if (newName && newName !== d.name) {
+                await fetch(`/api/pi/devices/${encodeURIComponent(d.device_id)}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newName })
+                });
+                d.name = newName;
+            }
 
-    async function loadPhotos() {
-        const d = selectedDevice;
-        if (!d) return;
-        _selectedIds.clear();
-        const grid = document.getElementById('photoGrid');
-        if (!grid) return;
-        grid.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</div>';
+            // Preserve existing SIM config fields that live on the SIM tab
+            const existingConfig = typeof d.config === 'string' ? JSON.parse(d.config) : (d.config || {});
+            const config = {
+                auto_track: document.getElementById('cfgAutoTrack').checked,
+                gps_poll_seconds: parseInt(document.getElementById('cfgGpsPoll')?.value) || 10,
+                gps_upload_interval_seconds: parseInt(document.getElementById('cfgGpsUpload')?.value) || 60,
+                camera_enabled: document.getElementById('cfgCamEnabled').checked,
+                camera_auto_photo: (document.getElementById('cfgCamAutoPhoto') || {}).checked || false,
+                photo_interval_seconds: parseInt((document.getElementById('cfgPhotoInterval') || {}).value) || 30,
+                photo_session_minutes: parseInt((document.getElementById('cfgPhotoDuration') || {}).value) || 60,
+                photo_upload_interval_minutes: parseInt((document.getElementById('cfgPhotoUpload') || {}).value) || 5,
+                video_auto_record: (document.getElementById('cfgVideoAutoRecord') || {}).checked || false,
+                video_interval_minutes: parseInt((document.getElementById('cfgVideoInterval') || {}).value) || 10,
+                video_duration_seconds: parseInt((document.getElementById('cfgVideoDuration') || {}).value) || 60,
+                // Carry over SIM fields unchanged
+                sim_apn: existingConfig.sim_apn || '',
+                sim_apn_user: existingConfig.sim_apn_user || '',
+                sim_apn_pass: existingConfig.sim_apn_pass || '',
+                sim_status_interval_seconds: existingConfig.sim_status_interval_seconds || 60
+            };
 
-        const resp = await fetch(`/api/pi/devices/${encodeURIComponent(d.device_id)}/photos?limit=200`);
-        _photoData = await resp.json();
-
-        const countEl = document.getElementById('photoCount');
-        if (countEl) countEl.textContent = `(${_photoData.length})`;
-
-        _renderPhotoGrid();
-        _updateSelectionUI();
-    }
-
-    function _renderPhotoGrid() {
-        const grid = document.getElementById('photoGrid');
-        if (!grid) return;
-        if (!_photoData.length) {
-            grid.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">No photos uploaded yet.</div>';
-            return;
+            try {
+                const resp = await fetch(`/api/pi/devices/${encodeURIComponent(d.device_id)}/config`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                await resp.json();
+                d.config = config;
+                // Update whichever save message is visible
+                ['saveMsg', 'saveMsgCapture'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        el.textContent = '✅ Saved — Pi picks up in ~' + config.gps_poll_seconds + 's';
+                        setTimeout(() => { if (el) el.textContent = ''; }, 5000);
+                    }
+                });
+                await loadDevices();
+            } catch (e) {
+                alert('Save failed: ' + e.message);
+            }
         }
-        grid.className = 'photo-grid' + (_selectedIds.size > 0 || _photoData.length ? ' select-mode' : '');
-        grid.innerHTML = _photoData.map(p => {
-            const t   = p.captured_at ? fmtDateTime(p.captured_at) + ' ET' : '—';
-            const sel = _selectedIds.has(p.id) ? 'selected' : '';
-            return `<div class="photo-thumb ${sel}" data-id="${p.id}"
+
+        async function saveAutoCaptureConfig() {
+            await saveConfig();
+        }
+
+        // ── Load photos ───────────────────────────────────────────────────────────
+        let _photoData = [];   // [{id, storage_path, captured_at, ...}]
+        let _selectedIds = new Set();
+
+        async function loadPhotos() {
+            const d = selectedDevice;
+            if (!d) return;
+            _selectedIds.clear();
+            const grid = document.getElementById('photoGrid');
+            if (!grid) return;
+            grid.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</div>';
+
+            const resp = await fetch(`/api/pi/devices/${encodeURIComponent(d.device_id)}/photos?limit=200`);
+            _photoData = await resp.json();
+
+            const countEl = document.getElementById('photoCount');
+            if (countEl) countEl.textContent = `(${_photoData.length})`;
+
+            _renderPhotoGrid();
+            _updateSelectionUI();
+        }
+
+        function _renderPhotoGrid() {
+            const grid = document.getElementById('photoGrid');
+            if (!grid) return;
+            if (!_photoData.length) {
+                grid.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">No photos uploaded yet.</div>';
+                return;
+            }
+            grid.className = 'photo-grid' + (_selectedIds.size > 0 || _photoData.length ? ' select-mode' : '');
+            grid.innerHTML = _photoData.map(p => {
+                const t = p.captured_at ? fmtDateTime(p.captured_at) + ' ET' : '—';
+                const sel = _selectedIds.has(p.id) ? 'selected' : '';
+                return `<div class="photo-thumb ${sel}" data-id="${p.id}"
                         onclick="togglePhotoSelect(event,${p.id},'${p.storage_path}','${esc(t)}')">
                 <span class="sel-check">✓</span>
                 <img src="${p.storage_path}" alt="capture" loading="lazy">
-                <div class="photo-time">${fmtTime(p.captured_at||p.uploaded_at)} ET</div>
+                <div class="photo-time">${fmtTime(p.captured_at || p.uploaded_at)} ET</div>
             </div>`;
-        }).join('');
-        // Always show checkboxes
-        grid.classList.add('select-mode');
-    }
-
-    function togglePhotoSelect(e, id, src, caption) {
-        // Click on the checkbox circle always selects
-        if (e.target.classList.contains('sel-check')) {
-            _toggleId(id);
-            return;
+            }).join('');
+            // Always show checkboxes
+            grid.classList.add('select-mode');
         }
-        // If in multi-select mode, toggle selection; otherwise open lightbox
-        if (_selectedIds.size > 0) {
-            _toggleId(id);
-        } else {
-            openLightbox(src, caption);
-        }
-    }
 
-    function _toggleId(id) {
-        if (_selectedIds.has(id)) _selectedIds.delete(id);
-        else                       _selectedIds.add(id);
-        // Update just the affected thumb
-        const thumb = document.querySelector(`.photo-thumb[data-id="${id}"]`);
-        if (thumb) thumb.classList.toggle('selected', _selectedIds.has(id));
-        _updateSelectionUI();
-    }
-
-    function toggleSelectAll() {
-        const btn = document.querySelector('#galleryToolbar .btn');
-        if (_selectedIds.size === _photoData.length && _photoData.length > 0) {
-            // Deselect all
-            _selectedIds.clear();
-            document.querySelectorAll('.photo-thumb').forEach(t => t.classList.remove('selected'));
-            if (btn) btn.textContent = '☑ Select All';
-        } else {
-            // Select all
-            _photoData.forEach(p => _selectedIds.add(p.id));
-            document.querySelectorAll('.photo-thumb').forEach(t => t.classList.add('selected'));
-            if (btn) btn.textContent = '☐ Deselect All';
-        }
-        _updateSelectionUI();
-    }
-
-    function _updateSelectionUI() {
-        const n      = _selectedIds.size;
-        const total  = _photoData.length;
-        const delBtn = document.getElementById('btnDeleteSelected');
-        const countEl = document.getElementById('selCount');
-        const selBtn  = document.querySelector('#galleryToolbar .btn');
-        if (delBtn)  { delBtn.style.display = n > 0 ? '' : 'none';
-                       delBtn.textContent = `🗑 Delete Selected (${n})`; }
-        if (countEl)  countEl.textContent = n > 0 ? `${n} of ${total} selected` : `${total} photo${total!==1?'s':''}`;
-        if (selBtn && n < total) selBtn.textContent = '☑ Select All';
-    }
-
-    async function deleteSelectedPhotos() {
-        const n = _selectedIds.size;
-        if (!n) return;
-        if (!confirm(`Permanently delete ${n} photo${n!==1?'s':''}? This cannot be undone.`)) return;
-
-        const d = selectedDevice;
-        const ids = Array.from(_selectedIds);
-        try {
-            const resp = await fetch(`/api/pi/devices/${encodeURIComponent(d.device_id)}/photos`, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ids })
-            });
-            const result = await resp.json();
-            if (!resp.ok) throw new Error(result.error || 'Delete failed');
-
-            // Remove from local data and re-render
-            _photoData = _photoData.filter(p => !_selectedIds.has(p.id));
-            _selectedIds.clear();
-            const countEl = document.getElementById('photoCount');
-            if (countEl) countEl.textContent = `(${_photoData.length})`;
-            _renderPhotoGrid();
-            _updateSelectionUI();
-        } catch (e) {
-            alert('Delete failed: ' + e.message);
-        }
-    }
-
-    // ── Delete device ─────────────────────────────────────────────────────────
-    async function deleteDevice(deviceId) {
-        if (!confirm(`Remove "${deviceId}" and all its data? This cannot be undone.`)) return;
-        await fetch(`/api/pi/devices/${encodeURIComponent(deviceId)}`, { method: 'DELETE' });
-        selectedDevice = null;
-        document.getElementById('mainPanel').innerHTML =
-            '<div class="placeholder">Device removed.</div>';
-        await loadDevices();
-    }
-
-    // ── Lightbox ──────────────────────────────────────────────────────────────
-    function openLightbox(src, caption) {
-        document.getElementById('lightboxImg').src = src;
-        document.getElementById('lightboxCaption').textContent = caption;
-        document.getElementById('lightbox').classList.add('show');
-    }
-    function closeLightbox() { document.getElementById('lightbox').classList.remove('show'); }
-
-    function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-
-    // Always display times in Eastern Time
-    const EST = { timeZone: 'America/New_York' };
-    const fmtTime     = d => new Date(d).toLocaleTimeString('en-US', EST);
-    const fmtDateTime = d => new Date(d).toLocaleString('en-US', EST);
-    const fmtDate     = d => new Date(d).toLocaleDateString('en-US', EST);
-
-    // ── Remote command sender ─────────────────────────────────────────────────
-    async function sendCommand(cmd) {
-        const d = selectedDevice;
-        if (!d) return;
-
-        // Pick feedback element based on which tab is active
-        const fbId = (cmd === 'capture_photo' || cmd === 'start_video' || cmd === 'stop_video')
-                     ? 'camCmdFeedback' : 'cmdFeedback';
-        const fb = document.getElementById(fbId);
-        if (fb) fb.textContent = '⏳ Sending…';
-
-        const labels = {
-            start_track:   '▶ Start tracking queued',
-            stop_track:    '■ Stop tracking queued',
-            capture_photo: '📸 Photo command queued',
-            start_video:   '⏺ Start video queued',
-            stop_video:    '⏹ Stop video queued',
-        };
-
-        try {
-            const resp = await fetch(
-                `/api/pi/devices/${encodeURIComponent(d.device_id)}/command`,
-                { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ command: cmd }) }
-            );
-            const data = await resp.json();
-            if (fb) {
-                fb.textContent = data.ok
-                    ? `✅ ${labels[cmd] || cmd} — Pi will act within ~${(d.config && d.config.gps_poll_seconds)||10}s`
-                    : `❌ ${data.error}`;
-                setTimeout(() => { if(fb) fb.textContent = ''; }, 6000);
+        function togglePhotoSelect(e, id, src, caption) {
+            // Click on the checkbox circle always selects
+            if (e.target.classList.contains('sel-check')) {
+                _toggleId(id);
+                return;
             }
-            // Optimistically update button states immediately
-            if (data.ok && cmd === 'start_track')  setTrackingButtons(true);
-            if (data.ok && cmd === 'stop_track')   setTrackingButtons(false);
-            if (data.ok && cmd === 'start_video')  setVideoButtons(true);
-            if (data.ok && cmd === 'stop_video')   setVideoButtons(false);
-        } catch(e) {
-            if (fb) { fb.textContent = '❌ ' + e.message; setTimeout(() => { if(fb) fb.textContent=''; }, 4000); }
-        }
-    }
-
-    async function testSimUpload() {
-        const d = selectedDevice;
-        if (!d) return;
-        const btn = document.getElementById('btnTestSim');
-        const result = document.getElementById('simTestResult');
-        btn.disabled = true;
-        btn.textContent = '⏳ Sending test command…';
-        result.textContent = 'Command sent — the Pi will attempt a PPP/SIM upload in the next poll cycle (~30s). Watch "Last Upload Via" on this page.';
-        try {
-            const r = await fetch(`/api/pi/devices/${d.device_id}/command`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ command: 'test_sim' })
-            });
-            const data = await r.json();
-            if (data.ok) {
-                result.style.color = '#2ecc71';
-                result.textContent = '✅ Command queued. Refresh this page in ~30s to see the result in "Last Upload Via".';
+            // If in multi-select mode, toggle selection; otherwise open lightbox
+            if (_selectedIds.size > 0) {
+                _toggleId(id);
             } else {
+                openLightbox(src, caption);
+            }
+        }
+
+        function _toggleId(id) {
+            if (_selectedIds.has(id)) _selectedIds.delete(id);
+            else _selectedIds.add(id);
+            // Update just the affected thumb
+            const thumb = document.querySelector(`.photo-thumb[data-id="${id}"]`);
+            if (thumb) thumb.classList.toggle('selected', _selectedIds.has(id));
+            _updateSelectionUI();
+        }
+
+        function toggleSelectAll() {
+            const btn = document.querySelector('#galleryToolbar .btn');
+            if (_selectedIds.size === _photoData.length && _photoData.length > 0) {
+                // Deselect all
+                _selectedIds.clear();
+                document.querySelectorAll('.photo-thumb').forEach(t => t.classList.remove('selected'));
+                if (btn) btn.textContent = '☑ Select All';
+            } else {
+                // Select all
+                _photoData.forEach(p => _selectedIds.add(p.id));
+                document.querySelectorAll('.photo-thumb').forEach(t => t.classList.add('selected'));
+                if (btn) btn.textContent = '☐ Deselect All';
+            }
+            _updateSelectionUI();
+        }
+
+        function _updateSelectionUI() {
+            const n = _selectedIds.size;
+            const total = _photoData.length;
+            const delBtn = document.getElementById('btnDeleteSelected');
+            const countEl = document.getElementById('selCount');
+            const selBtn = document.querySelector('#galleryToolbar .btn');
+            if (delBtn) {
+                delBtn.style.display = n > 0 ? '' : 'none';
+                delBtn.textContent = `🗑 Delete Selected (${n})`;
+            }
+            if (countEl) countEl.textContent = n > 0 ? `${n} of ${total} selected` : `${total} photo${total !== 1 ? 's' : ''}`;
+            if (selBtn && n < total) selBtn.textContent = '☑ Select All';
+        }
+
+        async function deleteSelectedPhotos() {
+            const n = _selectedIds.size;
+            if (!n) return;
+            if (!confirm(`Permanently delete ${n} photo${n !== 1 ? 's' : ''}? This cannot be undone.`)) return;
+
+            const d = selectedDevice;
+            const ids = Array.from(_selectedIds);
+            try {
+                const resp = await fetch(`/api/pi/devices/${encodeURIComponent(d.device_id)}/photos`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids })
+                });
+                const result = await resp.json();
+                if (!resp.ok) throw new Error(result.error || 'Delete failed');
+
+                // Remove from local data and re-render
+                _photoData = _photoData.filter(p => !_selectedIds.has(p.id));
+                _selectedIds.clear();
+                const countEl = document.getElementById('photoCount');
+                if (countEl) countEl.textContent = `(${_photoData.length})`;
+                _renderPhotoGrid();
+                _updateSelectionUI();
+            } catch (e) {
+                alert('Delete failed: ' + e.message);
+            }
+        }
+
+        // ── Delete device ─────────────────────────────────────────────────────────
+        async function deleteDevice(deviceId) {
+            if (!confirm(`Remove "${deviceId}" and all its data? This cannot be undone.`)) return;
+            await fetch(`/api/pi/devices/${encodeURIComponent(deviceId)}`, { method: 'DELETE' });
+            selectedDevice = null;
+            document.getElementById('mainPanel').innerHTML =
+                '<div class="placeholder">Device removed.</div>';
+            await loadDevices();
+        }
+
+        // ── Lightbox ──────────────────────────────────────────────────────────────
+        function openLightbox(src, caption) {
+            document.getElementById('lightboxImg').src = src;
+            document.getElementById('lightboxCaption').textContent = caption;
+            document.getElementById('lightbox').classList.add('show');
+        }
+        function closeLightbox() { document.getElementById('lightbox').classList.remove('show'); }
+
+        function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+
+        // Always display times in Eastern Time
+        const EST = { timeZone: 'America/New_York' };
+        const fmtTime = d => new Date(d).toLocaleTimeString('en-US', EST);
+        const fmtDateTime = d => new Date(d).toLocaleString('en-US', EST);
+        const fmtDate = d => new Date(d).toLocaleDateString('en-US', EST);
+
+        // ── Remote command sender ─────────────────────────────────────────────────
+        async function sendCommand(cmd) {
+            const d = selectedDevice;
+            if (!d) return;
+
+            // Pick feedback element based on which tab is active
+            const fbId = (cmd === 'capture_photo' || cmd === 'start_video' || cmd === 'stop_video')
+                ? 'camCmdFeedback' : 'cmdFeedback';
+            const fb = document.getElementById(fbId);
+            if (fb) fb.textContent = '⏳ Sending…';
+
+            const labels = {
+                start_track: '▶ Start tracking queued',
+                stop_track: '■ Stop tracking queued',
+                capture_photo: '📸 Photo command queued',
+                start_video: '⏺ Start video queued',
+                stop_video: '⏹ Stop video queued',
+            };
+
+            try {
+                const resp = await fetch(
+                    `/api/pi/devices/${encodeURIComponent(d.device_id)}/command`,
+                    {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ command: cmd })
+                    }
+                );
+                const data = await resp.json();
+                if (fb) {
+                    fb.textContent = data.ok
+                        ? `✅ ${labels[cmd] || cmd} — Pi will act within ~${(d.config && d.config.gps_poll_seconds) || 10}s`
+                        : `❌ ${data.error}`;
+                    setTimeout(() => { if (fb) fb.textContent = ''; }, 6000);
+                }
+                // Refresh device + tracks so button state matches server (open track / active_track_id)
+                if (data.ok && (cmd === 'start_track' || cmd === 'stop_track')) {
+                    await loadDevices();
+                    const id = d.device_id;
+                    selectedDevice = devices.find(x => x.device_id === id) || selectedDevice;
+                    await loadGpsTracks();
+                }
+                if (data.ok && cmd === 'start_video') setVideoButtons(true);
+                if (data.ok && cmd === 'stop_video') setVideoButtons(false);
+            } catch (e) {
+                if (fb) { fb.textContent = '❌ ' + e.message; setTimeout(() => { if (fb) fb.textContent = ''; }, 4000); }
+            }
+        }
+
+        async function testSimUpload() {
+            const d = selectedDevice;
+            if (!d) return;
+            const btn = document.getElementById('btnTestSim');
+            const result = document.getElementById('simTestResult');
+            btn.disabled = true;
+            btn.textContent = '⏳ Sending test command…';
+            result.textContent = 'Command sent — the Pi will attempt a PPP/SIM upload in the next poll cycle (~30s). Watch "Last Upload Via" on this page.';
+            try {
+                const r = await fetch(`/api/pi/devices/${d.device_id}/command`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: 'test_sim' })
+                });
+                const data = await r.json();
+                if (data.ok) {
+                    result.style.color = '#2ecc71';
+                    result.textContent = '✅ Command queued. Refresh this page in ~30s to see the result in "Last Upload Via".';
+                } else {
+                    result.style.color = '#e74c3c';
+                    result.textContent = '❌ ' + (data.error || 'Unknown error');
+                }
+            } catch (e) {
                 result.style.color = '#e74c3c';
-                result.textContent = '❌ ' + (data.error || 'Unknown error');
+                result.textContent = '❌ ' + e.message;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📡 Test SIM Upload';
             }
-        } catch(e) {
-            result.style.color = '#e74c3c';
-            result.textContent = '❌ ' + e.message;
-        } finally {
-            btn.disabled = false;
-            btn.textContent = '📡 Test SIM Upload';
         }
-    }
 
-    async function restartDevice() {
-        const d = selectedDevice;
-        if (!d) return;
-        const msg = document.getElementById('restartMsg');
-        if (!confirm(`Restart the PiSailBox service on "${d.name || d.device_id}"?\n\nThe device will go offline briefly then reconnect automatically.`)) return;
-        if (msg) msg.textContent = '⏳ Queuing restart…';
-        try {
-            const resp = await fetch(
-                `/api/pi/devices/${encodeURIComponent(d.device_id)}/command`,
-                { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ command: 'restart' }) }
-            );
-            const data = await resp.json();
-            if (msg) {
-                msg.textContent = data.ok
-                    ? '✅ Restart queued — Pi will restart within ~10s'
-                    : `❌ ${data.error}`;
-                setTimeout(() => { if (msg) msg.textContent = ''; }, 8000);
+        async function restartDevice() {
+            const d = selectedDevice;
+            if (!d) return;
+            const msg = document.getElementById('restartMsg');
+            if (!confirm(`Restart the PiSailBox service on "${d.name || d.device_id}"?\n\nThe device will go offline briefly then reconnect automatically.`)) return;
+            if (msg) msg.textContent = '⏳ Queuing restart…';
+            try {
+                const resp = await fetch(
+                    `/api/pi/devices/${encodeURIComponent(d.device_id)}/command`,
+                    {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ command: 'restart' })
+                    }
+                );
+                const data = await resp.json();
+                if (msg) {
+                    msg.textContent = data.ok
+                        ? '✅ Restart queued — Pi will restart within ~10s'
+                        : `❌ ${data.error}`;
+                    setTimeout(() => { if (msg) msg.textContent = ''; }, 8000);
+                }
+            } catch (e) {
+                if (msg) { msg.textContent = '❌ ' + e.message; setTimeout(() => { if (msg) msg.textContent = ''; }, 5000); }
             }
-        } catch(e) {
-            if (msg) { msg.textContent = '❌ ' + e.message; setTimeout(() => { if (msg) msg.textContent = ''; }, 5000); }
         }
-    }
 
-    // ── IP addresses display ──────────────────────────────────────────────────
-    function renderIpAddresses(d) {
-        const ips = (typeof d.ip_addresses === 'string'
-            ? JSON.parse(d.ip_addresses) : d.ip_addresses) || {};
+        // ── IP addresses display ──────────────────────────────────────────────────
+        function renderIpAddresses(d) {
+            const ips = (typeof d.ip_addresses === 'string'
+                ? JSON.parse(d.ip_addresses) : d.ip_addresses) || {};
 
-        // Interface display names / icons
-        const ifaceLabel = { wlan0:'📶 WiFi', eth0:'🔌 Ethernet', wwan0:'📡 4G/LTE',
-                              ppp0:'📡 PPP/4G', usb0:'🔗 USB', lo:'loopback' };
+            // Interface display names / icons
+            const ifaceLabel = {
+                wlan0: '📶 WiFi', eth0: '🔌 Ethernet', wwan0: '📡 4G/LTE',
+                ppp0: '📡 PPP/4G', usb0: '🔗 USB', lo: 'loopback'
+            };
 
-        const entries = Object.entries(ips).filter(([k]) => k !== 'lo');
-        if (!entries.length) {
-            // Fall back to legacy single ip_address field
-            if (d.ip_address) {
-                return `<span class="ip-tag"><span class="iface">IP</span>${esc(d.ip_address)}</span>`;
+            const entries = Object.entries(ips).filter(([k]) => k !== 'lo');
+            if (!entries.length) {
+                // Fall back to legacy single ip_address field
+                if (d.ip_address) {
+                    return `<span class="ip-tag"><span class="iface">IP</span>${esc(d.ip_address)}</span>`;
+                }
+                return '<span style="color:rgba(255,255,255,0.3);font-size:0.82rem;">No IP data yet — Pi will report on next registration.</span>';
             }
-            return '<span style="color:rgba(255,255,255,0.3);font-size:0.82rem;">No IP data yet — Pi will report on next registration.</span>';
+            return entries.map(([iface, ip]) => {
+                const label = ifaceLabel[iface] || ('🌐 ' + iface);
+                return `<span class="ip-tag"><span class="iface">${esc(label)}</span>${esc(ip)}</span>`;
+            }).join('');
         }
-        return entries.map(([iface, ip]) => {
-            const label = ifaceLabel[iface] || ('🌐 ' + iface);
-            return `<span class="ip-tag"><span class="iface">${esc(label)}</span>${esc(ip)}</span>`;
-        }).join('');
-    }
 
-    // ── GPS tracks tab ────────────────────────────────────────────────────────
-    let gpsMap     = null;
-    let gpsMapLayers = [];
+        // ── GPS tracks tab ────────────────────────────────────────────────────────
+        let gpsMap = null;
+        let gpsMapLayers = [];
 
-    async function loadGpsDiagnostics() {
-        const d = selectedDevice;
-        if (!d) return;
-        const el = document.getElementById('gpsDiagBody');
-        if (!el) return;
-        el.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</div>';
-        try {
-            const r = await fetch(`/api/pi/devices/${encodeURIComponent(d.device_id)}/gps-status`);
-            const g = r.ok ? await r.json() : {};
+        async function loadGpsDiagnostics() {
+            const d = selectedDevice;
+            if (!d) return;
+            const el = document.getElementById('gpsDiagBody');
+            if (!el) return;
+            el.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</div>';
+            try {
+                const r = await fetch(`/api/pi/devices/${encodeURIComponent(d.device_id)}/gps-status`);
+                const g = r.ok ? await r.json() : {};
 
-            const boolBadge = (v, trueLabel='Yes', falseLabel='No') =>
-                v ? `<span style="background:#1a4a2e;color:#2ecc71;padding:2px 8px;border-radius:4px;font-size:0.78rem;">${trueLabel}</span>`
-                  : `<span style="background:#3a1a1a;color:#e74c3c;padding:2px 8px;border-radius:4px;font-size:0.78rem;">${falseLabel}</span>`;
+                const boolBadge = (v, trueLabel = 'Yes', falseLabel = 'No') =>
+                    v ? `<span style="background:#1a4a2e;color:#2ecc71;padding:2px 8px;border-radius:4px;font-size:0.78rem;">${trueLabel}</span>`
+                        : `<span style="background:#3a1a1a;color:#e74c3c;padding:2px 8px;border-radius:4px;font-size:0.78rem;">${falseLabel}</span>`;
 
-            const row = (label, val) =>
-                `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+                const row = (label, val) =>
+                    `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
                     <span style="font-size:0.82rem;color:rgba(255,255,255,0.5);">${label}</span>
                     <span style="font-size:0.82rem;color:#fff;">${val}</span>
                 </div>`;
 
-            if (!g || !Object.keys(g).length) {
-                el.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">No diagnostics received yet — Pi will report on its next GPS poll.</div>';
-                return;
-            }
+                if (!g || !Object.keys(g).length) {
+                    el.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">No diagnostics received yet — Pi will report on its next GPS poll.</div>';
+                    return;
+                }
 
-            // received_at = server time when diagnostics last arrived (HTTP or MQTT); authoritative for "last check-in"
-            const reportedAt = (g.received_at || g.reported_at)
-                ? fmtDateTime(g.received_at || g.reported_at) + ' ET'
-                : '—';
-            const lastFixAt  = g.last_fix_at  ? fmtDateTime(g.last_fix_at)  + ' ET' : '—';
-            const posStr = (g.fix_valid && g.lat != null)
-                ? `${Number(g.lat).toFixed(5)}, ${Number(g.lng).toFixed(5)}`
-                : '—';
-            const speedStr = (g.speed_ms != null)
-                ? `${(g.speed_ms * 1.944).toFixed(1)} kn / ${(g.speed_ms * 3.6).toFixed(1)} km/h`
-                : '—';
+                // received_at = server time when diagnostics last arrived (HTTP or MQTT); authoritative for "last check-in"
+                const reportedAt = (g.received_at || g.reported_at)
+                    ? fmtDateTime(g.received_at || g.reported_at) + ' ET'
+                    : '—';
+                const lastFixAt = g.last_fix_at ? fmtDateTime(g.last_fix_at) + ' ET' : '—';
+                const posStr = (g.fix_valid && g.lat != null)
+                    ? `${Number(g.lat).toFixed(5)}, ${Number(g.lng).toFixed(5)}`
+                    : '—';
+                const speedStr = (g.speed_ms != null)
+                    ? `${(g.speed_ms * 1.944).toFixed(1)} kn / ${(g.speed_ms * 3.6).toFixed(1)} km/h`
+                    : '—';
 
-            let html = `<div style="margin-bottom:6px;font-size:0.72rem;color:rgba(255,255,255,0.45);">
+                let html = `<div style="margin-bottom:6px;font-size:0.72rem;color:rgba(255,255,255,0.45);">
                 <div><strong style="color:rgba(255,255,255,0.55);">Last GPS diagnostics received</strong></div>
                 <div style="margin-top:3px;color:#a8d4ff;">${reportedAt}</div>
                 <div style="margin-top:4px;font-size:0.65rem;color:rgba(255,255,255,0.28);">Server time when the Pi last sent this block (HTTP or SIM). Next update within ~60s while tracking.</div>
             </div>`;
-            html += row('Serial Port Open', boolBadge(g.serial_open));
-            html += row('GPS Engine On',    boolBadge(g.gps_engine_on));
-            html += row('Fix Valid',        boolBadge(g.fix_valid, '✅ Yes', '⚠️ No fix'));
-            html += row('Position (lat, lng)', esc(posStr));
-            html += row('Speed', esc(speedStr));
-            html += row('Last Fix At', lastFixAt);
-            html += row('Fix Count',    g.fix_count    != null ? g.fix_count    : '—');
-            html += row('No-fix Count', g.no_fix_count != null ? g.no_fix_count : '—');
-            if (g.last_error) {
-                html += `<div style="margin-top:10px;padding:8px 12px;background:rgba(231,76,60,0.12);border:1px solid rgba(231,76,60,0.3);border-radius:6px;font-size:0.78rem;color:#e74c3c;">
+                html += row('Serial Port Open', boolBadge(g.serial_open));
+                html += row('GPS Engine On', boolBadge(g.gps_engine_on));
+                html += row('Fix Valid', boolBadge(g.fix_valid, '✅ Yes', '⚠️ No fix'));
+                html += row('Position (lat, lng)', esc(posStr));
+                html += row('Speed', esc(speedStr));
+                html += row('Last Fix At', lastFixAt);
+                html += row('Fix Count', g.fix_count != null ? g.fix_count : '—');
+                html += row('No-fix Count', g.no_fix_count != null ? g.no_fix_count : '—');
+                if (g.last_error) {
+                    html += `<div style="margin-top:10px;padding:8px 12px;background:rgba(231,76,60,0.12);border:1px solid rgba(231,76,60,0.3);border-radius:6px;font-size:0.78rem;color:#e74c3c;">
                     ⚠️ Last error: ${esc(String(g.last_error))}
                 </div>`;
-            }
-            if (Array.isArray(g.recent_errors) && g.recent_errors.length) {
-                html += `<div style="margin-top:10px;">
+                }
+                if (Array.isArray(g.recent_errors) && g.recent_errors.length) {
+                    html += `<div style="margin-top:10px;">
                     <div style="font-size:0.72rem;color:rgba(255,255,255,0.35);margin-bottom:6px;">Recent Errors</div>
-                    <div style="font-family:monospace;font-size:0.72rem;color:#e74c3c;background:rgba(0,0,0,0.25);padding:8px;border-radius:6px;max-height:120px;overflow-y:auto;white-space:pre-wrap;">${g.recent_errors.map(e=>esc(e)).join('\n')}</div>
+                    <div style="font-family:monospace;font-size:0.72rem;color:#e74c3c;background:rgba(0,0,0,0.25);padding:8px;border-radius:6px;max-height:120px;overflow-y:auto;white-space:pre-wrap;">${g.recent_errors.map(e => esc(e)).join('\n')}</div>
                 </div>`;
-            }
-            el.innerHTML = html;
-        } catch (e) {
-            el.innerHTML = `<div style="color:#e74c3c;font-size:0.82rem;">Failed to load: ${esc(e.message)}</div>`;
-        }
-    }
-
-    async function loadGpsTracks() {
-        const d = selectedDevice;
-        if (!d) return;
-        const listEl = document.getElementById('gpsTrackList');
-        const dashLink = document.getElementById('gpsOpenDash');
-        if (dashLink) dashLink.href = `/Tracker-dashboard.html?device=${encodeURIComponent(d.device_id)}`;
-        if (!listEl) return;
-
-        listEl.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</div>';
-
-        // Init map lazily
-        if (!gpsMap) {
-            const mapEl = document.getElementById('gpsMap');
-            if (mapEl) {
-                gpsMap = L.map(mapEl, { zoomControl: true }).setView([51.5, -0.1], 10);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap contributors', maxZoom: 19
-                }).addTo(gpsMap);
+                }
+                el.innerHTML = html;
+            } catch (e) {
+                el.innerHTML = `<div style="color:#e74c3c;font-size:0.82rem;">Failed to load: ${esc(e.message)}</div>`;
             }
         }
 
-        try {
-            const resp = await fetch(`/api/tracks?device=${encodeURIComponent(d.device_id)}`);
-            const tracks = await resp.json();
+        async function loadGpsTracks() {
+            const d = selectedDevice;
+            if (!d) return;
+            const listEl = document.getElementById('gpsTrackList');
+            const dashLink = document.getElementById('gpsOpenDash');
+            if (dashLink) dashLink.href = `/Tracker-dashboard.html?device=${encodeURIComponent(d.device_id)}`;
+            if (!listEl) return;
 
-            const countEl = document.getElementById('gpsTrackCount');
-            if (countEl) countEl.textContent = `(${tracks.length})`;
+            listEl.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</div>';
 
-            // Button state: prefer device's own tracking_active flag (from GPS diagnostics);
-            // fall back to open-track existence for devices that haven't reported yet.
-            const deviceTracking = d.gps_status && d.gps_status.tracking_active;
-            const isTracking = deviceTracking != null ? deviceTracking : tracks.some(t => !t.ended_at);
-            setTrackingButtons(isTracking);
-
-            if (!tracks.length) {
-                listEl.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">No GPS tracks yet. Pi will create one when it gets a fix.</div>';
-                return;
+            // Init map lazily
+            if (!gpsMap) {
+                const mapEl = document.getElementById('gpsMap');
+                if (mapEl) {
+                    gpsMap = L.map(mapEl, { zoomControl: true }).setView([51.5, -0.1], 10);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenStreetMap contributors', maxZoom: 19
+                    }).addTo(gpsMap);
+                }
             }
 
-            listEl.innerHTML = tracks.map(t => {
-                const pts    = t.point_count || 0;
-                const live   = !t.ended_at;
-                const start  = t.started_at ? fmtDateTime(t.started_at) + ' ET' : '—';
-                const stop   = t.ended_at   ? fmtDateTime(t.ended_at)   + ' ET' : null;
-                const maxSpd = t.max_speed_ms ? (t.max_speed_ms * 1.94384).toFixed(1) + ' kn' : '—';
+            try {
+                const resp = await fetch(`/api/tracks?device=${encodeURIComponent(d.device_id)}`);
+                const tracks = await resp.json();
 
-                // Duration string
-                let dur = '';
-                if (t.started_at && t.ended_at) {
-                    const secs = Math.round((new Date(t.ended_at) - new Date(t.started_at)) / 1000);
-                    const h = Math.floor(secs/3600), m = Math.floor((secs%3600)/60), s = secs%60;
-                    dur = h ? `${h}h ${m}m` : m ? `${m}m ${s}s` : `${s}s`;
+                const countEl = document.getElementById('gpsTrackCount');
+                if (countEl) countEl.textContent = `(${tracks.length})`;
+
+                // Console / server is source of truth: open track OR config.active_track_id means "tracking on".
+                // Do not use gps_status.tracking_active here — it can disagree with the DB for minutes over SIM.
+                const cfg = typeof d.config === 'string' ? (() => { try { return JSON.parse(d.config); } catch (e) { return {}; } })() : (d.config || {});
+                const serverOpenTrack = tracks.some(t => !t.ended_at);
+                const serverWantsTrack = cfg.active_track_id != null && cfg.active_track_id !== '';
+                const isTracking = serverOpenTrack || serverWantsTrack;
+                setTrackingButtons(isTracking);
+
+                if (!tracks.length) {
+                    listEl.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">No GPS tracks yet. Pi will create one when it gets a fix.</div>';
+                    return;
                 }
 
-                const stopRow = stop
-                    ? `<div class="track-meta" style="color:rgba(255,255,255,0.35);">
-                           ⏹ Stopped: ${stop}${dur ? ' · '+dur : ''}
+                listEl.innerHTML = tracks.map(t => {
+                    const pts = t.point_count || 0;
+                    const live = !t.ended_at;
+                    const start = t.started_at ? fmtDateTime(t.started_at) + ' ET' : '—';
+                    const stop = t.ended_at ? fmtDateTime(t.ended_at) + ' ET' : null;
+                    const maxSpd = t.max_speed_ms ? (t.max_speed_ms * 1.94384).toFixed(1) + ' kn' : '—';
+
+                    // Duration string
+                    let dur = '';
+                    if (t.started_at && t.ended_at) {
+                        const secs = Math.round((new Date(t.ended_at) - new Date(t.started_at)) / 1000);
+                        const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+                        dur = h ? `${h}h ${m}m` : m ? `${m}m ${s}s` : `${s}s`;
+                    }
+
+                    const stopRow = stop
+                        ? `<div class="track-meta" style="color:rgba(255,255,255,0.35);">
+                           ⏹ Stopped: ${stop}${dur ? ' · ' + dur : ''}
                        </div>`
-                    : '';
+                        : '';
 
-                const forceStopBtn = live
-                    ? `<button class="btn danger" style="font-size:0.7rem;padding:3px 8px;margin-top:6px;"
+                    const forceStopBtn = live
+                        ? `<button class="btn danger" style="font-size:0.7rem;padding:3px 8px;margin-top:6px;"
                                onclick="event.stopPropagation();forceStopTrack(${t.id})">Force Stop</button>`
-                    : '';
+                        : '';
 
-                return `<div class="track-row ${gpsSelectedTrack===t.id?'active':''}" onclick="selectGpsTrack(${t.id})">
+                    return `<div class="track-row ${gpsSelectedTrack === t.id ? 'active' : ''}" onclick="selectGpsTrack(${t.id})">
                     <div style="flex:1;min-width:0;">
-                        <div class="track-name">${esc(t.name||'Track '+t.id)}</div>
+                        <div class="track-name">${esc(t.name || 'Track ' + t.id)}</div>
                         <div class="track-meta">▶ Started: ${start}</div>
                         ${stopRow}
                         <div class="track-meta" style="margin-top:3px;">${pts} pts · max ${maxSpd}</div>
                         ${forceStopBtn}
                     </div>
                     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
-                        <span class="track-badge ${live?'':'ended'}">${live?'🟢 Live':'⏹ Ended'}</span>
+                        <span class="track-badge ${live ? '' : 'ended'}">${live ? '🟢 Live' : '⏹ Ended'}</span>
                         <button class="btn danger" style="font-size:0.68rem;padding:2px 8px;"
                                 onclick="event.stopPropagation();deleteTrack(${t.id})">🗑 Delete</button>
                     </div>
                 </div>`;
-            }).join('');
+                }).join('');
 
-            // Auto-select the most recent (first) track
-            selectGpsTrack(tracks[0].id);
+                // Auto-select the most recent (first) track
+                selectGpsTrack(tracks[0].id);
 
-        } catch(e) {
-            if (listEl) listEl.innerHTML = `<div style="color:#e74c3c;font-size:0.85rem;">Error: ${e.message}</div>`;
-        }
-    }
-
-    async function forceStopTrack(trackId) {
-        if (!confirm('Force-stop this track? Use this when the Pi went offline without closing the track.')) return;
-        try {
-            const resp = await fetch(`/api/tracks/${trackId}/stop`, { method: 'PATCH' });
-            if (!resp.ok) {
-                const err = await resp.json();
-                throw new Error(err.error || 'Failed');
+            } catch (e) {
+                if (listEl) listEl.innerHTML = `<div style="color:#e74c3c;font-size:0.85rem;">Error: ${e.message}</div>`;
             }
-            await loadGpsTracks();
-        } catch(e) {
-            alert('Force stop failed: ' + e.message);
         }
-    }
 
-    async function deleteTrack(trackId) {
-        if (!confirm('Delete this track and all its GPS points? This cannot be undone.')) return;
-        try {
-            const resp = await fetch(`/api/tracks/${trackId}`, { method: 'DELETE' });
-            if (!resp.ok) throw new Error((await resp.json()).error || 'Delete failed');
-            await loadGpsTracks();
-        } catch(e) {
-            alert('Delete failed: ' + e.message);
+        async function forceStopTrack(trackId) {
+            if (!confirm('Force-stop this track? Use this when the Pi went offline without closing the track.')) return;
+            try {
+                const resp = await fetch(`/api/tracks/${trackId}/stop`, { method: 'PATCH' });
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    throw new Error(err.error || 'Failed');
+                }
+                await loadGpsTracks();
+            } catch (e) {
+                alert('Force stop failed: ' + e.message);
+            }
         }
-    }
 
-    async function deleteAllTracks() {
-        const d = selectedDevice;
-        if (!d) return;
-        const countEl = document.getElementById('gpsTrackCount');
-        const countStr = countEl ? countEl.textContent : '';
-        if (!confirm(`Delete ALL tracks ${countStr} for "${d.name || d.device_id}"?\n\nThis will permanently remove all GPS history for this device and cannot be undone.`)) return;
-        try {
-            const resp = await fetch(
-                `/api/tracks?device=${encodeURIComponent(d.device_id)}`,
-                { method: 'DELETE' }
-            );
-            const data = await resp.json();
-            if (!resp.ok) throw new Error(data.error || 'Delete failed');
-            await loadGpsTracks();
-        } catch(e) {
-            alert('Delete all failed: ' + e.message);
+        async function deleteTrack(trackId) {
+            if (!confirm('Delete this track and all its GPS points? This cannot be undone.')) return;
+            try {
+                const resp = await fetch(`/api/tracks/${trackId}`, { method: 'DELETE' });
+                if (!resp.ok) throw new Error((await resp.json()).error || 'Delete failed');
+                await loadGpsTracks();
+            } catch (e) {
+                alert('Delete failed: ' + e.message);
+            }
         }
-    }
 
-    function setVideoButtons(isRecording) {
-        const btnStart = document.getElementById('btnStartVideo');
-        const btnStop  = document.getElementById('btnStopVideo');
-        if (!btnStart || !btnStop) return;
-
-        if (isRecording) {
-            // Recording — Start dimmed, Stop active with pulse
-            btnStart.style.opacity       = '0.35';
-            btnStart.style.cursor        = 'default';
-            btnStart.style.pointerEvents = 'none';
-            btnStart.textContent         = '⏺ Start Video';
-
-            btnStop.style.opacity        = '1';
-            btnStop.style.cursor         = 'pointer';
-            btnStop.style.pointerEvents  = 'auto';
-            btnStop.innerHTML            = '⏹ Stop Video <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#e74c3c;animation:pulse 1.2s infinite;margin-left:5px;vertical-align:middle;"></span>';
-        } else {
-            // Not recording — Stop dimmed, Start active
-            btnStart.style.opacity       = '1';
-            btnStart.style.cursor        = 'pointer';
-            btnStart.style.pointerEvents = 'auto';
-            btnStart.textContent         = '⏺ Start Video';
-
-            btnStop.style.opacity        = '0.35';
-            btnStop.style.cursor         = 'default';
-            btnStop.style.pointerEvents  = 'none';
-            btnStop.textContent          = '⏹ Stop Video';
+        async function deleteAllTracks() {
+            const d = selectedDevice;
+            if (!d) return;
+            const countEl = document.getElementById('gpsTrackCount');
+            const countStr = countEl ? countEl.textContent : '';
+            if (!confirm(`Delete ALL tracks ${countStr} for "${d.name || d.device_id}"?\n\nThis will permanently remove all GPS history for this device and cannot be undone.`)) return;
+            try {
+                const resp = await fetch(
+                    `/api/tracks?device=${encodeURIComponent(d.device_id)}`,
+                    { method: 'DELETE' }
+                );
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || 'Delete failed');
+                await loadGpsTracks();
+            } catch (e) {
+                alert('Delete all failed: ' + e.message);
+            }
         }
-    }
 
-    // Initialise video buttons to "not recording" when the Photos tab renders
-    function initVideoButtons() {
-        setVideoButtons(false);
-    }
+        function setVideoButtons(isRecording) {
+            const btnStart = document.getElementById('btnStartVideo');
+            const btnStop = document.getElementById('btnStopVideo');
+            if (!btnStart || !btnStop) return;
 
-    function updateVideoAutoSection() {
-        const master  = document.getElementById('cfgVideoEnabled');
-        const section = document.getElementById('videoAutoSection');
-        if (!master || !section) return;
-        section.style.opacity       = master.checked ? '1'    : '0.35';
-        section.style.pointerEvents = master.checked ? 'auto' : 'none';
-    }
+            if (isRecording) {
+                // Recording — Start dimmed, Stop active with pulse
+                btnStart.style.opacity = '0.35';
+                btnStart.style.cursor = 'default';
+                btnStart.style.pointerEvents = 'none';
+                btnStart.textContent = '⏺ Start Video';
 
-    function updateVideoScheduleSection() {
-        const auto    = document.getElementById('cfgVideoAutoRecord');
-        const section = document.getElementById('videoScheduleSection');
-        if (!auto || !section) return;
-        section.style.opacity       = auto.checked ? '1'    : '0.35';
-        section.style.pointerEvents = auto.checked ? 'auto' : 'none';
-    }
+                btnStop.style.opacity = '1';
+                btnStop.style.cursor = 'pointer';
+                btnStop.style.pointerEvents = 'auto';
+                btnStop.innerHTML = '⏹ Stop Video <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#e74c3c;animation:pulse 1.2s infinite;margin-left:5px;vertical-align:middle;"></span>';
+            } else {
+                // Not recording — Stop dimmed, Start active
+                btnStart.style.opacity = '1';
+                btnStart.style.cursor = 'pointer';
+                btnStart.style.pointerEvents = 'auto';
+                btnStart.textContent = '⏺ Start Video';
 
-    function setTrackingButtons(isTracking) {
-        const btnStart = document.getElementById('btnStartTrack');
-        const btnStop  = document.getElementById('btnStopTrack');
-        if (!btnStart || !btnStop) return;
-
-        if (isTracking) {
-            // Tracking ON — Start is inactive, Stop is active
-            btnStart.style.opacity  = '0.35';
-            btnStart.style.cursor   = 'default';
-            btnStart.style.pointerEvents = 'none';
-            btnStart.textContent    = '▶ Start Tracking';
-
-            btnStop.style.opacity   = '1';
-            btnStop.style.cursor    = 'pointer';
-            btnStop.style.pointerEvents = 'auto';
-            btnStop.innerHTML       = '■ Stop Tracking <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#e74c3c;animation:pulse 1.2s infinite;margin-left:5px;vertical-align:middle;"></span>';
-        } else {
-            // Tracking OFF — Stop is inactive, Start is active
-            btnStart.style.opacity  = '1';
-            btnStart.style.cursor   = 'pointer';
-            btnStart.style.pointerEvents = 'auto';
-            btnStart.textContent    = '▶ Start Tracking';
-
-            btnStop.style.opacity   = '0.35';
-            btnStop.style.cursor    = 'default';
-            btnStop.style.pointerEvents = 'none';
-            btnStop.textContent     = '■ Stop Tracking';
+                btnStop.style.opacity = '0.35';
+                btnStop.style.cursor = 'default';
+                btnStop.style.pointerEvents = 'none';
+                btnStop.textContent = '⏹ Stop Video';
+            }
         }
-    }
 
-    let gpsSelectedTrack = null;
-
-    async function selectGpsTrack(trackId) {
-        gpsSelectedTrack = trackId;
-        // Highlight row
-        document.querySelectorAll('.track-row').forEach(r => r.classList.remove('active'));
-        const rows = document.querySelectorAll('.track-row');
-        rows.forEach(r => { if (r.querySelector('.track-name')) r.classList.toggle('active', r.onclick && r.getAttribute('onclick') && r.getAttribute('onclick').includes(trackId)); });
-
-        if (!gpsMap) return;
-
-        // Clear old layers
-        gpsMapLayers.forEach(l => gpsMap.removeLayer(l));
-        gpsMapLayers = [];
-
-        try {
-            const resp = await fetch(`/api/tracks/${trackId}/points`);
-            const pts  = await resp.json();
-            if (!pts.length) return;
-
-            const latlngs = pts.map(p => [p.lat, p.lng]);
-
-            // Draw polyline
-            const line = L.polyline(latlngs, { color: '#7ecfff', weight: 3, opacity: 0.85 }).addTo(gpsMap);
-            gpsMapLayers.push(line);
-
-            // Start marker (green)
-            const startM = L.circleMarker(latlngs[0], { radius: 8, fillColor: '#2ecc71', color: '#fff', weight: 2, fillOpacity: 1 })
-                .bindPopup('Start').addTo(gpsMap);
-            gpsMapLayers.push(startM);
-
-            // Latest position marker (blue, pulsing via larger ring)
-            const last = latlngs[latlngs.length - 1];
-            const lastPt = pts[pts.length - 1];
-            const spd  = lastPt.speed ? (lastPt.speed * 1.94384).toFixed(1) + ' kn' : '—';
-            const popupTxt = `<b>Latest position</b><br>Speed: ${spd}<br>${fmtTime(lastPt.recorded_at)} ET`;
-            const endM = L.circleMarker(last, { radius: 10, fillColor: '#7ecfff', color: '#fff', weight: 2, fillOpacity: 1 })
-                .bindPopup(popupTxt).addTo(gpsMap);
-            gpsMapLayers.push(endM);
-
-            gpsMap.fitBounds(line.getBounds(), { padding: [30, 30] });
-        } catch(e) {
-            console.error('GPS points load failed:', e);
+        // Initialise video buttons to "not recording" when the Photos tab renders
+        function initVideoButtons() {
+            setVideoButtons(false);
         }
-    }
 
-    // ── Init ──────────────────────────────────────────────────────────────────
-    loadDevices();
-    setInterval(loadDevices, 30000);
-</script>
+        function updateVideoAutoSection() {
+            const master = document.getElementById('cfgVideoEnabled');
+            const section = document.getElementById('videoAutoSection');
+            if (!master || !section) return;
+            section.style.opacity = master.checked ? '1' : '0.35';
+            section.style.pointerEvents = master.checked ? 'auto' : 'none';
+        }
+
+        function updateVideoScheduleSection() {
+            const auto = document.getElementById('cfgVideoAutoRecord');
+            const section = document.getElementById('videoScheduleSection');
+            if (!auto || !section) return;
+            section.style.opacity = auto.checked ? '1' : '0.35';
+            section.style.pointerEvents = auto.checked ? 'auto' : 'none';
+        }
+
+        function setTrackingButtons(isTracking) {
+            const btnStart = document.getElementById('btnStartTrack');
+            const btnStop = document.getElementById('btnStopTrack');
+            if (!btnStart || !btnStop) return;
+
+            if (isTracking) {
+                // Tracking ON — Start is inactive, Stop is active
+                btnStart.style.opacity = '0.35';
+                btnStart.style.cursor = 'default';
+                btnStart.style.pointerEvents = 'none';
+                btnStart.textContent = '▶ Start Tracking';
+
+                btnStop.style.opacity = '1';
+                btnStop.style.cursor = 'pointer';
+                btnStop.style.pointerEvents = 'auto';
+                btnStop.innerHTML = '■ Stop Tracking <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#e74c3c;animation:pulse 1.2s infinite;margin-left:5px;vertical-align:middle;"></span>';
+            } else {
+                // Tracking OFF — Stop is inactive, Start is active
+                btnStart.style.opacity = '1';
+                btnStart.style.cursor = 'pointer';
+                btnStart.style.pointerEvents = 'auto';
+                btnStart.textContent = '▶ Start Tracking';
+
+                btnStop.style.opacity = '0.35';
+                btnStop.style.cursor = 'default';
+                btnStop.style.pointerEvents = 'none';
+                btnStop.textContent = '■ Stop Tracking';
+            }
+        }
+
+        let gpsSelectedTrack = null;
+
+        async function selectGpsTrack(trackId) {
+            gpsSelectedTrack = trackId;
+            // Highlight row
+            document.querySelectorAll('.track-row').forEach(r => r.classList.remove('active'));
+            const rows = document.querySelectorAll('.track-row');
+            rows.forEach(r => { if (r.querySelector('.track-name')) r.classList.toggle('active', r.onclick && r.getAttribute('onclick') && r.getAttribute('onclick').includes(trackId)); });
+
+            if (!gpsMap) return;
+
+            // Clear old layers
+            gpsMapLayers.forEach(l => gpsMap.removeLayer(l));
+            gpsMapLayers = [];
+
+            try {
+                const resp = await fetch(`/api/tracks/${trackId}/points`);
+                const pts = await resp.json();
+                if (!pts.length) return;
+
+                const latlngs = pts.map(p => [p.lat, p.lng]);
+
+                // Draw polyline
+                const line = L.polyline(latlngs, { color: '#7ecfff', weight: 3, opacity: 0.85 }).addTo(gpsMap);
+                gpsMapLayers.push(line);
+
+                // Start marker (green)
+                const startM = L.circleMarker(latlngs[0], { radius: 8, fillColor: '#2ecc71', color: '#fff', weight: 2, fillOpacity: 1 })
+                    .bindPopup('Start').addTo(gpsMap);
+                gpsMapLayers.push(startM);
+
+                // Latest position marker (blue, pulsing via larger ring)
+                const last = latlngs[latlngs.length - 1];
+                const lastPt = pts[pts.length - 1];
+                const spd = lastPt.speed ? (lastPt.speed * 1.94384).toFixed(1) + ' kn' : '—';
+                const popupTxt = `<b>Latest position</b><br>Speed: ${spd}<br>${fmtTime(lastPt.recorded_at)} ET`;
+                const endM = L.circleMarker(last, { radius: 10, fillColor: '#7ecfff', color: '#fff', weight: 2, fillOpacity: 1 })
+                    .bindPopup(popupTxt).addTo(gpsMap);
+                gpsMapLayers.push(endM);
+
+                gpsMap.fitBounds(line.getBounds(), { padding: [30, 30] });
+            } catch (e) {
+                console.error('GPS points load failed:', e);
+            }
+        }
+
+        // ── Init ──────────────────────────────────────────────────────────────────
+        loadDevices();
+        setInterval(loadDevices, 30000);
+    </script>
 </body>
+
 </html>

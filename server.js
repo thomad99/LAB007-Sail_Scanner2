@@ -181,8 +181,7 @@ async function listS3Objects(prefix = '') {
             page += 1;
 
             console.log(
-                `S3 list page ${page}: fetched ${contents.length} object(s)${
-                    response.IsTruncated ? ' (more pages available)' : ''
+                `S3 list page ${page}: fetched ${contents.length} object(s)${response.IsTruncated ? ' (more pages available)' : ''
                 }`
             );
 
@@ -892,8 +891,8 @@ async function createLiveviewResultsTable() {
         // Migration: add columns if they don't exist yet
         const additions = [
             { col: 'session_id', def: 'TEXT' },
-            { col: 'filename',   def: 'TEXT' },
-            { col: 'metadata',   def: 'JSONB DEFAULT \'{}\'::jsonb' },
+            { col: 'filename', def: 'TEXT' },
+            { col: 'metadata', def: 'JSONB DEFAULT \'{}\'::jsonb' },
         ];
         for (const { col, def } of additions) {
             const r = await pool.query(
@@ -1215,16 +1214,16 @@ app.post('/api/scan2', upload.single('image'), async (req, res) => {
     const uploadNoSail = req.body.upload_no_sail !== 'false';
 
     const metadata = {
-        date:                req.body.date               || new Date().toISOString().split('T')[0],
-        regatta_name:        req.body.regatta_name        || null,
-        yacht_club:          req.body.yacht_club          || null,
-        photographer_name:   req.body.photographer_name   || null,
-        photographer_website:req.body.photographer_website|| null,
-        location:            req.body.location            || null,
-        additional_tags:     req.body.additional_tags
-                               ? req.body.additional_tags.split(',').map(t => t.trim())
-                               : [],
-        upload_timestamp:    new Date().toISOString(),
+        date: req.body.date || new Date().toISOString().split('T')[0],
+        regatta_name: req.body.regatta_name || null,
+        yacht_club: req.body.yacht_club || null,
+        photographer_name: req.body.photographer_name || null,
+        photographer_website: req.body.photographer_website || null,
+        location: req.body.location || null,
+        additional_tags: req.body.additional_tags
+            ? req.body.additional_tags.split(',').map(t => t.trim())
+            : [],
+        upload_timestamp: new Date().toISOString(),
     };
 
     try {
@@ -1242,8 +1241,8 @@ app.post('/api/scan2', upload.single('image'), async (req, res) => {
 
         // Scan with Document Intelligence
         const analyzeResult = await analyzeWithDocumentIntelligence(req.file.buffer, req.file.mimetype || 'image/jpeg');
-        const sailNumbers    = extractSailNumbersFromDocumentIntelligence(analyzeResult);
-        const exifData       = extractExifData(req.file.buffer);
+        const sailNumbers = extractSailNumbersFromDocumentIntelligence(analyzeResult);
+        const exifData = extractExifData(req.file.buffer);
 
         const processedFiles = [];
 
@@ -1332,10 +1331,10 @@ app.post('/api/scan2', upload.single('image'), async (req, res) => {
                         metadata.location,
                         metadata.additional_tags,
                         rowChecksum,
-                        exifData.photo_timestamp  || null,
-                        exifData.gps_latitude     || null,
-                        exifData.gps_longitude    || null,
-                        exifData.gps_altitude     || null,
+                        exifData.photo_timestamp || null,
+                        exifData.gps_latitude || null,
+                        exifData.gps_longitude || null,
+                        exifData.gps_altitude || null,
                         metadata.upload_timestamp,
                     ]
                 );
@@ -1359,9 +1358,9 @@ app.post('/api/scan2', upload.single('image'), async (req, res) => {
 // Store LiveView scan results in Postgres (timestamp added server-side)
 app.post('/api/liveview-store-results', express.json(), async (req, res) => {
     const sailNumbers = req.body.sailNumbers;
-    const sessionId  = req.body.sessionId && String(req.body.sessionId).trim() ? String(req.body.sessionId).trim() : null;
-    const filename   = req.body.filename   ? String(req.body.filename).trim()  : null;
-    const metadata   = req.body.metadata && typeof req.body.metadata === 'object' ? req.body.metadata : null;
+    const sessionId = req.body.sessionId && String(req.body.sessionId).trim() ? String(req.body.sessionId).trim() : null;
+    const filename = req.body.filename ? String(req.body.filename).trim() : null;
+    const metadata = req.body.metadata && typeof req.body.metadata === 'object' ? req.body.metadata : null;
     if (!Array.isArray(sailNumbers)) {
         return res.status(400).json({ error: 'sailNumbers array required' });
     }
@@ -1699,7 +1698,7 @@ function extractSailNumbersFromDocumentIntelligence(analyzeResult) {
 
     // Prefer valid sail numbers (2–8 digits, range 10–999999), then any digit line; sort by confidence
     const valid = deduped.filter((c) => isValidSailNumber(c.number));
-    const rest  = deduped.filter((c) => !isValidSailNumber(c.number));
+    const rest = deduped.filter((c) => !isValidSailNumber(c.number));
     return [...valid.sort((a, b) => (b.confidence || 0) - (a.confidence || 0)), ...rest.sort((a, b) => (b.confidence || 0) - (a.confidence || 0))];
 }
 
@@ -2654,8 +2653,8 @@ app.post('/api/photo-rescan', async (req, res) => {
         // Normalize selected_checksums if provided
         let checksumList = Array.isArray(selected_checksums)
             ? selected_checksums
-                  .map((c) => (typeof c === 'string' ? c.trim() : ''))
-                  .filter((c) => c.length > 0)
+                .map((c) => (typeof c === 'string' ? c.trim() : ''))
+                .filter((c) => c.length > 0)
             : [];
 
         let originalsResult;
@@ -5349,7 +5348,7 @@ async function scrapeClubspot() {
             const placeholders = batch.map((r, idx) => {
                 const base = idx * 8;
                 values.push(r.regatta_date, r.regatta_name, r.location, r.event_website_url, null, null, 'clubspot', r.source_id);
-                return `($${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7},$${base+8})`;
+                return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},$${base + 7},$${base + 8})`;
             });
             try {
                 const result = await pool.query(`
@@ -5913,7 +5912,7 @@ app.post('/api/pi/register', express.json(), async (req, res) => {
         // Build a display IP — prefer the first non-loopback from ip_addresses map
         let displayIp = ip_address || null;
         if (ip_addresses && typeof ip_addresses === 'object') {
-            const preferred = ['wlan0','eth0','wwan0','ppp0','usb0'];
+            const preferred = ['wlan0', 'eth0', 'wwan0', 'ppp0', 'usb0'];
             for (const iface of preferred) {
                 if (ip_addresses[iface]) { displayIp = ip_addresses[iface]; break; }
             }
@@ -5959,7 +5958,7 @@ app.get('/api/pi/devices/:deviceId/config', async (req, res) => {
         );
         if (!result.rows.length) return res.status(404).json({ error: 'Device not found' });
         const row = result.rows[0];
-        const config   = row.config || defaultPiConfig();
+        const config = row.config || defaultPiConfig();
         const commands = row.pending_commands || [];
         // Embed commands inside the config response under a reserved key
         config.__commands = Array.isArray(commands) ? commands : [];
@@ -5975,7 +5974,7 @@ app.post('/api/pi/devices/:deviceId/command', express.json(), async (req, res) =
     try {
         const { command } = req.body;
         const deviceId = req.params.deviceId;
-        const valid = ['start_track','stop_track','capture_photo','start_video','stop_video','restart','test_sim'];
+        const valid = ['start_track', 'stop_track', 'capture_photo', 'start_video', 'stop_video', 'restart', 'test_sim'];
         if (!valid.includes(command)) {
             return res.status(400).json({ error: `Unknown command. Valid: ${valid.join(', ')}` });
         }
@@ -5986,7 +5985,7 @@ app.post('/api/pi/devices/:deviceId/command', express.json(), async (req, res) =
             const now = new Date();
             const etOffset = -5 * 60;  // ET = UTC-5 (close enough for name label)
             const etTime = new Date(now.getTime() + etOffset * 60000);
-            const trackName = `${deviceId} — ${etTime.toISOString().slice(0,16).replace('T',' ')} ET`;
+            const trackName = `${deviceId} — ${etTime.toISOString().slice(0, 16).replace('T', ' ')} ET`;
             const trackResult = await pool.query(
                 `INSERT INTO tracks (name, device_name) VALUES ($1, $2) RETURNING id`,
                 [trackName, deviceId]
@@ -6187,7 +6186,7 @@ app.post('/api/pi/devices/:deviceId/photos', upload.array('photos', 50), async (
                 `INSERT INTO pi_photos (device_id, filename, captured_at, file_size, storage_path, lat, lng)
                  VALUES ($1,$2,$3,$4,$5,$6,$7)`,
                 [deviceId, filename, m.captured_at || new Date(), file.size,
-                 webPath, m.lat || null, m.lng || null]
+                    webPath, m.lat || null, m.lng || null]
             );
             saved.push(webPath);
         }
@@ -6339,7 +6338,7 @@ app.get('/api/tracks', async (req, res) => {
     try {
         const device = req.query.device || null;
         const params = device ? [device] : [];
-        const where  = device ? `WHERE t.device_name = $1` : '';
+        const where = device ? `WHERE t.device_name = $1` : '';
         const result = await pool.query(`
             SELECT
                 t.*,
@@ -6471,7 +6470,7 @@ app.get('/api/tracks/sessions', async (req, res) => {
             sessions.push({
                 id: sessions.length,
                 label: anchor.toLocaleDateString() + ' ' +
-                       anchor.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    anchor.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 started_at: track.started_at,
                 track_count: group.length,
                 total_points: group.reduce((s, t) => s + (t.point_count || 0), 0),
@@ -6501,27 +6500,27 @@ let pisailboxMqtt = null;
     const BROKER = process.env.PISAILBOX_MQTT_BROKER || 'mqtt://broker.hivemq.com:1883';
 
     pisailboxMqtt = mqtt.connect(BROKER, {
-        clientId:        `lovesailing-server-${Math.random().toString(16).slice(2, 8)}`,
-        clean:           true,
+        clientId: `lovesailing-server-${Math.random().toString(16).slice(2, 8)}`,
+        clean: true,
         reconnectPeriod: 5000,
-        connectTimeout:  15000,
+        connectTimeout: 15000,
     });
 
     pisailboxMqtt.on('connect', () => {
         console.log(`MQTT: connected to ${BROKER}`);
-        pisailboxMqtt.subscribe('pisailbox/+/gps',    { qos: 1 }, (err) => { if (err) console.error('MQTT sub gps error:', err); });
+        pisailboxMqtt.subscribe('pisailbox/+/gps', { qos: 1 }, (err) => { if (err) console.error('MQTT sub gps error:', err); });
         pisailboxMqtt.subscribe('pisailbox/+/status', { qos: 0 }, (err) => { if (err) console.error('MQTT sub status error:', err); });
     });
 
     pisailboxMqtt.on('reconnect', () => console.log('MQTT: reconnecting…'));
-    pisailboxMqtt.on('error',     (e) => console.error('MQTT error:', e.message));
+    pisailboxMqtt.on('error', (e) => console.error('MQTT error:', e.message));
 
     pisailboxMqtt.on('message', async (topic, buffer) => {
         try {
-            const parts    = topic.split('/');
+            const parts = topic.split('/');
             const deviceId = parts[1];
-            const msgType  = parts[2];
-            const data     = JSON.parse(buffer.toString());
+            const msgType = parts[2];
+            const data = JSON.parse(buffer.toString());
 
             if (msgType === 'gps') {
                 const { lat, lng, speed, altitude, accuracy, heading, track_id } = data;
@@ -6565,15 +6564,15 @@ async function publishMqttDeviceConfig(deviceId) {
         );
         if (!result.rows.length) return;
 
-        const row      = result.rows[0];
-        const config   = typeof row.config === 'string' ? JSON.parse(row.config) : (row.config || {});
+        const row = result.rows[0];
+        const config = typeof row.config === 'string' ? JSON.parse(row.config) : (row.config || {});
         const commands = Array.isArray(row.pending_commands) ? row.pending_commands : [];
 
-        const payload  = JSON.stringify({ ...config, __commands: commands });
+        const payload = JSON.stringify({ ...config, __commands: commands });
 
         pisailboxMqtt.publish(`pisailbox/${deviceId}/config`, payload, { retain: true, qos: 1 }, (err) => {
             if (err) console.error(`MQTT: config publish failed for ${deviceId}:`, err);
-            else     console.log(`MQTT: published retained config for ${deviceId} (track=${config.active_track_id || 'none'})`);
+            else console.log(`MQTT: published retained config for ${deviceId} (track=${config.active_track_id || 'none'})`);
         });
     } catch (e) {
         console.error('publishMqttDeviceConfig error:', e.message);
