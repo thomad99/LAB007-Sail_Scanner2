@@ -872,24 +872,35 @@
                 const sel = selectedDevice && d.device_id === selectedDevice.device_id ? 'selected' : '';
                 const lastSeen = d.last_seen ? fmtDateTime(d.last_seen) + ' ET' : 'Never';
                 const lastGps = d.last_gps_at ? fmtDateTime(d.last_gps_at) + ' ET' : '—';
+                const cfg = typeof d.config === 'string'
+                    ? (() => { try { return JSON.parse(d.config); } catch (e) { return {}; } })()
+                    : (d.config || {});
                 // "Tracking ON" only when there is an open track AND a GPS point was recorded
                 // within the last 5 minutes — avoids showing ON for auto_track sessions with no data
                 const recentGps = d.last_gps_at && (Date.now() - new Date(d.last_gps_at).getTime()) < 5 * 60 * 1000;
                 const tracking = d.tracking_active && recentGps;
-                const trackBadge = tracking
-                    ? `<span style="display:inline-block;padding:1px 7px;border-radius:20px;font-size:0.65rem;font-weight:bold;
-                       background:rgba(46,204,113,0.18);border:1px solid rgba(46,204,113,0.4);color:#2ecc71;">
-                       📍 Tracking ON</span>`
-                    : `<span style="display:inline-block;padding:1px 7px;border-radius:20px;font-size:0.65rem;
-                       background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.3);">
-                       📍 Tracking OFF</span>`;
+                const badgeOn = (label) =>
+                    `<span style="display:inline-block;padding:1px 7px;border-radius:20px;font-size:0.65rem;font-weight:bold;
+                       background:rgba(46,204,113,0.18);border:1px solid rgba(46,204,113,0.4);color:#2ecc71;">${label}</span>`;
+                const badgeOff = (label) =>
+                    `<span style="display:inline-block;padding:1px 7px;border-radius:20px;font-size:0.65rem;
+                       background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.3);">${label}</span>`;
+                const trackBadge = tracking ? badgeOn('📍 Tracking ON') : badgeOff('📍 Tracking OFF');
+                const photosOn = !!(cfg.camera_enabled && cfg.camera_auto_photo);
+                const videoOn = !!(cfg.camera_enabled && cfg.video_auto_record);
+                const photoBadge = photosOn ? badgeOn('📷 Photos ON') : badgeOff('📷 Photos OFF');
+                const videoBadge = videoOn ? badgeOn('🎥 Video ON') : badgeOff('🎥 Video OFF');
                 return `<div class="device-item ${sel}" onclick="selectDevice('${esc(d.device_id)}')" id="dev-${esc(d.device_id)}">
                 <div class="device-name">
                     <span class="status-dot ${online ? 'online' : 'offline'}"></span>${esc(d.name || d.device_id)}
                 </div>
                 <div class="device-meta" style="margin-top:5px;">
-                    ${trackBadge}<br>
-                    <span style="margin-top:3px;display:inline-block;">
+                    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin-bottom:6px;">
+                    ${trackBadge}
+                    ${photoBadge}
+                    ${videoBadge}
+                    </div>
+                    <span style="display:inline-block;">
                         ${online ? '● Online' : '○ Offline'} · ${esc(d.ip_address || '?')}<br>
                         Last seen: ${lastSeen}<br>
                         Last GPS: ${lastGps}
