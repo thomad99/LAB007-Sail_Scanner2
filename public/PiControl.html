@@ -887,15 +887,19 @@
             }
         }
 
-        /** One refresh control: reload device list, then rebuild the open tab from latest server data. */
-        async function refreshCurrentView() {
+        /**
+         * Reload device list, then rebuild the open tab from latest server data.
+         * @param {{ silent?: boolean }} opts - silent=true: background tick (no button disable), e.g. auto-refresh every 60s
+         */
+        async function refreshCurrentView(opts = {}) {
+            const silent = opts.silent === true;
             const btn = document.getElementById('btnTopRefresh');
-            if (btn) btn.disabled = true;
+            if (!silent && btn) btn.disabled = true;
             try {
                 await loadDevices();
                 if (selectedDevice) renderMainPanel();
             } finally {
-                if (btn) btn.disabled = false;
+                if (!silent && btn) btn.disabled = false;
             }
         }
 
@@ -913,10 +917,10 @@
                 const cfg = typeof d.config === 'string'
                     ? (() => { try { return JSON.parse(d.config); } catch (e) { return {}; } })()
                     : (d.config || {});
-                // "Tracking ON" only when there is an open track AND a GPS point was recorded
-                // within the last 5 minutes — avoids showing ON for auto_track sessions with no data
-                const recentGps = d.last_gps_at && (Date.now() - new Date(d.last_gps_at).getTime()) < 5 * 60 * 1000;
-                const tracking = d.tracking_active && recentGps;
+                // Match GPS tab / server: ON = open track (tracking_active) OR active_track_id in config.
+                // Do not require a recent GPS fix — a live session with 0 pts still shows ON here.
+                const serverWantsTrack = cfg.active_track_id != null && String(cfg.active_track_id) !== '';
+                const tracking = !!(d.tracking_active || serverWantsTrack);
                 const badgeOn = (label) =>
                     `<span style="display:inline-block;padding:1px 7px;border-radius:20px;font-size:0.65rem;font-weight:bold;
                        background:rgba(46,204,113,0.18);border:1px solid rgba(46,204,113,0.4);color:#2ecc71;">${label}</span>`;
@@ -1166,11 +1170,15 @@
                             <div class="stat-box">
                                 <div class="stat-label">GPS Tracking</div>
                                 ${(() => {
-                    const recentGps = d.last_gps_at && (Date.now() - new Date(d.last_gps_at).getTime()) < 5 * 60 * 1000;
-                    const liveTracking = d.tracking_active && recentGps;
-                    return liveTracking
-                        ? `<div class="stat-val" style="color:#2ecc71">▶ Active</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Last fix: ${fmtTime(d.last_gps_at)} ET</div>`
-                        : `<div class="stat-val" style="color:rgba(255,255,255,0.35)">⏹ Off</div>${d.last_gps_at ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Last: ${fmtTime(d.last_gps_at)} ET</div>` : ''}`;
+                    const serverWantsTrack = config.active_track_id != null && String(config.active_track_id) !== '';
+                    const sessionOpen = !!(d.tracking_active || serverWantsTrack);
+                    if (!sessionOpen) {
+                        return `<div class="stat-val" style="color:rgba(255,255,255,0.35)">⏹ Off</div>${d.last_gps_at ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Last fix: ${fmtTime(d.last_gps_at)} ET</div>` : ''}`;
+                    }
+                    const sub = d.last_gps_at
+                        ? `Last fix: ${fmtTime(d.last_gps_at)} ET`
+                        : 'No fix logged yet';
+                    return `<div class="stat-val" style="color:#2ecc71">▶ On</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">${sub}</div>`;
                 })()}
                             </div>
                             <div class="stat-box">
@@ -2204,7 +2212,7 @@
 
         // ── Init ──────────────────────────────────────────────────────────────────
         loadDevices();
-        setInterval(loadDevices, 30000);
+        setInterval(() => { refreshCurrentView({ silent: true }); }, 60000);
     </script>
 </body>
 
