@@ -36,9 +36,8 @@ TRACK_ID_FILE = os.path.join(DATA_DIR, "current_track_id")   # persists track ac
 
 # ── Defaults (overridden by server config) ────────────────────────────────────
 DEFAULT_CONFIG = {
-    "config_poll_interval_seconds":  30,   # how often to poll server for config + SIM MQTT upload batch
     "gps_poll_seconds":              10,   # how often to read GPS (seconds)
-    "gps_upload_interval_seconds":   30,   # kept in sync with check-in; upload uses check-in interval
+    "gps_upload_interval_seconds":   60,   # how often to upload batched points to server
     "camera_enabled":                False,
     "photo_interval_seconds":        30,
     "photo_session_minutes":         60,
@@ -48,5 +47,5 @@ DEFAULT_CONFIG = {
     "video_duration_seconds":        60,
 }
 
-# Fallback if server config has no config_poll_interval_seconds yet
+# Config is polled from server every N seconds
 CONFIG_POLL_SECONDS = 30

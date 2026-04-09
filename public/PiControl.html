@@ -791,7 +791,7 @@
         <a href="/index.html"><img src="/Images/LOVE SAILING LOGO.JPEG" class="topbar-logo" alt="Love Sailing"></a>
         <div class="topbar-title">🥧 PISAILBOX CONTROL</div>
         <div class="topbar-right">
-            <button class="btn" onclick="loadDevices()">↻ Refresh</button>
+            <button class="btn" id="btnTopRefresh" onclick="refreshCurrentView()">↻ Refresh</button>
             <a href="/Tracker-dashboard.html" class="btn primary">📍 Tracker Map</a>
         </div>
     </div>
@@ -848,16 +848,54 @@
             }
         }
 
+        function syncSelectedDeviceFromList() {
+            if (!selectedDevice) return;
+            const id = selectedDevice.device_id;
+            const fresh = devices.find(x => x.device_id === id);
+            if (fresh) {
+                selectedDevice = fresh;
+            } else {
+                selectedDevice = null;
+                const main = document.getElementById('mainPanel');
+                if (main) {
+                    main.innerHTML = `
+                    <div class="placeholder">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
+                            <rect x="5" y="2" width="14" height="20" rx="2" />
+                            <line x1="9" y1="7" x2="15" y2="7" />
+                            <line x1="9" y1="11" x2="15" y2="11" />
+                            <line x1="9" y1="15" x2="12" y2="15" />
+                        </svg>
+                        <div>Select a Pi device from the left to manage it</div>
+                    </div>`;
+                }
+                currentTab = 'status';
+            }
+        }
+
         // ── Load devices ──────────────────────────────────────────────────────────
         async function loadDevices() {
             try {
                 const resp = await fetch('/api/pi/devices');
                 devices = await resp.json();
                 document.getElementById('devCount').textContent = devices.length;
+                syncSelectedDeviceFromList();
                 renderDeviceList();
             } catch (e) {
                 document.getElementById('deviceList').innerHTML =
                     `<div class="empty-state">Error: ${e.message}</div>`;
+            }
+        }
+
+        /** One refresh control: reload device list, then rebuild the open tab from latest server data. */
+        async function refreshCurrentView() {
+            const btn = document.getElementById('btnTopRefresh');
+            if (btn) btn.disabled = true;
+            try {
+                await loadDevices();
+                if (selectedDevice) renderMainPanel();
+            } finally {
+                if (btn) btn.disabled = false;
             }
         }
 
@@ -925,6 +963,7 @@
 
         function renderMainPanel() {
             const d = selectedDevice;
+            if (!d) return;
             const config = (typeof d.config === 'string' ? JSON.parse(d.config) : d.config) || {};
             document.getElementById('mainPanel').innerHTML = `
             <div class="tabs">
@@ -1027,8 +1066,6 @@
                                         onclick="sendCommand('start_track')">▶ Start Tracking</button>
                                 <button class="btn danger"  id="btnStopTrack"
                                         onclick="sendCommand('stop_track')">■ Stop Tracking</button>
-                                <button class="btn" style="float:right;padding:7px 12px;font-size:0.78rem;"
-                                        onclick="loadGpsTracks()">↻ Refresh</button>
                             </div>
                         </div>
                         <div id="cmdFeedback" style="font-size:0.82rem;color:#2ecc71;margin-top:6px;min-height:18px;"></div>
@@ -1054,9 +1091,8 @@
                     </div>
 
                     <div class="card">
-                        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
+                        <div class="card-title">
                             <span>GPS / Modem Diagnostics</span>
-                            <button class="btn" style="padding:4px 12px;font-size:0.72rem;" onclick="loadGpsDiagnostics()">↻ Refresh</button>
                         </div>
                         <div id="gpsDiagBody">
                             <div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</div>
@@ -1069,10 +1105,7 @@
                 <div class="tab-panel ${currentTab === 'sim' ? 'active' : ''}" id="tab-sim">
 
                     <div class="card">
-                        <div class="card-title">Live SIM / Modem Status
-                            <button class="btn" style="float:right;padding:3px 10px;font-size:0.72rem;"
-                                    onclick="refreshSim()">↻ Refresh</button>
-                        </div>
+                        <div class="card-title">Live SIM / Modem Status</div>
                         <div id="simStatusBody">
                             <div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</div>
                         </div>
@@ -1241,9 +1274,6 @@
                             <button class="btn danger" id="btnStopVideo"
                                     onclick="sendCommand('stop_video')">
                                 ⏹ Stop Video
-                            </button>
-                            <button class="btn" onclick="loadPhotos()" style="margin-left:auto;">
-                                ↻ Refresh Gallery
                             </button>
                         </div>
                         <div id="camCmdFeedback" style="font-size:0.82rem;color:#2ecc71;margin-top:8px;min-height:18px;"></div>
@@ -1458,8 +1488,6 @@
             }
             return html;
         }
-
-        function refreshSim() { loadSimStatus(); }
 
         // ── Save SIM / APN config ─────────────────────────────────────────────────
         async function saveSimConfig() {

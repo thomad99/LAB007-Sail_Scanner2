@@ -279,15 +279,8 @@ def gps_thread_fn():
     next_gps_upload   = time.time()   # next batch upload to server
 
     while not shutdown_event.is_set():
-        poll_s = max(3, int(device_config.get("gps_poll_seconds", cfg.DEFAULT_CONFIG["gps_poll_seconds"]) or 10))
-        # Batch upload (SIM MQTT + config subscribe) uses website check-in interval
-        _ci = device_config.get("config_poll_interval_seconds")
-        _gu = device_config.get("gps_upload_interval_seconds")
-        try:
-            upload_s = max(5, int(_ci if _ci is not None else _gu if _gu is not None
-                else cfg.DEFAULT_CONFIG.get("gps_upload_interval_seconds", 30)))
-        except (TypeError, ValueError):
-            upload_s = 30
+        poll_s    = device_config.get("gps_poll_seconds",            cfg.DEFAULT_CONFIG["gps_poll_seconds"])
+        upload_s  = device_config.get("gps_upload_interval_seconds", cfg.DEFAULT_CONFIG.get("gps_upload_interval_seconds", 60))
 
         if tracking_active.is_set():
             # Ensure we have an open track on the server
