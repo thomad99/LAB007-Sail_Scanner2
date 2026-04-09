@@ -6536,13 +6536,20 @@ let pisailboxMqtt = null;
                 console.log(`MQTT: GPS point track=${track_id} lat=${lat} lng=${lng}`);
 
             } else if (msgType === 'status') {
-                // Pi publishes status (gps diagnostics, tracking_active, etc.)
-                const merged = { ...data, received_at: new Date().toISOString() };
+                // Pi publishes GPS diagnostics + optional sim_modem (same path as SIM HTTP POST)
+                const receivedAt = new Date().toISOString();
+                const { sim_modem, ...rest } = data;
+                const gpsPayload = { ...rest, received_at: receivedAt };
+                const simPayload = sim_modem
+                    ? { ...sim_modem, reported_at: receivedAt }
+                    : null;
                 await pool.query(
-                    `UPDATE pi_devices SET last_seen = NOW(), gps_status = $1 WHERE device_id = $2`,
-                    [JSON.stringify(merged), deviceId]
+                    `UPDATE pi_devices SET last_seen = NOW(), gps_status = $1::jsonb,
+                     sim_status = COALESCE($2::jsonb, sim_status)
+                     WHERE device_id = $3`,
+                    [JSON.stringify(gpsPayload), simPayload ? JSON.stringify(simPayload) : null, deviceId]
                 );
-                console.log(`MQTT: status from ${deviceId} — tracking=${data.tracking_active} fix=${data.fix_valid}`);
+                console.log(`MQTT: status from ${deviceId} — tracking=${data.tracking_active} fix=${data.fix_valid} sim=${simPayload ? 'yes' : 'no'}`);
             }
         } catch (e) {
             console.error('MQTT message handler error:', e.message);

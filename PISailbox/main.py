@@ -16,6 +16,7 @@ Starts on boot (via systemd), registers with the server, then:
 
 import os
 import sys
+import json
 import signal
 import threading
 import time
@@ -42,7 +43,30 @@ from camera   import CameraHandler
 from uploader import Uploader
 from device   import DeviceConfig
 from sim      import SIMManager
-import ppp as ppp_mgr
+
+# Last-known server config (SIM/MQTT path) — used if HTTPS register fails (no WiFi)
+CONFIG_CACHE_FILE = os.path.join(cfg.DATA_DIR, "cached_server_config.json")
+
+
+def _load_cached_config():
+    try:
+        with open(CONFIG_CACHE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _save_cached_config(config_dict):
+    if not config_dict:
+        return
+    try:
+        os.makedirs(cfg.DATA_DIR, exist_ok=True)
+        snap = {k: v for k, v in config_dict.items() if k != "__commands"}
+        with open(CONFIG_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(snap, f)
+    except OSError as e:
+        log.warning(f"Could not save config cache: {e}")
+
 
 # ── Globals ───────────────────────────────────────────────────────────────────
 shutdown_event    = threading.Event()
@@ -206,6 +230,22 @@ def _build_gps_diag(current_track_id):
     }
 
 
+def _build_mqtt_status_payload(current_track_id):
+    """
+    Full status for pisailbox/{id}/status over SIM MQTT (no WiFi).
+    Includes SIM/modem snapshot so the website stays updated off-WiFi.
+    """
+    payload = _build_gps_diag(current_track_id)
+    try:
+        if sim_manager:
+            sm = sim_manager.get_status()
+            if sm:
+                payload["sim_modem"] = sm
+    except Exception as e:
+        payload["sim_modem_error"] = str(e)
+    return payload
+
+
 _last_processed_cmd_id = None   # dedup one-shot MQTT commands
 
 
@@ -257,8 +297,15 @@ def _apply_mqtt_config(mqtt_cfg, current_track_id):
             if cmd_id:
                 _last_processed_cmd_id = cmd_id
 
+    try:
+        if device_config:
+            _save_cached_config(device_config.all())
+    except Exception:
+        pass
+
 
 def gps_thread_fn():
+    global _last_upload_via, _last_upload_at
     log.info("GPS thread started")
 
     gps_reader.start()           # blocks until serial port opens successfully
@@ -275,8 +322,8 @@ def gps_thread_fn():
         _last_applied_apn = f"{apn}|{user}|{pw}"
 
     current_track_id = None
-    next_diag_report  = time.time()
-    next_gps_upload   = time.time()   # next batch upload to server
+    # SIM/MQTT: config, GPS points, and full status — same cadence, WiFi not required
+    next_mqtt_cycle = 0.0
 
     while not shutdown_event.is_set():
         poll_s    = device_config.get("gps_poll_seconds",            cfg.DEFAULT_CONFIG["gps_poll_seconds"])
@@ -290,8 +337,7 @@ def gps_thread_fn():
                 now_est = datetime.datetime.now(est)
                 track_name = f"{cfg.DEVICE_ID} — {now_est.strftime('%Y-%m-%d %H:%M')} ET"
 
-                # Prefer server-assigned track_id (set by command handler, arrives via
-                # HTTP config poll or MQTT config topic)
+                # Prefer server-assigned track_id (MQTT retained config or HTTP)
                 server_track_id = device_config.get("active_track_id") or uploader_inst._track_id
                 if server_track_id:
                     current_track_id = server_track_id
@@ -299,72 +345,28 @@ def gps_thread_fn():
                     uploader_inst._save_track_id(server_track_id)
                     log.info(f"▶ Track RESUMED  id={current_track_id}  (server-assigned)")
                 else:
-                    # Fall back to creating a track via HTTP (needs WiFi)
+                    # Creating a track via HTTPS (needs a routed internet path, e.g. WiFi)
                     current_track_id = uploader_inst.start_track(name=track_name)
                     if current_track_id:
                         log.info(f"▶ Track STARTED  id={current_track_id}  name='{track_name}'  at {now_est.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                     else:
-                        # No WiFi and no server assignment — try persisted id
                         fallback = uploader_inst.load_persisted_track_id()
                         if fallback:
                             current_track_id = fallback
-                            log.warning(f"No network — resuming persisted track id={current_track_id} (SIM MQTT will upload when fix arrives)")
+                            log.warning(f"No HTTPS — resuming persisted track id={current_track_id} (SIM MQTT)")
                         else:
-                            log.warning("No network and no persisted track — will retry in 15s")
+                            log.warning("No HTTPS and no persisted track — retry in 15s")
                             shutdown_event.wait(15)
                             continue
 
-            # Read GPS and store locally every poll_s seconds
             fix = gps_reader.get_fix()
             if fix and fix.is_valid():
                 log.info(f"GPS fix: lat={fix.lat:.5f} lng={fix.lng:.5f} spd={fix.speed}")
-                uploader_inst.queue_gps_point(fix)   # store locally
+                uploader_inst.queue_gps_point(fix)
             else:
                 log.info("GPS: no fix yet — waiting for satellites")
 
-            # Upload queued points every upload_s seconds — SIM MQTT only.
-            # WiFi is NOT used for GPS; all points go via the modem's AT+CMQTT stack
-            # so it's always clear whether the SIM path is working.
-            now = time.time()
-            if now >= next_gps_upload:
-                next_gps_upload = now + upload_s
-                depth = uploader_inst.gps_queue_depth()
-                log.info(f"GPS: upload tick — {depth} point(s) in queue")
-
-                global _last_upload_via, _last_upload_at
-
-                # Build a compact status payload to publish alongside GPS data
-                _status = _build_gps_diag(current_track_id)
-
-                gps_reader.pause()
-                try:
-                    import sim_mqtt
-                    mqtt_result = sim_mqtt.flush_via_mqtt(
-                        serial_port    = cfg.GPS_SERIAL_PORT,
-                        baud_rate      = cfg.GPS_BAUD_RATE,
-                        device_id      = cfg.DEVICE_ID,
-                        track_id       = uploader_inst._track_id,
-                        db_path        = uploader_inst.db_path,
-                        status_payload = _status,
-                    )
-                    sent = mqtt_result["sent"]
-                    if sent > 0:
-                        log.info(f"GPS: published {sent} point(s) via SIM MQTT")
-                        _last_upload_via = "SIM"
-                        _last_upload_at  = datetime.datetime.utcnow().isoformat() + "Z"
-                    elif depth > 0:
-                        log.warning("GPS: SIM MQTT — 0 sent (check SIM connected and track active)")
-
-                    # Apply any config / commands the server pushed via retained MQTT
-                    _apply_mqtt_config(mqtt_result.get("config"), current_track_id)
-
-                except Exception as _sim_e:
-                    log.error(f"GPS: SIM MQTT error: {_sim_e}")
-                finally:
-                    gps_reader.resume()
-
         else:
-            # Tracking inactive — if we had an open track, close it
             if current_track_id:
                 import zoneinfo
                 est = zoneinfo.ZoneInfo("America/New_York")
@@ -373,14 +375,39 @@ def gps_thread_fn():
                 log.info(f"⏹ Track STOPPED  id={current_track_id}  at {now_est.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                 current_track_id = None
 
-        # Report GPS diagnostics periodically (every ~60 s)
         now = time.time()
-        if now >= next_diag_report:
-            next_diag_report = now + 60
+        if now >= next_mqtt_cycle:
+            next_mqtt_cycle = now + upload_s
+            depth = uploader_inst.gps_queue_depth()
+            log.info(f"SIM-MQTT cycle — queue={depth} pt(s), tracking={tracking_active.is_set()}")
+
+            _status = _build_mqtt_status_payload(current_track_id)
+
+            gps_reader.pause()
             try:
-                uploader_inst.report_gps_status(_build_gps_diag(current_track_id))
-            except Exception as _e:
-                log.debug(f"GPS diag upload error: {_e}")
+                import sim_mqtt
+                mqtt_result = sim_mqtt.flush_via_mqtt(
+                    serial_port    = cfg.GPS_SERIAL_PORT,
+                    baud_rate      = cfg.GPS_BAUD_RATE,
+                    device_id      = cfg.DEVICE_ID,
+                    track_id       = uploader_inst._track_id,
+                    db_path        = uploader_inst.db_path,
+                    status_payload = _status,
+                )
+                sent = mqtt_result["sent"]
+                if sent > 0:
+                    log.info(f"SIM-MQTT: published {sent} GPS point(s)")
+                    _last_upload_via = "SIM"
+                    _last_upload_at  = datetime.datetime.utcnow().isoformat() + "Z"
+                elif depth > 0 and tracking_active.is_set():
+                    log.warning("SIM-MQTT: 0 points sent (check track id / PDP context)")
+
+                _apply_mqtt_config(mqtt_result.get("config"), current_track_id)
+
+            except Exception as _sim_e:
+                log.error(f"SIM-MQTT error: {_sim_e}")
+            finally:
+                gps_reader.resume()
 
         shutdown_event.wait(poll_s)
 
@@ -459,6 +486,7 @@ def camera_thread_fn():
 # ── SIM status thread ─────────────────────────────────────────────────────────
 
 def sim_thread_fn():
+    """Log modem stats; website SIM card is updated via SIM-MQTT status payload (no HTTPS)."""
     log.info("SIM status thread started")
     while not shutdown_event.is_set():
         try:
@@ -467,7 +495,6 @@ def sim_thread_fn():
                 f"SIM: op={status.get('operator')} type={status.get('network_type')} "
                 f"sig={status.get('signal_percent')}% reg={status.get('registration')}"
             )
-            uploader_inst.report_sim_status(status)
         except Exception as e:
             log.warning(f"SIM status failed: {e}")
         interval = device_config.get("sim_status_interval_seconds", 60)
@@ -523,14 +550,23 @@ def main():
     uploader_inst = Uploader(cfg.SERVER_URL, cfg.DEVICE_ID, cfg.QUEUE_DB,
                              track_id_file=cfg.TRACK_ID_FILE)
 
-    # Register and get initial config — retry until network is up
-    log.info("Waiting for network…")
-    initial_config = {}
-    while not initial_config and not shutdown_event.is_set():
-        initial_config = uploader_inst.register(started_at=service_started_at)
-        if not initial_config:
-            log.warning("Registration failed — retrying in 15s")
-            shutdown_event.wait(15)
+    # HTTPS register and/or cached config — SIM-only operation after first successful sync
+    log.info("Waiting for server config (HTTPS or cached file)…")
+    initial_config = None
+    while initial_config is None and not shutdown_event.is_set():
+        reg = uploader_inst.register(started_at=service_started_at)
+        if reg is not None:
+            initial_config = reg
+            _save_cached_config(reg)
+            log.info("Registered with server via HTTPS")
+            break
+        cached = _load_cached_config()
+        if cached:
+            initial_config = cached
+            log.warning("HTTPS register failed — using cached config (SIM MQTT will sync)")
+            break
+        log.warning("Registration failed — retrying in 15s")
+        shutdown_event.wait(15)
 
     if shutdown_event.is_set():
         return

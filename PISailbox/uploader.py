@@ -115,10 +115,10 @@ class Uploader:
             resp.raise_for_status()
             data = resp.json()
             log.info(f"Registered with server. Config: {data.get('config')}")
-            return data.get("config", {})
+            return data.get("config") or {}
         except Exception as e:
             log.warning(f"Registration failed: {e}")
-            return {}
+            return None
 
     def fetch_config(self):
         """Poll server for latest config. Returns dict or None."""
