@@ -82,15 +82,6 @@ class SIMManager:
             return NETWORK_TYPES.get(m.group(1), f"Type {m.group(1)}")
         return None
 
-    def get_iccid(self):
-        """
-        Returns SIM ICCID string or None.
-        AT+CCID → +CCID: <iccid>
-        """
-        resp = self._at("AT+CCID", wait=0.8)
-        m = re.search(r"\+CCID:\s*([0-9A-Fa-f]+)", resp)
-        return m.group(1) if m else None
-
     def get_imei(self):
         """Returns modem IMEI or None. AT+CGSN"""
         resp = self._at("AT+CGSN", wait=0.8)

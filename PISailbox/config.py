@@ -34,6 +34,13 @@ VIDEOS_DIR  = os.path.join(DATA_DIR, "videos")
 QUEUE_DB      = os.path.join(DATA_DIR, "queue.sqlite")
 TRACK_ID_FILE = os.path.join(DATA_DIR, "current_track_id")   # persists track across WiFi loss
 
+# GPS queue: rows are retried until uploaded; this caps runaway rows (set high for “keep until link works”).
+GPS_QUEUE_MAX_ATTEMPTS = int(os.environ.get("PISAILBOX_GPS_QUEUE_MAX_ATTEMPTS", "10000"))
+
+# Append-only backup of every queued GPS fix (in addition to SQLite). Disable with PISAILBOX_GPS_JSONL=0.
+GPS_POINTS_JSONL = os.path.join(DATA_DIR, "gps_points.jsonl")
+GPS_POINTS_JSONL_ENABLED = os.environ.get("PISAILBOX_GPS_JSONL", "1").strip().lower() not in ("0", "false", "no")
+
 # ── Defaults (overridden by server config) ────────────────────────────────────
 DEFAULT_CONFIG = {
     "gps_poll_seconds":              10,   # how often to read GPS (seconds)

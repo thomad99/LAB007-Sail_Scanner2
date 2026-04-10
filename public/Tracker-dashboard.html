@@ -186,6 +186,7 @@
         }
         .pb-row1 { display: flex; align-items: center; gap: 10px; }
         .pb-time { font-size: 0.82rem; color: rgba(255,255,255,0.5); min-width: 130px; }
+        .pb-time.wide { min-width: 220px; font-size: 0.75rem; line-height: 1.25; white-space: pre-line; }
         .pb-timeline {
             flex: 1; -webkit-appearance: none; appearance: none;
             height: 4px; border-radius: 2px; background: rgba(255,255,255,0.15);
@@ -366,9 +367,9 @@
 
             <div class="playback-controls" id="pbControls" style="display:none;">
                 <div class="pb-row1">
-                    <span class="pb-time" id="pbTimeLabel">00:00:00</span>
+                    <span class="pb-time wide" id="pbTimeLabel">00:00:00</span>
                     <input type="range" class="pb-timeline" id="pbTimeline" min="0" max="1000" value="0" oninput="scrubPlayback(this.value)">
-                    <span class="pb-time" style="text-align:right;" id="pbEndLabel">—</span>
+                    <span class="pb-time wide" style="text-align:right;" id="pbEndLabel">—</span>
                 </div>
                 <div class="pb-row2">
                     <button class="btn-pb" id="pbPlayBtn" onclick="togglePlayback()">▶ Play</button>
@@ -419,6 +420,16 @@ function formatDur(ms) {
     if(!ms||ms<0)return'—';
     const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=s%60;
     return h>0?`${h}h ${m}m`:m>0?`${m}m ${sc}s`:`${sc}s`;
+}
+/** Elapsed within session + wall clock in Eastern (matches track point storage as UTC instant). */
+function formatPlaybackClock(virtualMs) {
+    const sessionStart = getSessionStartMs();
+    const s = Math.floor(virtualMs/1000);
+    const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sc = s%60;
+    const elapsed = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sc).padStart(2,'0')}`;
+    if (!sessionStart) return elapsed;
+    const wall = fmtTimeShort(new Date(sessionStart + virtualMs));
+    return `${elapsed}\n${wall} ET`;
 }
 function formatTime(d) {
     return d instanceof Date
@@ -725,9 +736,13 @@ async function selectSession(idx) {
 
     // Build unified timeline
     pbTotalMs = calcTotalMs();
-    document.getElementById('pbEndLabel').textContent = formatDur(pbTotalMs);
+    const ss = getSessionStartMs();
+    const endMs = ss + pbTotalMs;
+    document.getElementById('pbEndLabel').textContent = pbTotalMs > 0 && ss
+        ? `${formatDur(pbTotalMs)}\n${fmtTimeShort(new Date(endMs))} ET`
+        : formatDur(pbTotalMs);
     document.getElementById('pbTimeline').value = 0;
-    document.getElementById('pbTimeLabel').textContent = '0:00:00';
+    document.getElementById('pbTimeLabel').textContent = formatPlaybackClock(0);
 
     // ── Compute session-wide stats ─────────────────────────────────────────
     let totalDistNm = 0, allSpeeds = [], peakSpeedKts = 0, peakSpeedMs = 0;
@@ -842,10 +857,7 @@ function applyReplayFrame(virtualMs) {
     // Update timeline UI
     const pct = pbTotalMs>0 ? Math.min(pbVirtualMs/pbTotalMs,1)*1000 : 0;
     document.getElementById('pbTimeline').value = pct;
-    const s = Math.floor(virtualMs/1000);
-    const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sc=s%60;
-    document.getElementById('pbTimeLabel').textContent =
-        `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sc).padStart(2,'0')}`;
+    document.getElementById('pbTimeLabel').textContent = formatPlaybackClock(virtualMs);
 }
 
 function playbackTick() {
@@ -877,7 +889,7 @@ function resetPlayback() {
     pbVirtualMs=0;
     if(selectedSession) applyReplayFrame(0);
     document.getElementById('pbTimeline').value=0;
-    document.getElementById('pbTimeLabel').textContent='0:00:00';
+    document.getElementById('pbTimeLabel').textContent = formatPlaybackClock(0);
 }
 
 function scrubPlayback(val) {

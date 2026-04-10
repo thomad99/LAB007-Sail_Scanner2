@@ -14,6 +14,8 @@ import datetime
 import requests
 import urllib3
 
+import config as cfg
+
 log = logging.getLogger(__name__)
 
 RETRY_INTERVAL = 30   # seconds between retry attempts
@@ -259,13 +261,31 @@ class Uploader:
                 "INSERT INTO gps_queue (payload, created) VALUES (?, ?)",
                 (json.dumps(payload), datetime.datetime.utcnow().isoformat())
             )
+        self._append_gps_jsonl(payload)
+
+    def _append_gps_jsonl(self, payload):
+        """Append-only backup on disk (same fixes as SQLite queue)."""
+        if not cfg.GPS_POINTS_JSONL_ENABLED:
+            return
+        try:
+            os.makedirs(os.path.dirname(cfg.GPS_POINTS_JSONL), exist_ok=True)
+            rec = {
+                "created": datetime.datetime.utcnow().isoformat() + "Z",
+                "track_id": self._track_id,
+                **payload,
+            }
+            with open(cfg.GPS_POINTS_JSONL, "a", encoding="utf-8") as f:
+                f.write(json.dumps(rec, separators=(",", ":")) + "\n")
+        except OSError as e:
+            log.debug(f"GPS jsonl append failed: {e}")
 
     def gps_queue_depth(self):
         """Return how many GPS points are currently waiting in the local queue."""
         try:
             with self._db() as db:
                 return db.execute(
-                    "SELECT COUNT(*) FROM gps_queue WHERE attempts < 10"
+                    "SELECT COUNT(*) FROM gps_queue WHERE attempts < ?",
+                    (cfg.GPS_QUEUE_MAX_ATTEMPTS,),
                 ).fetchone()[0]
         except Exception:
             return 0
@@ -276,7 +296,8 @@ class Uploader:
             return 0
         with self._db() as db:
             rows = db.execute(
-                "SELECT id, payload FROM gps_queue WHERE attempts < 10 ORDER BY id LIMIT 200"
+                "SELECT id, payload FROM gps_queue WHERE attempts < ? ORDER BY id LIMIT 200",
+                (cfg.GPS_QUEUE_MAX_ATTEMPTS,),
             ).fetchall()
         sent = 0
         for row_id, payload_str in rows:

@@ -225,6 +225,7 @@ def _build_gps_diag(current_track_id):
         "last_fix_at":      gps_reader.last_fix_at_iso if gps_reader and fix and fix.is_valid() else None,
         "last_upload_via":  _last_upload_via,
         "last_upload_at":   _last_upload_at,
+        "gps_queue_pending": uploader_inst.gps_queue_depth() if uploader_inst else 0,
         # Device-local time when this payload was assembled (for clock-skew debugging)
         "reported_at":      datetime.datetime.utcnow().isoformat() + "Z",
     }

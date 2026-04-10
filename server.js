@@ -5946,25 +5946,61 @@ app.post('/api/pi/register', express.json(), async (req, res) => {
     }
 });
 
-// Get device config (polled by Pi) — also returns and clears any pending commands
+// Get device config (polled by Pi) — return pending commands, then clear them.
+// (Must read commands BEFORE clearing; RETURNING sees the row *after* UPDATE, so a single
+// UPDATE … SET pending_commands='[]' … RETURNING pending_commands always yielded [].)
 app.get('/api/pi/devices/:deviceId/config', async (req, res) => {
+    const deviceId = req.params.deviceId;
+    const client = await pool.connect();
     try {
-        const result = await pool.query(
-            `UPDATE pi_devices
-             SET last_seen = NOW(), pending_commands = '[]'
-             WHERE device_id = $1
-             RETURNING config, pending_commands`,
-            [req.params.deviceId]
+        await client.query('BEGIN');
+        const sel = await client.query(
+            `SELECT config, pending_commands FROM pi_devices WHERE device_id = $1 FOR UPDATE`,
+            [deviceId]
         );
-        if (!result.rows.length) return res.status(404).json({ error: 'Device not found' });
-        const row = result.rows[0];
-        const config = row.config || defaultPiConfig();
-        const commands = row.pending_commands || [];
-        // Embed commands inside the config response under a reserved key
-        config.__commands = Array.isArray(commands) ? commands : [];
-        res.json(config);
+        if (!sel.rows.length) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Device not found' });
+        }
+        const row = sel.rows[0];
+        let rawCmds = row.pending_commands;
+        if (rawCmds == null) rawCmds = [];
+        if (typeof rawCmds === 'string') {
+            try {
+                rawCmds = JSON.parse(rawCmds);
+            } catch {
+                rawCmds = [];
+            }
+        }
+        const commands = Array.isArray(rawCmds) ? rawCmds : [];
+        let config = row.config || defaultPiConfig();
+        if (typeof config === 'string') {
+            try {
+                config = JSON.parse(config);
+            } catch {
+                config = defaultPiConfig();
+            }
+        }
+        const configOut = { ...config, __commands: commands };
+        await client.query(
+            `UPDATE pi_devices SET last_seen = NOW(), pending_commands = '[]'::jsonb WHERE device_id = $1`,
+            [deviceId]
+        );
+        await client.query('COMMIT');
+        // Refresh MQTT retained config so SIM path does not replay stale __commands forever
+        try {
+            await publishMqttDeviceConfig(deviceId);
+        } catch (e) {
+            console.error('publishMqttDeviceConfig after config GET:', e.message);
+        }
+        res.json(configOut);
     } catch (err) {
+        try {
+            await client.query('ROLLBACK');
+        } catch (e) { /* ignore */ }
         res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
     }
 });
 
@@ -6436,6 +6472,15 @@ app.get('/api/tracks/live', async (req, res) => {
     }
 });
 
+// Eastern labels for replay sessions (server TZ is often UTC on cloud hosts)
+const TRACKER_DISPLAY_TZ = 'America/New_York';
+function formatSessionLabelEt(isoOrDate) {
+    const d = isoOrDate instanceof Date ? isoOrDate : new Date(isoOrDate);
+    const dateOpts = { timeZone: TRACKER_DISPLAY_TZ, month: 'numeric', day: 'numeric', year: 'numeric' };
+    const timeOpts = { timeZone: TRACKER_DISPLAY_TZ, hour: '2-digit', minute: '2-digit' };
+    return d.toLocaleDateString('en-US', dateOpts) + ' ' + d.toLocaleTimeString('en-US', timeOpts) + ' ET';
+}
+
 // Group finished + active tracks into sessions (tracks starting within 1 hour of each other)
 app.get('/api/tracks/sessions', async (req, res) => {
     try {
@@ -6469,8 +6514,7 @@ app.get('/api/tracks/sessions', async (req, res) => {
 
             sessions.push({
                 id: sessions.length,
-                label: anchor.toLocaleDateString() + ' ' +
-                    anchor.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                label: formatSessionLabelEt(anchor),
                 started_at: track.started_at,
                 track_count: group.length,
                 total_points: group.reduce((s, t) => s + (t.point_count || 0), 0),

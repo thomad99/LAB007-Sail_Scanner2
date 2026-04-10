@@ -18,6 +18,8 @@ import sqlite3
 import time
 import logging
 
+import config as cfg
+
 log = logging.getLogger(__name__)
 
 # How long to wait for +HTTPACTION response (server round-trip)
@@ -101,7 +103,8 @@ def flush_via_at_http(serial_port, baud_rate, server_url, track_id, db_path):
     try:
         with sqlite3.connect(db_path) as db:
             rows = db.execute(
-                'SELECT id, payload FROM gps_queue WHERE attempts < 10 ORDER BY id LIMIT 100'
+                "SELECT id, payload FROM gps_queue WHERE attempts < ? ORDER BY id LIMIT 100",
+                (cfg.GPS_QUEUE_MAX_ATTEMPTS,),
             ).fetchall()
     except Exception as e:
         log.warning(f'SIM-HTTP: cannot read queue: {e}')

@@ -49,7 +49,8 @@ class GPSReader:
         self.port          = port
         self.baud          = baud
         self.ser           = None
-        self.lock          = threading.Lock()
+        # RLock: _open / pause / resume / _send_at must not race; same thread re-enters during init.
+        self.lock          = threading.RLock()
         self.current_fix   = None
         self._running      = False
         self.gps_engine_on = False
@@ -65,19 +66,7 @@ class GPSReader:
     def is_ready(self):
         return self.ser is not None and self.ser.is_open
 
-    def _open(self):
-        self.ser = serial.Serial(
-            self.port, self.baud,
-            timeout=3, write_timeout=3,
-            bytesize=serial.EIGHTBITS,
-            parity=serial.PARITY_NONE,
-            stopbits=serial.STOPBITS_ONE,
-            rtscts=False,
-            dsrdtr=False
-        )
-        log.info(f"Opened serial port {self.port}")
-
-    def _close(self):
+    def _close_unlocked(self):
         try:
             if self.ser and self.ser.is_open:
                 self.ser.close()
@@ -85,12 +74,31 @@ class GPSReader:
             pass
         self.ser = None
 
+    def _open(self):
+        with self.lock:
+            if self.ser and self.ser.is_open:
+                return
+            self.ser = serial.Serial(
+                self.port, self.baud,
+                timeout=3, write_timeout=3,
+                bytesize=serial.EIGHTBITS,
+                parity=serial.PARITY_NONE,
+                stopbits=serial.STOPBITS_ONE,
+                rtscts=False,
+                dsrdtr=False
+            )
+            log.info(f"Opened serial port {self.port}")
+
+    def _close(self):
+        with self.lock:
+            self._close_unlocked()
+
     def _send_at(self, cmd, wait_s=1.5):
         """Send AT command and return response. Returns '' if port not ready."""
-        if not self.is_ready:
-            log.debug(f"AT skipped (port not open): {cmd}")
-            return ""
         with self.lock:
+            if not self.ser or not self.ser.is_open:
+                log.debug(f"AT skipped (port not open): {cmd}")
+                return ""
             try:
                 self.ser.reset_input_buffer()
                 self.ser.write((cmd + "\r\n").encode())

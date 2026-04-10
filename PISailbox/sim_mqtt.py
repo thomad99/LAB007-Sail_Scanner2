@@ -43,6 +43,8 @@ import sqlite3
 import time
 import logging
 
+import config as cfg
+
 log = logging.getLogger(__name__)
 
 BROKER_URL = os.environ.get("PISAILBOX_MQTT_BROKER", "tcp://broker.hivemq.com:1883")
@@ -174,7 +176,8 @@ def flush_via_mqtt(serial_port, baud_rate, device_id, track_id, db_path,
     try:
         with sqlite3.connect(db_path) as db:
             rows = db.execute(
-                'SELECT id, payload FROM gps_queue WHERE attempts < 10 ORDER BY id LIMIT 5'
+                "SELECT id, payload FROM gps_queue WHERE attempts < ? ORDER BY id LIMIT 20",
+                (cfg.GPS_QUEUE_MAX_ATTEMPTS,),
             ).fetchall()
     except Exception as e:
         log.warning(f'SIM-MQTT: cannot read queue: {e}')
