@@ -13,8 +13,8 @@ RestartSec=10
 StandardOutput=journal
 StandardError=journal
 
-# Ensure the SIM7600 HAT has time to initialise before we start
-ExecStartPre=/bin/sleep 10
+# UART + SIM7600 need time after power-on (Python side adds extra settle; see PISAILBOX_MODEM_SETTLE)
+ExecStartPre=/bin/sleep 15
 
 # Environment — edit SERVER URL here or in /opt/pisailbox/config.py
 Environment=PISAILBOX_SERVER=https://lovesailing.ai

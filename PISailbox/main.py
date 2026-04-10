@@ -79,6 +79,9 @@ uploader_inst:  Uploader      = None
 device_config:  DeviceConfig  = None
 sim_manager:    SIMManager    = None
 
+# GNSS soft-recover (AT+CGPS cycle) — at most two tries per tracking session
+_gnss_recoveries = 0
+
 # ── Signal handling ───────────────────────────────────────────────────────────
 
 def _handle_signal(sig, frame):
@@ -306,19 +309,29 @@ def _apply_mqtt_config(mqtt_cfg, current_track_id):
 
 
 def gps_thread_fn():
-    global _last_upload_via, _last_upload_at
+    global _last_upload_via, _last_upload_at, _gnss_recoveries
     log.info("GPS thread started")
+
+    if cfg.MODEM_SETTLE_SECONDS > 0:
+        log.info(f"Cold-boot modem settle {cfg.MODEM_SETTLE_SECONDS}s before opening GPS UART")
+        time.sleep(cfg.MODEM_SETTLE_SECONDS)
 
     gps_reader.start()           # blocks until serial port opens successfully
 
-    # Serial is now open — apply APN once and record it so _on_config_change
-    # doesn't re-apply it on every subsequent poll
+    # Serial is now open — apply APN once after a delay so PDP setup does not run
+    # immediately on top of AT+CGPS=1 (common cold-start GNSS flake source).
     global _last_applied_apn
     apn  = device_config.get("sim_apn", "")
     user = device_config.get("sim_apn_user", "")
     pw   = device_config.get("sim_apn_pass", "")
     if apn:
-        log.info("Applying APN after serial open")
+        if cfg.APN_APPLY_DELAY_SECONDS > 0:
+            log.info(
+                f"Deferring APN configuration {cfg.APN_APPLY_DELAY_SECONDS}s "
+                "(lets GNSS engine start before PDP context changes)"
+            )
+            time.sleep(cfg.APN_APPLY_DELAY_SECONDS)
+        log.info("Applying APN after GPS UART init")
         sim_manager.apply_apn(apn, user=user, password=pw)
         _last_applied_apn = f"{apn}|{user}|{pw}"
 
@@ -345,16 +358,19 @@ def gps_thread_fn():
                     uploader_inst._track_id = server_track_id
                     uploader_inst._save_track_id(server_track_id)
                     log.info(f"▶ Track RESUMED  id={current_track_id}  (server-assigned)")
+                    _gnss_recoveries = 0
                 else:
                     # Creating a track via HTTPS (needs a routed internet path, e.g. WiFi)
                     current_track_id = uploader_inst.start_track(name=track_name)
                     if current_track_id:
                         log.info(f"▶ Track STARTED  id={current_track_id}  name='{track_name}'  at {now_est.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                        _gnss_recoveries = 0
                     else:
                         fallback = uploader_inst.load_persisted_track_id()
                         if fallback:
                             current_track_id = fallback
                             log.warning(f"No HTTPS — resuming persisted track id={current_track_id} (SIM MQTT)")
+                            _gnss_recoveries = 0
                         else:
                             log.warning("No HTTPS and no persisted track — retry in 15s")
                             shutdown_event.wait(15)
@@ -362,10 +378,18 @@ def gps_thread_fn():
 
             fix = gps_reader.get_fix()
             if fix and fix.is_valid():
+                _gnss_recoveries = 0
                 log.info(f"GPS fix: lat={fix.lat:.5f} lng={fix.lng:.5f} spd={fix.speed}")
                 uploader_inst.queue_gps_point(fix)
             else:
                 log.info("GPS: no fix yet — waiting for satellites")
+                n = gps_reader.no_fix_count
+                if n >= 45 and _gnss_recoveries == 0:
+                    _gnss_recoveries = 1
+                    gps_reader.recover_gnss()
+                elif n >= 95 and _gnss_recoveries == 1:
+                    _gnss_recoveries = 2
+                    gps_reader.recover_gnss()
 
         else:
             if current_track_id:
@@ -375,6 +399,7 @@ def gps_thread_fn():
                 uploader_inst.stop_track()
                 log.info(f"⏹ Track STOPPED  id={current_track_id}  at {now_est.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                 current_track_id = None
+                _gnss_recoveries = 0
 
         now = time.time()
         if now >= next_mqtt_cycle:

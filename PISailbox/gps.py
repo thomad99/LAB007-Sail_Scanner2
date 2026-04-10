@@ -9,11 +9,14 @@ This module uses AT+CGPS / AT+CGPSINFO command set
 """
 
 import datetime
+import os
 import serial
 import threading
 import time
 import logging
 import re
+
+import config as cfg
 
 log = logging.getLogger(__name__)
 
@@ -117,18 +120,19 @@ class GPSReader:
     # ── GPS init ──────────────────────────────────────────────────────────────
 
     def _init_gps(self):
-        # Wait for modem to settle
-        time.sleep(2)
+        # Cold boot: modem UART stack may need longer than a running system
+        time.sleep(max(2.0, cfg.GPS_AT_INIT_SLEEP))
 
-        # Confirm modem alive — retry up to 5 times
-        for attempt in range(5):
+        # Confirm modem alive — retry with backoff (cold boot can need many tries)
+        max_at = int(os.environ.get("PISAILBOX_GPS_AT_RETRIES", "12"))
+        for attempt in range(max_at):
             resp = self._send_at("AT", wait_s=1.5)
             if AT_OK in resp:
                 break
-            log.warning(f"AT attempt {attempt+1}/5: no OK (got: {repr(resp[:40])})")
-            time.sleep(2)
+            log.warning(f"AT attempt {attempt+1}/{max_at}: no OK (got: {repr(resp[:40])})")
+            time.sleep(min(2 + attempt // 3, 6))
         else:
-            msg = "Modem not responding to AT after 5 attempts"
+            msg = f"Modem not responding to AT after {max_at} attempts"
             log.error(msg)
             self.last_error = msg
             self._recent_errors.append(msg)
@@ -151,6 +155,21 @@ class GPSReader:
         log.info("GNSS engine powered on")
         self.gps_engine_on = True
         return True
+
+    def recover_gnss(self):
+        """
+        Soft-reset GNSS without tearing down the whole process (same idea as app restart).
+        Call when tracking but CGPSINFO never returns a fix after a long time.
+        """
+        log.warning("GPS: recover_gnss — cycling AT+CGPS off/on")
+        self._send_at("AT+CGPS=0", wait_s=1.5)
+        time.sleep(2.5)
+        resp = self._send_at("AT+CGPS=1", wait_s=2.5)
+        if resp and "ERROR" in resp and AT_OK not in resp:
+            log.warning(f"GPS recover AT+CGPS=1: {repr(resp[:80])}")
+        else:
+            self.gps_engine_on = True
+            log.info("GPS: GNSS engine cycled")
 
     # ── Parse +CGPSINFO ───────────────────────────────────────────────────────
 
@@ -238,6 +257,18 @@ class GPSReader:
     def start(self, retry_interval=5):
         """Open serial port, init GPS, retry on failure."""
         self._running = True
+        deadline = time.time() + cfg.GPS_WAIT_PORT_TIMEOUT
+        while self._running and not os.path.exists(self.port):
+            if time.time() > deadline:
+                log.error(
+                    f"GPS serial {self.port} not present after {cfg.GPS_WAIT_PORT_TIMEOUT}s "
+                    "(check HAT power / UART enabled / ModemManager not holding the port)"
+                )
+                time.sleep(retry_interval)
+                deadline = time.time() + cfg.GPS_WAIT_PORT_TIMEOUT
+                continue
+            log.warning(f"GPS: waiting for serial device {self.port}…")
+            time.sleep(2)
         while self._running:
             try:
                 self._open()

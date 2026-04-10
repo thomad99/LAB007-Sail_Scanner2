@@ -881,6 +881,9 @@
                 document.getElementById('devCount').textContent = devices.length;
                 syncSelectedDeviceFromList();
                 renderDeviceList();
+                if (devices.length && !selectedDevice) {
+                    selectDevice(devices[0].device_id);
+                }
             } catch (e) {
                 document.getElementById('deviceList').innerHTML =
                     `<div class="empty-state">Error: ${e.message}</div>`;

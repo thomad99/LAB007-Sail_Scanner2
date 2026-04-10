@@ -27,6 +27,15 @@ DEVICE_NAME = os.environ.get("PISAILBOX_NAME", DEVICE_ID)
 GPS_SERIAL_PORT = os.environ.get("GPS_PORT", "/dev/ttyAMA0")
 GPS_BAUD_RATE   = 115200
 
+# Cold-boot: UART/modem may not be ready when systemd starts the app (even with ExecStartPre sleep).
+MODEM_SETTLE_SECONDS = float(os.environ.get("PISAILBOX_MODEM_SETTLE", "18"))
+# After GPS engine is enabled, delay before APN AT sequence — avoids PDP churn during GNSS first lock.
+APN_APPLY_DELAY_SECONDS = float(os.environ.get("PISAILBOX_APN_DELAY", "30"))
+# Wait for serial device node to appear (seconds).
+GPS_WAIT_PORT_TIMEOUT = int(os.environ.get("PISAILBOX_GPS_WAIT_PORT", "120"))
+# Extra pause inside AT+CGPS init before first AT (modem firmware boot).
+GPS_AT_INIT_SLEEP = float(os.environ.get("PISAILBOX_GPS_AT_INIT_SLEEP", "4"))
+
 # ── Local storage ─────────────────────────────────────────────────────────────
 DATA_DIR    = os.path.expanduser("~/pisailbox_data")
 PHOTOS_DIR  = os.path.join(DATA_DIR, "photos")
