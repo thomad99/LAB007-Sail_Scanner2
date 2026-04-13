@@ -5903,6 +5903,16 @@ function defaultPiConfig() {
     };
 }
 
+// Pi embeds this on every GPS/MQTT status so the DB updates even when HTTPS register() was skipped (SIM-only boot).
+function pisailboxProcessStartedAtFromPayload(body) {
+    if (!body || typeof body !== 'object') return null;
+    const raw = body.pisailbox_process_started_at || body.service_started_at;
+    if (!raw || typeof raw !== 'string') return null;
+    const ms = Date.parse(raw);
+    if (Number.isNaN(ms)) return null;
+    return new Date(ms).toISOString();
+}
+
 // Register / heartbeat — called by Pi on boot and periodically
 app.post('/api/pi/register', express.json(), async (req, res) => {
     try {
@@ -6010,7 +6020,7 @@ app.post('/api/pi/devices/:deviceId/command', express.json(), async (req, res) =
     try {
         const { command } = req.body;
         const deviceId = req.params.deviceId;
-        const valid = ['start_track', 'stop_track', 'capture_photo', 'start_video', 'stop_video', 'restart', 'test_sim'];
+        const valid = ['start_track', 'stop_track', 'capture_photo', 'start_video', 'stop_video', 'restart', 'reboot', 'test_sim'];
         if (!valid.includes(command)) {
             return res.status(400).json({ error: `Unknown command. Valid: ${valid.join(', ')}` });
         }
@@ -6063,6 +6073,31 @@ app.post('/api/pi/devices/:deviceId/command', express.json(), async (req, res) =
 
         // Push updated config+commands to Pi via MQTT (works without WiFi)
         await publishMqttDeviceConfig(deviceId);
+
+        // One-shot: after ~75s remove reboot/restart from pending and republish MQTT retain,
+        // so the Pi gets the command once but does not loop after coming back online.
+        if (command === 'reboot' || command === 'restart') {
+            setTimeout(async () => {
+                try {
+                    const pr = await pool.query(
+                        `SELECT pending_commands FROM pi_devices WHERE device_id = $1`,
+                        [deviceId]
+                    );
+                    let pc = pr.rows[0]?.pending_commands;
+                    if (!Array.isArray(pc)) pc = [];
+                    const filtered = pc.filter((c) => c !== command);
+                    if (filtered.length !== pc.length) {
+                        await pool.query(
+                            `UPDATE pi_devices SET pending_commands = $1::jsonb WHERE device_id = $2`,
+                            [JSON.stringify(filtered), deviceId]
+                        );
+                        await publishMqttDeviceConfig(deviceId);
+                    }
+                } catch (e) {
+                    console.error('strip one-shot command from pending:', e.message);
+                }
+            }, 75000);
+        }
 
         res.json({ ok: true, command, note: 'Sent via MQTT and queued for HTTP poll' });
     } catch (err) {
@@ -6164,10 +6199,19 @@ app.post('/api/pi/devices/:deviceId/gps-status', express.json(), async (req, res
     try {
         const incoming = req.body && typeof req.body === 'object' ? req.body : {};
         const status = { ...incoming, received_at: new Date().toISOString() };
-        await pool.query(
-            `UPDATE pi_devices SET gps_status = $1, last_seen = NOW() WHERE device_id = $2`,
-            [JSON.stringify(status), req.params.deviceId]
-        );
+        const procStart = pisailboxProcessStartedAtFromPayload(incoming);
+        if (procStart) {
+            await pool.query(
+                `UPDATE pi_devices SET gps_status = $1, last_seen = NOW(),
+                 service_started_at = $2::timestamptz WHERE device_id = $3`,
+                [JSON.stringify(status), procStart, req.params.deviceId]
+            );
+        } else {
+            await pool.query(
+                `UPDATE pi_devices SET gps_status = $1, last_seen = NOW() WHERE device_id = $2`,
+                [JSON.stringify(status), req.params.deviceId]
+            );
+        }
         res.json({ ok: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -6587,12 +6631,23 @@ let pisailboxMqtt = null;
                 const simPayload = sim_modem
                     ? { ...sim_modem, reported_at: receivedAt }
                     : null;
-                await pool.query(
-                    `UPDATE pi_devices SET last_seen = NOW(), gps_status = $1::jsonb,
-                     sim_status = COALESCE($2::jsonb, sim_status)
-                     WHERE device_id = $3`,
-                    [JSON.stringify(gpsPayload), simPayload ? JSON.stringify(simPayload) : null, deviceId]
-                );
+                const procStart = pisailboxProcessStartedAtFromPayload(data);
+                if (procStart) {
+                    await pool.query(
+                        `UPDATE pi_devices SET last_seen = NOW(), gps_status = $1::jsonb,
+                         sim_status = COALESCE($2::jsonb, sim_status),
+                         service_started_at = $3::timestamptz
+                         WHERE device_id = $4`,
+                        [JSON.stringify(gpsPayload), simPayload ? JSON.stringify(simPayload) : null, procStart, deviceId]
+                    );
+                } else {
+                    await pool.query(
+                        `UPDATE pi_devices SET last_seen = NOW(), gps_status = $1::jsonb,
+                         sim_status = COALESCE($2::jsonb, sim_status)
+                         WHERE device_id = $3`,
+                        [JSON.stringify(gpsPayload), simPayload ? JSON.stringify(simPayload) : null, deviceId]
+                    );
+                }
                 console.log(`MQTT: status from ${deviceId} — tracking=${data.tracking_active} fix=${data.fix_valid} sim=${simPayload ? 'yes' : 'no'}`);
             }
         } catch (e) {

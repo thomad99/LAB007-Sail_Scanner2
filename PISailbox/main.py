@@ -10,6 +10,7 @@ Starts on boot (via systemd), registers with the server, then:
       capture_photo  — take one photo immediately
       start_video    — start a video recording
       stop_video     — stop the current video recording
+      reboot         — full system reboot (requires NOPASSWD sudo for /sbin/reboot; see install.sh)
   - Runs camera sessions on schedule (if camera_enabled + auto camera settings)
   - Reports SIM status periodically
 """
@@ -18,6 +19,7 @@ import os
 import sys
 import json
 import signal
+import subprocess
 import threading
 import time
 import logging
@@ -82,6 +84,9 @@ sim_manager:    SIMManager    = None
 # GNSS soft-recover (AT+CGPS cycle) — at most two tries per tracking session
 _gnss_recoveries = 0
 
+# Wall-clock when this Python process started (sent on every status upload for server UI)
+SERVICE_PROCESS_STARTED_AT = None
+
 # ── Signal handling ───────────────────────────────────────────────────────────
 
 def _handle_signal(sig, frame):
@@ -143,6 +148,22 @@ def handle_commands(commands):
             shutdown_event.set()
             tracking_active.clear()
             video_active.clear()
+
+        elif cmd == 'reboot':
+            log.warning("Reboot command received — full system reboot in ~3s (see pisailbox.log on next boot)")
+
+            def _delayed_reboot():
+                time.sleep(3)
+                for path in ("/sbin/reboot", "/usr/sbin/reboot"):
+                    if os.path.isfile(path):
+                        try:
+                            subprocess.run(["sudo", path], check=False, timeout=60)
+                            return
+                        except Exception as ex:
+                            log.error(f"reboot via {path} failed: {ex}")
+                log.error("reboot: no /sbin/reboot — install sudoers (install.sh) or run manually")
+
+            threading.Thread(target=_delayed_reboot, daemon=True, name="system-reboot").start()
 
         elif cmd == 'test_sim':
             t = threading.Thread(
@@ -212,6 +233,7 @@ def _build_gps_diag(current_track_id):
     """Build GPS diagnostic dict to upload to the server."""
     fix = gps_reader.current_fix if gps_reader else None
     return {
+        "pisailbox_process_started_at": SERVICE_PROCESS_STARTED_AT,
         "serial_open":      gps_reader.is_ready        if gps_reader else False,
         "gps_engine_on":    gps_reader.gps_engine_on   if gps_reader else False,
         "fix_valid":        bool(fix and fix.is_valid()),
@@ -564,9 +586,10 @@ def _on_config_change(new_cfg):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    global gps_reader, camera_handler, uploader_inst, device_config, sim_manager
+    global gps_reader, camera_handler, uploader_inst, device_config, sim_manager, SERVICE_PROCESS_STARTED_AT
 
     service_started_at = datetime.datetime.utcnow().isoformat() + "Z"
+    SERVICE_PROCESS_STARTED_AT = service_started_at
     log.info(f"PiSailBox starting — device={cfg.DEVICE_ID}  server={cfg.SERVER_URL}  started={service_started_at}")
 
     os.makedirs(cfg.DATA_DIR,   exist_ok=True)

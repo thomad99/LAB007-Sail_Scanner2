@@ -3,8 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#020053">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Tracker">
     <title>Tracker - Love Sailing</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="manifest" href="/tracker-manifest.json">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -158,6 +163,19 @@
         }
         .wake-notice.on { color: rgba(46,204,113,0.6); }
 
+        .mobile-tips {
+            width: 92%; max-width: 460px;
+            font-size: 0.74rem; color: rgba(255,255,255,0.45);
+            margin-bottom: 14px; line-height: 1.55;
+        }
+        .mobile-tips summary {
+            cursor: pointer; color: rgba(126,207,255,0.85);
+            font-size: 0.8rem; margin-bottom: 6px; list-style: none;
+        }
+        .mobile-tips summary::-webkit-details-marker { display: none; }
+        .mobile-tips ul { margin: 6px 0 8px 1.1em; }
+        .mobile-tips p { margin: 8px 0; }
+
         .point-log {
             max-height: 100px; overflow-y: auto;
             font-size: 0.7rem; color: rgba(255,255,255,0.35);
@@ -245,6 +263,22 @@
 <div class="wake-notice" id="wakeNotice">
     Keep this screen on for continuous GPS recording.
 </div>
+<details class="mobile-tips" id="mobileTips">
+    <summary>Phone / tablet: background tracking limits</summary>
+    <p>
+        Mobile browsers <strong>pause or throttle GPS</strong> when you switch apps, lock the screen, or sometimes when the tab is not visible.
+        This is an OS rule—not something the site can override with normal web code.
+    </p>
+    <p><strong>What helps</strong></p>
+    <ul>
+        <li><strong>Screen wake lock</strong> runs automatically while tracking (keeps the display on—uses more battery).</li>
+        <li><strong>Add to Home Screen</strong> (Safari: Share → Add to Home Screen; Chrome: menu → Install app / Add to Home screen) opens like an app and reduces accidental backgrounding.</li>
+        <li>Keep this page <strong>in the foreground</strong> while recording.</li>
+    </ul>
+    <p>
+        For tracking with the screen off or while using other apps, use a <strong>PiSailBox</strong> device from PiControl instead of the browser.
+    </p>
+</details>
 
 <!-- Live stats -->
 <div class="card">
@@ -317,7 +351,8 @@
         if (!('wakeLock' in navigator)) return;
         try {
             wakeLock = await navigator.wakeLock.request('screen');
-            document.getElementById('wakeNotice').textContent = '🔆 Screen wake lock active — display will stay on.';
+            document.getElementById('wakeNotice').textContent =
+                '🔆 Screen wake lock on — display stays awake. Add this page to Home Screen for a more app-like experience.';
             document.getElementById('wakeNotice').classList.add('on');
             wakeLock.addEventListener('release', () => {
                 document.getElementById('wakeNotice').textContent = 'Screen lock released.';
@@ -330,20 +365,54 @@
         if (wakeLock) { try { await wakeLock.release(); } catch(e){} wakeLock = null; }
     }
 
+    function applyPositionFromGeoloc(pos) {
+        pendingPoint = pos;
+        const { latitude: lat, longitude: lng, accuracy, speed } = pos.coords;
+        const acc = accuracy ? `±${Math.round(accuracy)}m` : '';
+        setGPS('locked', `${lat.toFixed(5)}, ${lng.toFixed(5)} ${acc}`);
+        document.getElementById('statLat').textContent = lat.toFixed(5);
+        document.getElementById('statLng').textContent = lng.toFixed(5);
+        if (speed != null) {
+            const kts = (speed * 1.94384).toFixed(1);
+            document.getElementById('statSpeed').innerHTML = `${kts}<span class="stat-unit">kts</span>`;
+        }
+        btn.disabled = false;
+    }
+
+    /** Fresh fix when returning to the tab (timers/GPS may have been throttled while hidden). */
+    function flushLocationAndRecord() {
+        if (!isTracking || !trackId || !navigator.geolocation) return;
+        navigator.geolocation.getCurrentPosition(
+            pos => {
+                applyPositionFromGeoloc(pos);
+                recordPoint();
+            },
+            () => { /* keep last watchPosition sample */ },
+            { enableHighAccuracy: true, timeout: 25000, maximumAge: 0 }
+        );
+    }
+
     // ── Page Visibility (background tab detection) ────────────────────────────
     document.addEventListener('visibilitychange', () => {
         if (document.hidden && isTracking) {
             document.getElementById('bgOverlay').classList.add('show');
         }
-        // If wake lock was released while hidden, re-acquire on return
-        if (!document.hidden && isTracking && !wakeLock) {
-            requestWakeLock();
+        if (!document.hidden && isTracking) {
+            flushLocationAndRecord();
+            if (!wakeLock) requestWakeLock();
         }
+    });
+
+    window.addEventListener('pageshow', ev => {
+        if (ev.persisted && isTracking) flushLocationAndRecord();
     });
 
     function dismissBgWarning() {
         document.getElementById('bgOverlay').classList.remove('show');
-        if (isTracking) requestWakeLock();
+        if (isTracking) {
+            requestWakeLock();
+            flushLocationAndRecord();
+        }
     }
 
     async function stopTrackingFromBg() {
@@ -366,19 +435,7 @@
         }
         setGPS('acquiring', 'Acquiring GPS fix…');
         watchId = navigator.geolocation.watchPosition(
-            pos => {
-                pendingPoint = pos;
-                const { latitude: lat, longitude: lng, accuracy, speed } = pos.coords;
-                const acc = accuracy ? `±${Math.round(accuracy)}m` : '';
-                setGPS('locked', `${lat.toFixed(5)}, ${lng.toFixed(5)} ${acc}`);
-                document.getElementById('statLat').textContent = lat.toFixed(5);
-                document.getElementById('statLng').textContent = lng.toFixed(5);
-                if (speed != null) {
-                    const kts = (speed * 1.94384).toFixed(1);
-                    document.getElementById('statSpeed').innerHTML = `${kts}<span class="stat-unit">kts</span>`;
-                }
-                btn.disabled = false;
-            },
+            pos => { applyPositionFromGeoloc(pos); },
             err => setGPS('error', err.message),
             { enableHighAccuracy: true, timeout: 30000, maximumAge: 5000 }
         );

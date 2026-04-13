@@ -1,0 +1,19 @@
+{
+  "name": "Love Sailing — GPS Tracker",
+  "short_name": "Tracker",
+  "description": "Record a GPS track in your browser",
+  "start_url": "/Tracker.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#020053",
+  "theme_color": "#020053",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon",
+      "purpose": "any"
+    }
+  ]
+}

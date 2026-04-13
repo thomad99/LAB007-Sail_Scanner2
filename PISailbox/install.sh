@@ -39,6 +39,18 @@ fi
 # ── 3. Serial port permissions ────────────────────────────────────────────────
 echo "[3/6] Setting serial port permissions…"
 usermod -aG dialout $USER
+
+# Allow the Pi user to reboot from PiControl (remote `reboot` command — passwordless sudo)
+echo "[3b/6] Sudo rule for remote reboot…"
+echo "$USER ALL=(ALL) NOPASSWD: /sbin/reboot, /usr/sbin/reboot" > /etc/sudoers.d/99-pisailbox-reboot
+chmod 440 /etc/sudoers.d/99-pisailbox-reboot
+if visudo -cf /etc/sudoers.d/99-pisailbox-reboot 2>/dev/null; then
+    echo "   Remote reboot sudo rule installed ✓"
+else
+    echo "   WARNING: sudoers check failed — removing rule (remote reboot from portal will not work)"
+    rm -f /etc/sudoers.d/99-pisailbox-reboot
+fi
+
 # Disable serial console to free up ttyUSB ports
 if systemctl is-active --quiet serial-getty@ttyS0.service 2>/dev/null; then
     systemctl stop serial-getty@ttyS0.service

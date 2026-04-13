@@ -380,11 +380,12 @@
                         🏁 Peak Speed
                     </button>
                     <span class="speed-label">Speed:</span>
-                    <button class="btn-pb" onclick="setSpeed(1)"  id="spd1" >1×</button>
-                    <button class="btn-pb" onclick="setSpeed(2)"  id="spd2" >2×</button>
-                    <button class="btn-pb" onclick="setSpeed(5)"  id="spd5" >5×</button>
-                    <button class="btn-pb" onclick="setSpeed(10)" id="spd10">10×</button>
-                    <button class="btn-pb" onclick="setSpeed(20)" id="spd20">20×</button>
+                    <button class="btn-pb" onclick="setSpeed(1)"    id="spd1"   >1×</button>
+                    <button class="btn-pb" onclick="setSpeed(10)"   id="spd10"  >10×</button>
+                    <button class="btn-pb" onclick="setSpeed(20)"   id="spd20"  >20×</button>
+                    <button class="btn-pb" onclick="setSpeed(60)"   id="spd60"  >60×</button>
+                    <button class="btn-pb" onclick="setSpeed(120)"  id="spd120" >120×</button>
+                    <button class="btn-pb" onclick="setSpeed(340)"  id="spd340">340×</button>
                 </div>
             </div>
         </div>
@@ -671,7 +672,7 @@ let replayPoints={};         // trackId → sorted points array
 let replayTimeline=[];       // unified sorted timestamps
 let replayMarkers={};        // trackId → L.marker
 let replayTrails={};         // trackId → L.polyline
-let pbPlaying=false, pbSpeed=5, pbVirtualMs=0, pbTotalMs=0, pbTimer=null;
+let pbPlaying=false, pbSpeed=10, pbVirtualMs=0, pbTotalMs=0, pbTimer=null;
 let rMapReady=false;
 
 async function loadSessions() {
@@ -898,11 +899,13 @@ function scrubPlayback(val) {
     applyReplayFrame(pbVirtualMs);
 }
 
+const PLAYBACK_SPEEDS = [1, 10, 20, 60, 120, 340];
+
 function setSpeed(s) {
-    pbSpeed=s;
-    [1,2,5,10,20].forEach(x=>{
-        const el=document.getElementById('spd'+x);
-        if(el) el.classList.toggle('active', x===s);
+    pbSpeed = s;
+    PLAYBACK_SPEEDS.forEach(x => {
+        const el = document.getElementById('spd' + x);
+        if (el) el.classList.toggle('active', x === s);
     });
 }
 

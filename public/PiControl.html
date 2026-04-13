@@ -1048,10 +1048,12 @@
                         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
                             <button class="btn" style="background:rgba(241,196,15,0.15);border:1px solid rgba(241,196,15,0.35);color:#f1c40f;"
                                     onclick="restartDevice()">🔄 Restart Service</button>
+                            <button class="btn" style="background:rgba(192,57,43,0.2);border:1px solid rgba(231,76,60,0.45);color:#e74c3c;"
+                                    onclick="rebootDevice()">⏻ Reboot Pi</button>
                             <span id="restartMsg" style="font-size:0.8rem;color:rgba(255,255,255,0.4);"></span>
                         </div>
                         <p style="font-size:0.73rem;color:rgba(255,255,255,0.3);margin:8px 0 0;">
-                            The Pi will restart its service on the next config poll (~10 s). Systemd will bring it back up automatically.
+                            <strong>Restart service</strong> — PisailBox process only (~10–60 s via MQTT poll). <strong>Reboot Pi</strong> — full Linux reboot (modem/GPS re-init; device offline ~1–2 min). Reboot needs <code style="font-size:0.68rem;">sudo</code> permission (see Pi install script).
                         </p>
                     </div>
 
@@ -1221,16 +1223,17 @@
                                 <div class="stat-val" style="font-size:0.72rem;">${esc((d.os_info || '—').substring(0, 30))}</div>
                             </div>
                             <div class="stat-box">
-                                <div class="stat-label">Service Started</div>
+                                <div class="stat-label">PiSailBox started</div>
                                 ${(() => {
-                    if (!d.service_started_at) return `<div class="stat-val" style="color:rgba(255,255,255,0.3)">—</div>`;
+                    if (!d.service_started_at) return `<div class="stat-val" style="color:rgba(255,255,255,0.3)">—</div>
+                        <div style="font-size:0.65rem;color:rgba(255,255,255,0.3);">Waiting for device to sync…</div>`;
                     const start = new Date(d.service_started_at);
                     const uptimeMs = Date.now() - start.getTime();
                     const h = Math.floor(uptimeMs / 3600000);
                     const m = Math.floor((uptimeMs % 3600000) / 60000);
                     const uptimeStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
                     return `<div class="stat-val" style="font-size:0.75rem;">${fmtDateTime(d.service_started_at)} ET</div>
-                                            <div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Up ${uptimeStr}</div>`;
+                                            <div style="font-size:0.7rem;color:rgba(255,255,255,0.4);">Up ${uptimeStr} <span style="opacity:0.7">(this process)</span></div>`;
                 })()}
                             </div>
                             <div class="stat-box">
@@ -1849,6 +1852,35 @@
                         ? '✅ Restart queued — Pi will restart within ~10s'
                         : `❌ ${data.error}`;
                     setTimeout(() => { if (msg) msg.textContent = ''; }, 8000);
+                }
+            } catch (e) {
+                if (msg) { msg.textContent = '❌ ' + e.message; setTimeout(() => { if (msg) msg.textContent = ''; }, 5000); }
+            }
+        }
+
+        async function rebootDevice() {
+            const d = selectedDevice;
+            if (!d) return;
+            const msg = document.getElementById('restartMsg');
+            if (!confirm(
+                `Reboot the entire Raspberry Pi "${d.name || d.device_id}"?\n\n` +
+                `This is a full system reboot (not just the tracker app). You will lose SSH/portal connection for about 1–2 minutes.`
+            )) return;
+            if (msg) msg.textContent = '⏳ Queuing reboot…';
+            try {
+                const resp = await fetch(
+                    `/api/pi/devices/${encodeURIComponent(d.device_id)}/command`,
+                    {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ command: 'reboot' })
+                    }
+                );
+                const data = await resp.json();
+                if (msg) {
+                    msg.textContent = data.ok
+                        ? '✅ Reboot queued — Pi should reboot within ~60s (SIM MQTT poll)'
+                        : `❌ ${data.error}`;
+                    setTimeout(() => { if (msg) msg.textContent = ''; }, 10000);
                 }
             } catch (e) {
                 if (msg) { msg.textContent = '❌ ' + e.message; setTimeout(() => { if (msg) msg.textContent = ''; }, 5000); }
