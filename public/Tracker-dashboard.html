@@ -411,6 +411,13 @@ const COLORS = [
 
 function trackColor(idx) { return COLORS[idx % COLORS.length]; }
 
+// Replay routes, legend, and moving markers — dark blue palette (readable on OSM)
+const REPLAY_ROUTE_COLORS = [
+    '#082567', '#0d47a1', '#1565c0', '#0a3d62', '#1a237e',
+    '#283593', '#01579b', '#004ba0', '#002171', '#1b2e5b'
+];
+function replayRouteColor(idx) { return REPLAY_ROUTE_COLORS[idx % REPLAY_ROUTE_COLORS.length]; }
+
 // ── Shared helpers ─────────────────────────────────────────────────────────
 function haversineNm(lat1,lon1,lat2,lon2) {
     const R=3440.065, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180;
@@ -720,16 +727,18 @@ async function selectSession(idx) {
         const pts = await (await fetch(`/api/tracks/${track.id}/points`)).json();
         if(!pts.length) return;
         replayPoints[track.id] = pts;
-        const col = trackColor(idx);
+        const routeCol = replayRouteColor(idx);
 
-        // Draw full ghost trail (dimmed)
+        // Full route (dark blue family — was light/washed at opacity 0.2)
         const ll = pts.map(p=>[p.lat,p.lng]);
-        replayTrails[track.id] = L.polyline(ll,{color:col,weight:2,opacity:0.2}).addTo(rMap);
+        replayTrails[track.id] = L.polyline(ll, {
+            color: routeCol, weight: 3, opacity: 0.88
+        }).addTo(rMap);
         ll.forEach(p=>allBounds.push(p));
 
         // Create animated marker with last 3 chars of device name (e.g. "007")
         const initials = (track.device_name||track.name||'?').slice(-3).toUpperCase();
-        const icon = makeRacerIcon(initials, col, false);
+        const icon = makeRacerIcon(initials, routeCol, false);
         replayMarkers[track.id] = L.marker(ll[0],{icon,zIndexOffset:100}).addTo(rMap);
     }));
 
@@ -786,7 +795,7 @@ async function selectSession(idx) {
     const legend = document.getElementById('replayLegend');
     legend.innerHTML = selectedSession.tracks.map((t,i)=>`
         <div class="legend-item">
-            <div class="legend-dot" style="background:${trackColor(i)}"></div>
+            <div class="legend-dot" style="background:${replayRouteColor(i)}"></div>
             <span>${esc(t.device_name||t.name||'Track '+t.id)}</span>
         </div>`).join('');
     showEl('replayLegend','flex');
@@ -845,7 +854,7 @@ function applyReplayFrame(virtualMs) {
         }
         if(!best) return;
 
-        const col = trackColor(idx);
+        const col = replayRouteColor(idx);
         const initials = (track.device_name||track.name||'?').slice(-3).toUpperCase();
         const isActive = new Date(pts[pts.length-1].recorded_at).getTime()>=virtualEpoch-5000;
         const icon = makeRacerIcon(initials, col, isActive);
