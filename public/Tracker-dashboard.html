@@ -38,7 +38,10 @@
         /* Live indicator dot on Live tab */
         .live-dot {
             display: inline-block; width: 7px; height: 7px;
-            border-radius: 50%; background: #2ecc71; margin-right: 5px;
+            border-radius: 50%; background: #e74c3c; margin-right: 5px;
+        }
+        .live-dot.live-online {
+            background: #2ecc71;
             animation: pulse 1.2s infinite;
         }
         @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
@@ -220,6 +223,20 @@
             font-size: 0.78rem; min-width: 140px;
         }
         .legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; border: 2px solid rgba(255,255,255,0.2); }
+        .legend-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .legend-del-btn {
+            margin-left: auto;
+            background: none;
+            border: none;
+            color: rgba(231,76,60,0.45);
+            cursor: pointer;
+            border-radius: 4px;
+            padding: 2px 5px;
+            font-size: 0.78rem;
+            line-height: 1;
+            transition: color 0.15s, background 0.15s;
+        }
+        .legend-del-btn:hover { color: #e74c3c; background: rgba(231,76,60,0.12); }
 
         /* Empty state */
         .empty { padding: 40px 16px; text-align: center; color: rgba(255,255,255,0.28); font-size: 0.88rem; line-height: 1.7; }
@@ -244,7 +261,7 @@
     <div class="topbar-right">
         <div class="tabs">
             <button class="tab active" onclick="showPage('tracks')">Tracks</button>
-            <button class="tab" onclick="showPage('live')"><span class="live-dot"></span>Live Race</button>
+            <button class="tab" onclick="showPage('live')"><span class="live-dot" id="liveTabDot"></span>Live Race</button>
             <button class="tab" onclick="showPage('replay')">▶ Replay</button>
         </div>
         <a href="/PiControl.html" class="btn-sm">Devices</a>
@@ -374,6 +391,7 @@
                 <div class="pb-row2">
                     <button class="btn-pb" id="pbPlayBtn" onclick="togglePlayback()">▶ Play</button>
                     <button class="btn-pb" onclick="resetPlayback()">⏮ Reset</button>
+                    <button class="btn-pb" onclick="shareCurrentReplay()" id="pbShareBtn">🔗 Share Replay</button>
                     <button class="btn-pb" onclick="jumpToPeakSpeed()" id="peakBtn"
                             title="Jump to the moment of highest recorded speed"
                             style="background:rgba(243,156,18,0.15);border-color:#f39c12;color:#f39c12;">
@@ -385,7 +403,7 @@
                     <button class="btn-pb" onclick="setSpeed(20)"   id="spd20"  >20×</button>
                     <button class="btn-pb" onclick="setSpeed(60)"   id="spd60"  >60×</button>
                     <button class="btn-pb" onclick="setSpeed(120)"  id="spd120" >120×</button>
-                    <button class="btn-pb" onclick="setSpeed(340)"  id="spd340">340×</button>
+                    <button class="btn-pb" onclick="setSpeed(360)"  id="spd360">360×</button>
                 </div>
             </div>
         </div>
@@ -579,7 +597,11 @@ function resetStats(prefix) {
 async function deleteTrack(e,id) {
     e.stopPropagation();
     if(!confirm('Delete this track and all its GPS points?')) return;
-    await fetch(`/api/tracks/${id}`,{method:'DELETE'});
+    const resp = await fetch(`/api/tracks/${id}`,{method:'DELETE'});
+    if (!resp.ok) {
+        alert('Delete failed. Please try again.');
+        return;
+    }
     if(selectedTrackId===id){
         selectedTrackId=null;
         if(tPolyline){tMap.removeLayer(tPolyline);tPolyline=null;}
@@ -593,6 +615,29 @@ async function deleteTrack(e,id) {
 // PAGE 2 — LIVE RACE
 // ══════════════════════════════════════════════════════════════════════════
 let liveMarkers={}, liveRefTimer=null, liveMapReady=false;
+let liveDotTimer=null;
+
+function setLiveDotState(isOnline) {
+    const dot = document.getElementById('liveTabDot');
+    if (!dot) return;
+    dot.classList.toggle('live-online', !!isOnline);
+    dot.title = isOnline ? 'Live tracker online' : 'No live trackers online';
+}
+
+async function refreshLiveDot() {
+    try {
+        const data = await (await fetch('/api/tracks/live')).json();
+        setLiveDotState(Array.isArray(data) && data.length > 0);
+    } catch (_) {
+        setLiveDotState(false);
+    }
+}
+
+function startLiveDotMonitor() {
+    if (liveDotTimer) return;
+    refreshLiveDot();
+    liveDotTimer = setInterval(refreshLiveDot, 15000);
+}
 
 function initLiveMap() {
     if(liveMapReady) return;
@@ -607,6 +652,7 @@ function initLiveMap() {
 async function refreshLive() {
     if(!liveMapReady) return;
     const data = await (await fetch('/api/tracks/live')).json();
+    setLiveDotState(data.length > 0);
     document.getElementById('liveStatus').textContent =
         `Last refresh: ${fmtTime(new Date())} ET · ${data.length} active tracker${data.length!==1?'s':''}`;
 
@@ -681,6 +727,87 @@ let replayMarkers={};        // trackId → L.marker
 let replayTrails={};         // trackId → L.polyline
 let pbPlaying=false, pbSpeed=10, pbVirtualMs=0, pbTotalMs=0, pbTimer=null;
 let rMapReady=false;
+let replayDeepLinkConsumed = false;
+
+function parseReplayTrackIds(raw) {
+    if (!raw) return [];
+    const ids = raw.split(',')
+        .map(v => Number(v.trim()))
+        .filter(v => Number.isFinite(v));
+    return [...new Set(ids)].sort((a, b) => a - b);
+}
+
+function getReplayDeepLinkTarget() {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get('replay') !== '1') return null;
+    const startedAt = q.get('session_start');
+    const startedAtMs = Date.parse(startedAt || '');
+    if (!Number.isFinite(startedAtMs)) return null;
+    return {
+        startedAtMs,
+        trackIds: parseReplayTrackIds(q.get('track_ids'))
+    };
+}
+
+function findSessionIndexFromDeepLink(target) {
+    if (!target) return -1;
+    return sessions.findIndex(s => {
+        const startMs = Date.parse(s.started_at || '');
+        if (!Number.isFinite(startMs) || startMs !== target.startedAtMs) return false;
+        if (!target.trackIds.length) return true;
+        const sessionTrackIds = (s.tracks || [])
+            .map(t => Number(t.id))
+            .filter(v => Number.isFinite(v))
+            .sort((a, b) => a - b);
+        if (sessionTrackIds.length !== target.trackIds.length) return false;
+        return sessionTrackIds.every((id, i) => id === target.trackIds[i]);
+    });
+}
+
+function buildReplayShareUrl(session) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('replay', '1');
+    url.searchParams.set('session_start', session.started_at);
+    const trackIds = (session.tracks || [])
+        .map(t => Number(t.id))
+        .filter(v => Number.isFinite(v))
+        .sort((a, b) => a - b);
+    if (trackIds.length) {
+        url.searchParams.set('track_ids', trackIds.join(','));
+    } else {
+        url.searchParams.delete('track_ids');
+    }
+    return url.toString();
+}
+
+async function shareCurrentReplay() {
+    if (!selectedSession) {
+        alert('Select a replay session first.');
+        return;
+    }
+    const shareUrl = buildReplayShareUrl(selectedSession);
+    const title = 'Love Sailing Replay';
+    const text = `Watch this race replay: ${selectedSession.label}`;
+
+    if (navigator.share) {
+        try {
+            await navigator.share({ title, text, url: shareUrl });
+            return;
+        } catch (err) {
+            if (err && err.name === 'AbortError') return;
+        }
+    }
+
+    try {
+        await navigator.clipboard.writeText(shareUrl);
+        alert('Replay link copied to clipboard.');
+        return;
+    } catch (_) {
+        // Fallback for browsers that block clipboard API.
+    }
+
+    window.prompt('Copy this replay link:', shareUrl);
+}
 
 async function loadSessions() {
     const resp = await fetch('/api/tracks/sessions');
@@ -692,6 +819,12 @@ async function loadSessions() {
             <div class="session-label">📅 ${esc(s.label)}</div>
             <div class="session-meta">${s.track_count} tracker${s.track_count!==1?'s':''} · ${s.total_points} pts</div>
         </div>`).join('');
+
+    if (!replayDeepLinkConsumed) {
+        replayDeepLinkConsumed = true;
+        const idx = findSessionIndexFromDeepLink(getReplayDeepLinkTarget());
+        if (idx >= 0) await selectSession(idx);
+    }
 }
 
 async function selectSession(idx) {
@@ -796,11 +929,66 @@ async function selectSession(idx) {
     legend.innerHTML = selectedSession.tracks.map((t,i)=>`
         <div class="legend-item">
             <div class="legend-dot" style="background:${replayRouteColor(i)}"></div>
-            <span>${esc(t.device_name||t.name||'Track '+t.id)}</span>
+            <span class="legend-label">${esc(t.device_name||t.name||'Track '+t.id)}</span>
+            <button class="legend-del-btn" onclick="deleteReplayTrack(event,${t.id})" title="Delete track">✕</button>
         </div>`).join('');
     showEl('replayLegend','flex');
     showEl('pbControls');
     setSpeed(pbSpeed);
+}
+
+function resetReplayUi() {
+    stopPlayback();
+    pbVirtualMs = 0;
+    selectedSession = null;
+    for (const m of Object.values(replayMarkers)) rMap?.removeLayer(m);
+    for (const t of Object.values(replayTrails)) rMap?.removeLayer(t);
+    replayMarkers = {};
+    replayTrails = {};
+    replayPoints = {};
+    hideEl('r-map');
+    showEl('r-map-ph', 'flex');
+    hideEl('replayLegend');
+    hideEl('replayStats');
+    hideEl('pbControls');
+}
+
+async function deleteReplayTrack(e, id) {
+    e.stopPropagation();
+    if (!selectedSession) return;
+
+    const track = selectedSession.tracks.find(t => t.id === id);
+    const label = track?.device_name || track?.name || ('Track ' + id);
+    if (!confirm(`Delete "${label}" and all its GPS points?`)) return;
+
+    const currentSessionStartedAt = selectedSession.started_at;
+    const resp = await fetch(`/api/tracks/${id}`, { method: 'DELETE' });
+    if (!resp.ok) {
+        alert('Delete failed. Please try again.');
+        return;
+    }
+
+    if (selectedTrackId === id) {
+        selectedTrackId = null;
+        if (tPolyline) { tMap.removeLayer(tPolyline); tPolyline = null; }
+        tMarkers.forEach(m => tMap.removeLayer(m)); tMarkers = [];
+        hideEl('t-map'); showEl('t-map-ph', 'flex'); resetStats('t');
+    }
+
+    await loadTracks();
+    await loadSessions();
+
+    if (!sessions.length) {
+        resetReplayUi();
+        return;
+    }
+
+    const sameSessionIdx = sessions.findIndex(s => s.started_at === currentSessionStartedAt);
+    if (sameSessionIdx >= 0) {
+        await selectSession(sameSessionIdx);
+    } else {
+        resetReplayUi();
+    }
 }
 
 function makeRacerIcon(initials, col, active) {
@@ -908,7 +1096,7 @@ function scrubPlayback(val) {
     applyReplayFrame(pbVirtualMs);
 }
 
-const PLAYBACK_SPEEDS = [1, 10, 20, 60, 120, 340];
+const PLAYBACK_SPEEDS = [1, 10, 20, 60, 120, 360];
 
 function setSpeed(s) {
     pbSpeed = s;
@@ -956,7 +1144,12 @@ function jumpToPeakSpeed() {
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
-loadTracks();
+startLiveDotMonitor();
+if (getReplayDeepLinkTarget()) {
+    showPage('replay');
+} else {
+    loadTracks();
+}
 </script>
 </body>
 </html>
