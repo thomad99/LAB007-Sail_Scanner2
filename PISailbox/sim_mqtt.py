@@ -168,9 +168,9 @@ def flush_via_mqtt(serial_port, baud_rate, device_id, track_id, db_path,
 
     Returns
     -------
-    dict  {"sent": int, "config": dict | None}
+    dict  {"sent": int, "config": dict | None, "status_published": bool}
     """
-    result = {"sent": 0, "config": None}
+    result = {"sent": 0, "config": None, "status_published": False}
 
     # Load GPS queue (publish even if track_id is None — server may provide one via config)
     try:
@@ -208,10 +208,13 @@ def flush_via_mqtt(serial_port, baud_rate, device_id, track_id, db_path,
         try:
             raw = _subscribe_and_receive(s, config_topic, wait_s=3.0)
             if raw:
-                cfg = json.loads(raw.decode(errors='ignore'))
-                result["config"] = cfg
-                log.info(f'SIM-MQTT: received config from server (track={cfg.get("active_track_id")}, '
-                         f'cmds={cfg.get("__commands", [])})')
+                config_payload = json.loads(raw.decode(errors='ignore'))
+                result["config"] = config_payload
+                log.info(
+                    "SIM-MQTT: received config from server "
+                    f'(track={config_payload.get("active_track_id")}, '
+                    f'cmds={config_payload.get("__commands", [])})'
+                )
         except Exception as e:
             log.warning(f'SIM-MQTT: config subscribe error: {e}')
 
@@ -240,7 +243,8 @@ def flush_via_mqtt(serial_port, baud_rate, device_id, track_id, db_path,
             try:
                 status_bytes = json.dumps(status_payload).encode()
                 _publish_one(s, status_topic, status_bytes)
-                log.debug('SIM-MQTT: status published')
+                result["status_published"] = True
+                log.info('SIM-MQTT: status published')
             except Exception as e:
                 log.warning(f'SIM-MQTT: status publish error: {e}')
 

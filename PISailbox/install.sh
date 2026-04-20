@@ -40,14 +40,14 @@ fi
 echo "[3/6] Setting serial port permissions…"
 usermod -aG dialout $USER
 
-# Allow the Pi user to reboot from PiControl (remote `reboot` command — passwordless sudo)
-echo "[3b/6] Sudo rule for remote reboot…"
-echo "$USER ALL=(ALL) NOPASSWD: /sbin/reboot, /usr/sbin/reboot" > /etc/sudoers.d/99-pisailbox-reboot
+# Allow the Pi user to reboot or shut down from PiControl (passwordless sudo for those binaries only)
+echo "[3b/6] Sudo rules for remote reboot / shutdown…"
+echo "$USER ALL=(ALL) NOPASSWD: /sbin/reboot, /usr/sbin/reboot, /sbin/shutdown, /usr/sbin/shutdown" > /etc/sudoers.d/99-pisailbox-reboot
 chmod 440 /etc/sudoers.d/99-pisailbox-reboot
 if visudo -cf /etc/sudoers.d/99-pisailbox-reboot 2>/dev/null; then
-    echo "   Remote reboot sudo rule installed ✓"
+    echo "   Remote reboot/shutdown sudo rules installed ✓"
 else
-    echo "   WARNING: sudoers check failed — removing rule (remote reboot from portal will not work)"
+    echo "   WARNING: sudoers check failed — removing rule (remote reboot/shutdown from portal will not work)"
     rm -f /etc/sudoers.d/99-pisailbox-reboot
 fi
 
@@ -56,6 +56,17 @@ if systemctl is-active --quiet serial-getty@ttyS0.service 2>/dev/null; then
     systemctl stop serial-getty@ttyS0.service
     systemctl disable serial-getty@ttyS0.service
 fi
+if systemctl is-active --quiet serial-getty@ttyAMA0.service 2>/dev/null; then
+    systemctl stop serial-getty@ttyAMA0.service
+    systemctl disable serial-getty@ttyAMA0.service
+fi
+
+# Ensure ttyAMA0 is accessible to the dialout group (needed on some Pi OS builds).
+cat > /etc/udev/rules.d/99-pisailbox-uart.rules <<'EOF'
+KERNEL=="ttyAMA0", GROUP="dialout", MODE="0660"
+EOF
+udevadm control --reload-rules || true
+udevadm trigger --name-match=ttyAMA0 || true
 
 # ── 4. 4G / SIM card setup ────────────────────────────────────────────────────
 echo "[4/6] Configuring 4G modem (ModemManager)…"
@@ -90,8 +101,9 @@ mkdir -p $INSTALL_DIR
 cp -r "$(dirname "$0")"/* $INSTALL_DIR/
 chown -R $USER:$USER $INSTALL_DIR
 
-# Write server URL into config
-sed -i "s|SERVER_URL = .*|SERVER_URL = os.environ.get(\"PISAILBOX_SERVER\", \"$SERVER_URL\")|" \
+# Write server URL into config.
+# Important: anchor the match at line start so we do NOT rewrite SIM_SERVER_URL.
+sed -i "s|^SERVER_URL[[:space:]]*=.*$|SERVER_URL = os.environ.get(\"PISAILBOX_SERVER\", \"$SERVER_URL\")|" \
     $INSTALL_DIR/config.py
 
 # Create data directory

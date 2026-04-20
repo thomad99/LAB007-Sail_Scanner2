@@ -6,6 +6,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=pi
+Group=pi
+SupplementaryGroups=dialout
 WorkingDirectory=/opt/pisailbox
 ExecStart=/usr/bin/python3 /opt/pisailbox/main.py
 Restart=always

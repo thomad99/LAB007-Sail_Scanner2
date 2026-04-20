@@ -8,6 +8,13 @@ On boot the Pi registers itself with the Love Sailing website, starts GPS tracki
 
 ---
 
+## GPS behavior
+
+- When tracking is **OFF**, the Pi polls GPS every 60 seconds by default (`gps_idle_poll_seconds`) and sends live status/location updates only (not recorded as track points).
+- When tracking is **ON**, the Pi uses `gps_poll_seconds` and `gps_upload_interval_seconds` to queue and upload recorded track points.
+
+---
+
 ## Hardware setup
 
 | Component | Connection |
@@ -24,15 +31,15 @@ Power the Pi **after** inserting the SIM card.
 
 ### 1. Copy files to the Pi
 
-From your laptop, copy the `pisailbox` folder to the Pi:
+From your laptop, copy the `PISailbox` folder to the Pi:
 
 ```bash
-scp -r pisailbox/ pi@<PI_IP_ADDRESS>:~/pisailbox/
+scp -r PISailbox/ pi@<PI_IP_ADDRESS>:~/PISailbox/
 ```
 
 ### 2. Set your server URL
 
-Edit `pisailbox/config.py` and change:
+Edit `PISailbox/config.py` and change:
 ```python
 SERVER_URL = "https://lovesailing.ai"
 ```
@@ -47,7 +54,7 @@ PISAILBOX_SERVER=https://lovesailing.ai sudo bash install.sh
 SSH into the Pi and run:
 
 ```bash
-cd ~/pisailbox
+cd ~/PISailbox
 chmod +x install.sh
 sudo bash install.sh
 ```
@@ -119,6 +126,26 @@ ls ~/pisailbox_data/videos/
 
 ---
 
+## Debug bundle (copy/paste report)
+
+If the Pi does not check in, collect a full diagnostics report:
+
+```bash
+cd ~/PISailbox
+chmod +x debug_bundle.sh
+sudo ./debug_bundle.sh
+```
+
+The script writes a file like:
+
+```bash
+~/pisailbox_data/pisailbox-debug-YYYYMMDD-HHMMSS.txt
+```
+
+Paste that report into chat for troubleshooting.
+
+---
+
 ## Control panel (web)
 
 Once the Pi is running and connected, visit:
@@ -138,7 +165,7 @@ From here you can:
 ## File structure
 
 ```
-pisailbox/
+PISailbox/
 ├── main.py         — entry point, starts all threads
 ├── config.py       — server URL, device ID, defaults
 ├── gps.py          — SIM7600 GPS via serial AT commands

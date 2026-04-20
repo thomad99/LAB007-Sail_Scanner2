@@ -1145,7 +1145,12 @@ function jumpToPeakSpeed() {
 
 // ── Init ───────────────────────────────────────────────────────────────────
 startLiveDotMonitor();
-if (getReplayDeepLinkTarget()) {
+const _urlTab = new URLSearchParams(location.search).get('tab');
+if (_urlTab === 'live') {
+    showPage('live');
+} else if (getReplayDeepLinkTarget()) {
+    showPage('replay');
+} else if (_urlTab === 'replay') {
     showPage('replay');
 } else {
     loadTracks();

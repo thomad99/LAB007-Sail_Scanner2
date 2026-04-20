@@ -11,6 +11,7 @@ Starts on boot (via systemd), registers with the server, then:
       start_video    — start a video recording
       stop_video     — stop the current video recording
       reboot         — full system reboot (requires NOPASSWD sudo for /sbin/reboot; see install.sh)
+      shutdown       — clean poweroff (sync + shutdown -h now; requires NOPASSWD for /sbin/shutdown; see install.sh)
   - Runs camera sessions on schedule (if camera_enabled + auto camera settings)
   - Reports SIM status periodically
 """
@@ -68,6 +69,24 @@ def _save_cached_config(config_dict):
             json.dump(snap, f)
     except OSError as e:
         log.warning(f"Could not save config cache: {e}")
+
+
+def _bootstrap_local_config():
+    """
+    Minimal config keys for SIM-only cold boot (no HTTPS, no cache file).
+    DeviceConfig still merges cfg.DEFAULT_CONFIG; we only add optional env APN so PDP can attach.
+    """
+    apn = os.environ.get("PISAILBOX_BOOTSTRAP_APN", "").strip()
+    if not apn:
+        return {}
+    log.warning(
+        "Bootstrap: using PISAILBOX_BOOTSTRAP_APN from environment until server config arrives"
+    )
+    return {
+        "sim_apn": apn,
+        "sim_apn_user": os.environ.get("PISAILBOX_BOOTSTRAP_APN_USER", "").strip(),
+        "sim_apn_pass": os.environ.get("PISAILBOX_BOOTSTRAP_APN_PASS", "").strip(),
+    }
 
 
 # ── Globals ───────────────────────────────────────────────────────────────────
@@ -165,6 +184,30 @@ def handle_commands(commands):
 
             threading.Thread(target=_delayed_reboot, daemon=True, name="system-reboot").start()
 
+        elif cmd == 'shutdown':
+            log.warning("Shutdown command received — clean poweroff in ~3s (sync then shutdown -h now)")
+
+            def _delayed_shutdown():
+                time.sleep(3)
+                try:
+                    subprocess.run(["sync"], check=False, timeout=120)
+                except Exception as ex:
+                    log.warning(f"sync before shutdown: {ex}")
+                for path in ("/sbin/shutdown", "/usr/sbin/shutdown"):
+                    if os.path.isfile(path):
+                        try:
+                            subprocess.run(
+                                ["sudo", path, "-h", "now"],
+                                check=False,
+                                timeout=60,
+                            )
+                            return
+                        except Exception as ex:
+                            log.error(f"shutdown via {path} failed: {ex}")
+                log.error("shutdown: no /sbin/shutdown — install sudoers (install.sh) or run manually")
+
+            threading.Thread(target=_delayed_shutdown, daemon=True, name="system-shutdown").start()
+
         elif cmd == 'test_sim':
             t = threading.Thread(
                 target=_do_test_sim, daemon=True, name="cmd-test-sim"
@@ -199,15 +242,20 @@ def _do_test_sim():
         gps_reader.pause()
         try:
             import sim_mqtt
-            sent = sim_mqtt.flush_via_mqtt(
+            sim_result = sim_mqtt.flush_via_mqtt(
                 serial_port = cfg.GPS_SERIAL_PORT,
                 baud_rate   = cfg.GPS_BAUD_RATE,
                 device_id   = cfg.DEVICE_ID,
                 track_id    = uploader_inst._track_id,
                 db_path     = uploader_inst.db_path,
             )
+            sent = sim_result.get("sent", 0) if isinstance(sim_result, dict) else int(sim_result or 0)
             if sent > 0:
                 log.info(f"SIM TEST: SUCCESS — published {sent} point(s) via SIM MQTT")
+                _last_upload_via = "SIM"
+                _last_upload_at  = datetime.datetime.utcnow().isoformat() + "Z"
+            elif isinstance(sim_result, dict) and sim_result.get("status_published"):
+                log.info("SIM TEST: status published via SIM MQTT (no GPS points in queue)")
                 _last_upload_via = "SIM"
                 _last_upload_at  = datetime.datetime.utcnow().isoformat() + "Z"
             else:
@@ -228,6 +276,73 @@ def _do_test_sim():
 
 _last_upload_via     = None   # "WiFi" | "SIM" | None
 _last_upload_at      = None   # ISO timestamp of last successful upload
+
+
+def _flush_gps_queue_https():
+    """
+    Upload queued GPS samples over HTTPS (no modem UART).
+    Call before SIM-MQTT so WiFi/Ethernet paths drain the queue every cycle,
+    not only when the SIM upload window runs.
+    """
+    global _last_upload_via, _last_upload_at
+    if not uploader_inst or not uploader_inst._track_id:
+        return 0
+    total = 0
+    for _ in range(25):
+        n = uploader_inst.flush_gps_queue()
+        if n <= 0:
+            break
+        total += n
+        if uploader_inst.gps_queue_depth() == 0:
+            break
+    if total > 0:
+        log.info(f"GPS queue: uploaded {total} point(s) via HTTPS")
+        _last_upload_via = "WiFi"
+        _last_upload_at = datetime.datetime.utcnow().isoformat() + "Z"
+    return total
+
+
+def _drain_gps_queue_before_track_close(track_id):
+    """
+    Flush SQLite GPS queue while track_id is still valid, then SIM-MQTT for leftovers.
+    Must run before stop_track() so the server receives queued points.
+    """
+    global _last_upload_via, _last_upload_at
+    if not uploader_inst or uploader_inst._track_id != track_id:
+        return
+    _flush_gps_queue_https()
+    depth = uploader_inst.gps_queue_depth()
+    if depth <= 0:
+        return
+    log.info(f"GPS queue: {depth} point(s) left — flushing via SIM-MQTT before track stop")
+    import sim_mqtt
+    for _round in range(15):
+        if uploader_inst.gps_queue_depth() <= 0:
+            break
+        _status = _build_mqtt_status_payload(track_id)
+        gps_reader.pause()
+        try:
+            mqtt_result = sim_mqtt.flush_via_mqtt(
+                serial_port    = cfg.GPS_SERIAL_PORT,
+                baud_rate      = cfg.GPS_BAUD_RATE,
+                device_id      = cfg.DEVICE_ID,
+                track_id       = track_id,
+                db_path        = uploader_inst.db_path,
+                status_payload = _status,
+            )
+            sent = mqtt_result.get("sent", 0)
+            if sent > 0:
+                log.info(f"SIM-MQTT: published {sent} GPS point(s) before track stop")
+                _last_upload_via = "SIM"
+                _last_upload_at = datetime.datetime.utcnow().isoformat() + "Z"
+            if sent <= 0:
+                break
+        except Exception as e:
+            log.warning(f"SIM-MQTT pre-stop flush failed: {e}")
+            break
+        finally:
+            gps_reader.resume()
+
 
 def _build_gps_diag(current_track_id):
     """Build GPS diagnostic dict to upload to the server."""
@@ -358,14 +473,31 @@ def gps_thread_fn():
         _last_applied_apn = f"{apn}|{user}|{pw}"
 
     current_track_id = None
-    # SIM/MQTT: config, GPS points, and full status — same cadence, WiFi not required
+    # SIM/MQTT: config, GPS points, and full status — WiFi not required
     next_mqtt_cycle = 0.0
+    last_tracking_state = None
 
     while not shutdown_event.is_set():
-        poll_s    = device_config.get("gps_poll_seconds",            cfg.DEFAULT_CONFIG["gps_poll_seconds"])
-        upload_s  = device_config.get("gps_upload_interval_seconds", cfg.DEFAULT_CONFIG.get("gps_upload_interval_seconds", 60))
+        poll_s_active = device_config.get(
+            "gps_poll_seconds",
+            cfg.DEFAULT_CONFIG["gps_poll_seconds"],
+        )
+        upload_s_active = device_config.get(
+            "gps_upload_interval_seconds",
+            cfg.DEFAULT_CONFIG.get("gps_upload_interval_seconds", 60),
+        )
+        poll_s_idle = device_config.get(
+            "gps_idle_poll_seconds",
+            cfg.DEFAULT_CONFIG.get("gps_idle_poll_seconds", 60),
+        )
 
-        if tracking_active.is_set():
+        tracking_now = tracking_active.is_set()
+        if last_tracking_state is None or last_tracking_state != tracking_now:
+            # Push an immediate status/config cycle when tracking state toggles.
+            next_mqtt_cycle = 0.0
+            last_tracking_state = tracking_now
+
+        if tracking_now:
             # Ensure we have an open track on the server
             if not current_track_id:
                 import zoneinfo
@@ -418,16 +550,34 @@ def gps_thread_fn():
                 import zoneinfo
                 est = zoneinfo.ZoneInfo("America/New_York")
                 now_est = datetime.datetime.now(est)
+                tid = current_track_id
+                _drain_gps_queue_before_track_close(tid)
                 uploader_inst.stop_track()
-                log.info(f"⏹ Track STOPPED  id={current_track_id}  at {now_est.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                log.info(f"⏹ Track STOPPED  id={tid}  at {now_est.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                 current_track_id = None
                 _gnss_recoveries = 0
 
+            # Idle heartbeat mode: poll GPS periodically for live location/status only.
+            # Points are NOT queued because there is no active track id.
+            fix = gps_reader.get_fix()
+            if fix and fix.is_valid():
+                log.info(f"GPS idle fix: lat={fix.lat:.5f} lng={fix.lng:.5f} spd={fix.speed}")
+            else:
+                log.info("GPS idle: no fix yet")
+
         now = time.time()
+        mqtt_cycle_interval = upload_s_active if tracking_now else poll_s_idle
         if now >= next_mqtt_cycle:
-            next_mqtt_cycle = now + upload_s
+            next_mqtt_cycle = now + mqtt_cycle_interval
             depth = uploader_inst.gps_queue_depth()
-            log.info(f"SIM-MQTT cycle — queue={depth} pt(s), tracking={tracking_active.is_set()}")
+            log.info(
+                f"SIM-MQTT cycle — queue={depth} pt(s), tracking={tracking_now}, "
+                f"interval={mqtt_cycle_interval}s"
+            )
+
+            # WiFi/Ethernet: drain queue over HTTPS first (no UART contention).
+            if tracking_now and uploader_inst._track_id:
+                _flush_gps_queue_https()
 
             _status = _build_mqtt_status_payload(current_track_id)
 
@@ -443,11 +593,16 @@ def gps_thread_fn():
                     status_payload = _status,
                 )
                 sent = mqtt_result["sent"]
+                status_published = bool(mqtt_result.get("status_published"))
                 if sent > 0:
                     log.info(f"SIM-MQTT: published {sent} GPS point(s)")
                     _last_upload_via = "SIM"
                     _last_upload_at  = datetime.datetime.utcnow().isoformat() + "Z"
-                elif depth > 0 and tracking_active.is_set():
+                elif status_published:
+                    log.info("SIM-MQTT: status heartbeat published via SIM")
+                    _last_upload_via = "SIM"
+                    _last_upload_at  = datetime.datetime.utcnow().isoformat() + "Z"
+                elif depth > 0 and tracking_now:
                     log.warning("SIM-MQTT: 0 points sent (check track id / PDP context)")
 
                 _apply_mqtt_config(mqtt_result.get("config"), current_track_id)
@@ -457,15 +612,18 @@ def gps_thread_fn():
             finally:
                 gps_reader.resume()
 
-        shutdown_event.wait(poll_s)
+        wait_s = poll_s_active if tracking_now else poll_s_idle
+        shutdown_event.wait(wait_s)
 
     # Clean shutdown
     if current_track_id:
         import zoneinfo
         est = zoneinfo.ZoneInfo("America/New_York")
         now_est = datetime.datetime.now(est)
+        tid = current_track_id
+        _drain_gps_queue_before_track_close(tid)
         uploader_inst.stop_track()
-        log.info(f"⏹ Track STOPPED (shutdown)  id={current_track_id}  at {now_est.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        log.info(f"⏹ Track STOPPED (shutdown)  id={tid}  at {now_est.strftime('%Y-%m-%d %H:%M:%S %Z')}")
     gps_reader.stop()
     log.info("GPS thread stopped")
 
@@ -599,9 +757,12 @@ def main():
     uploader_inst = Uploader(cfg.SERVER_URL, cfg.DEVICE_ID, cfg.QUEUE_DB,
                              track_id_file=cfg.TRACK_ID_FILE)
 
-    # HTTPS register and/or cached config — SIM-only operation after first successful sync
-    log.info("Waiting for server config (HTTPS or cached file)…")
+    # HTTPS register and/or cached config — SIM-only operation after first successful sync.
+    # Without WiFi + no cache, optionally fall through to local bootstrap after BOOTSTRAP_AFTER_SECONDS
+    # so GPS/SIM threads start (MQTT can deliver retained server config).
+    log.info("Waiting for server config (HTTPS, cached file, or bootstrap timeout)…")
     initial_config = None
+    start_mono = time.monotonic()
     while initial_config is None and not shutdown_event.is_set():
         reg = uploader_inst.register(started_at=service_started_at)
         if reg is not None:
@@ -614,7 +775,24 @@ def main():
             initial_config = cached
             log.warning("HTTPS register failed — using cached config (SIM MQTT will sync)")
             break
-        log.warning("Registration failed — retrying in 15s")
+        elapsed = time.monotonic() - start_mono
+        deadline = cfg.BOOTSTRAP_AFTER_SECONDS
+        use_bootstrap = cfg.SIM_BOOTSTRAP_IMMEDIATE or (
+            deadline >= 0 and elapsed >= deadline
+        )
+        if use_bootstrap:
+            initial_config = _bootstrap_local_config()
+            log.warning(
+                "HTTPS register unavailable — starting with local bootstrap "
+                f"after {elapsed:.0f}s (SIM/MQTT will sync; full config after HTTPS or MQTT)"
+            )
+            break
+        if deadline >= 0:
+            remain = max(0.0, deadline - elapsed)
+            extra = f"SIM bootstrap in ~{remain:.0f}s unless HTTPS succeeds"
+        else:
+            extra = "local bootstrap disabled (set PISAILBOX_BOOTSTRAP_AFTER>=0 to enable)"
+        log.warning(f"Registration failed — retrying in 15s ({extra})")
         shutdown_event.wait(15)
 
     if shutdown_event.is_set():

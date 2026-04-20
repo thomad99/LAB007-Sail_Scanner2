@@ -53,7 +53,8 @@ GPS_POINTS_JSONL_ENABLED = os.environ.get("PISAILBOX_GPS_JSONL", "1").strip().lo
 # ── Defaults (overridden by server config) ────────────────────────────────────
 DEFAULT_CONFIG = {
     "gps_poll_seconds":              10,   # how often to read GPS (seconds)
-    "gps_upload_interval_seconds":   60,   # how often to upload batched points to server
+    "gps_idle_poll_seconds":         60,   # heartbeat poll when NOT tracking (status only, not recorded)
+    "gps_upload_interval_seconds":   120,  # how often SIM-MQTT status + SIM drain runs; HTTPS may flush more often
     "camera_enabled":                False,
     "photo_interval_seconds":        30,
     "photo_session_minutes":         60,
@@ -65,3 +66,11 @@ DEFAULT_CONFIG = {
 
 # Config is polled from server every N seconds
 CONFIG_POLL_SECONDS = 30
+
+# Cold boot without WiFi: HTTPS register fails and there is no cached_server_config.json.
+# After BOOTSTRAP_AFTER_SECONDS, start with DEFAULT_CONFIG (+ optional PISAILBOX_BOOTSTRAP_APN*)
+# so GPS and SIM/MQTT run; MQTT or later HTTPS fills in the full server config.
+# Set to a negative value to never use local bootstrap (legacy: block until HTTPS or cache).
+# PISAILBOX_SIM_BOOTSTRAP=1 skips the delay and bootstraps on the first failed register attempt.
+BOOTSTRAP_AFTER_SECONDS = float(os.environ.get("PISAILBOX_BOOTSTRAP_AFTER", "120"))
+SIM_BOOTSTRAP_IMMEDIATE = os.environ.get("PISAILBOX_SIM_BOOTSTRAP", "").strip().lower() in ("1", "true", "yes")

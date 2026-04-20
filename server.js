@@ -5886,7 +5886,7 @@ function defaultPiConfig() {
     return {
         auto_track: false,                  // start GPS tracking automatically on boot
         gps_poll_seconds: 10,               // how often to read GPS position (seconds)
-        gps_upload_interval_seconds: 60,    // how often to send batched points to server
+        gps_upload_interval_seconds: 120,   // SIM-MQTT cycle cadence; HTTPS flushes queue when WiFi is up
         camera_enabled: false,
         camera_auto_photo: false,
         photo_interval_seconds: 30,
@@ -6015,12 +6015,12 @@ app.get('/api/pi/devices/:deviceId/config', async (req, res) => {
 });
 
 // Queue a remote command for the Pi to execute on its next config poll
-// Valid commands: start_track, stop_track, capture_photo, start_video, stop_video
+// Valid commands: start_track, stop_track, capture_photo, start_video, stop_video, restart, reboot, shutdown, test_sim
 app.post('/api/pi/devices/:deviceId/command', express.json(), async (req, res) => {
     try {
         const { command } = req.body;
         const deviceId = req.params.deviceId;
-        const valid = ['start_track', 'stop_track', 'capture_photo', 'start_video', 'stop_video', 'restart', 'reboot', 'test_sim'];
+        const valid = ['start_track', 'stop_track', 'capture_photo', 'start_video', 'stop_video', 'restart', 'reboot', 'shutdown', 'test_sim'];
         if (!valid.includes(command)) {
             return res.status(400).json({ error: `Unknown command. Valid: ${valid.join(', ')}` });
         }
@@ -6076,7 +6076,7 @@ app.post('/api/pi/devices/:deviceId/command', express.json(), async (req, res) =
 
         // One-shot: after ~75s remove reboot/restart from pending and republish MQTT retain,
         // so the Pi gets the command once but does not loop after coming back online.
-        if (command === 'reboot' || command === 'restart') {
+        if (command === 'reboot' || command === 'restart' || command === 'shutdown') {
             setTimeout(async () => {
                 try {
                     const pr = await pool.query(
@@ -6632,21 +6632,50 @@ let pisailboxMqtt = null;
                     ? { ...sim_modem, reported_at: receivedAt }
                     : null;
                 const procStart = pisailboxProcessStartedAtFromPayload(data);
+                const gpsJson = JSON.stringify(gpsPayload);
+                const simJson = simPayload ? JSON.stringify(simPayload) : null;
+
+                let upd;
                 if (procStart) {
-                    await pool.query(
+                    upd = await pool.query(
                         `UPDATE pi_devices SET last_seen = NOW(), gps_status = $1::jsonb,
                          sim_status = COALESCE($2::jsonb, sim_status),
                          service_started_at = $3::timestamptz
                          WHERE device_id = $4`,
-                        [JSON.stringify(gpsPayload), simPayload ? JSON.stringify(simPayload) : null, procStart, deviceId]
+                        [gpsJson, simJson, procStart, deviceId]
                     );
                 } else {
-                    await pool.query(
+                    upd = await pool.query(
                         `UPDATE pi_devices SET last_seen = NOW(), gps_status = $1::jsonb,
                          sim_status = COALESCE($2::jsonb, sim_status)
                          WHERE device_id = $3`,
-                        [JSON.stringify(gpsPayload), simPayload ? JSON.stringify(simPayload) : null, deviceId]
+                        [gpsJson, simJson, deviceId]
                     );
+                }
+
+                // First MQTT-only check-in (no prior HTTPS register / no DB row): create device + retained config
+                if (!upd.rowCount) {
+                    await pool.query(
+                        `INSERT INTO pi_devices (
+                            device_id, name, last_seen, ip_address, ip_addresses, os_info,
+                            config, pending_commands, gps_status, sim_status, service_started_at
+                        ) VALUES (
+                            $1, $1, NOW(), NULL, '{}'::jsonb, NULL,
+                            $2::jsonb, '[]'::jsonb, $3::jsonb, $4::jsonb, $5::timestamptz
+                        )`,
+                        [
+                            deviceId,
+                            JSON.stringify(defaultPiConfig()),
+                            gpsJson,
+                            simJson,
+                            procStart || null,
+                        ]
+                    );
+                    try {
+                        await publishMqttDeviceConfig(deviceId);
+                    } catch (e) {
+                        console.error('MQTT: publishMqttDeviceConfig after insert:', e.message);
+                    }
                 }
                 console.log(`MQTT: status from ${deviceId} — tracking=${data.tracking_active} fix=${data.fix_valid} sim=${simPayload ? 'yes' : 'no'}`);
             }

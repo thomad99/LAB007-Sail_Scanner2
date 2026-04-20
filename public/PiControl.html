@@ -782,6 +782,27 @@
             color: rgba(126, 207, 255, 0.7);
             text-transform: uppercase;
         }
+
+        /* Live map link — pin matches Tracker dashboard: green = active GPS in last 10 min */
+        .topbar-map-pin {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            margin-right: 6px;
+            margin-left: 1px;
+            vertical-align: middle;
+            position: relative;
+            top: -1px;
+            background: #e74c3c;
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+        }
+
+        .topbar-map-pin.has-live {
+            background: #2ecc71;
+            animation: pulse 2s infinite;
+        }
     </style>
 </head>
 
@@ -792,7 +813,12 @@
         <div class="topbar-title">🥧 PISAILBOX CONTROL</div>
         <div class="topbar-right">
             <button class="btn" id="btnTopRefresh" onclick="refreshCurrentView()">↻ Refresh</button>
-            <a href="/Tracker-dashboard.html" class="btn primary">📍 Tracker Map</a>
+            <a href="/Tracker-dashboard.html?tab=live" class="btn primary" target="_blank" rel="noopener"
+               id="linkLiveMap" title="Checking live map status…">
+                <span class="topbar-map-pin" id="topbarLiveMapPin" aria-hidden="true"></span> Live map
+            </a>
+            <a href="/Tracker-dashboard.html?tab=replay" class="btn" target="_blank" rel="noopener"
+               title="Session replay (historic tracks)">▶ Replay</a>
         </div>
     </div>
 
@@ -884,9 +910,29 @@
                 if (devices.length && !selectedDevice) {
                     selectDevice(devices[0].device_id);
                 }
+                refreshLiveMapPin();
             } catch (e) {
                 document.getElementById('deviceList').innerHTML =
                     `<div class="empty-state">Error: ${e.message}</div>`;
+            }
+        }
+
+        /** Same rule as Tracker dashboard live tab: /api/tracks/live (open track + GPS point within 10 min). */
+        async function refreshLiveMapPin() {
+            const pin = document.getElementById('topbarLiveMapPin');
+            const link = document.getElementById('linkLiveMap');
+            if (!pin || !link) return;
+            try {
+                const resp = await fetch('/api/tracks/live');
+                const data = await resp.json();
+                const live = Array.isArray(data) && data.length > 0;
+                pin.classList.toggle('has-live', live);
+                link.title = live
+                    ? `${data.length} live tracker(s) on the map (GPS in the last 10 minutes)`
+                    : 'No live trackers — no open track with a recent GPS fix (last 10 minutes)';
+            } catch (_) {
+                pin.classList.remove('has-live');
+                link.title = 'Could not reach live map status';
             }
         }
 
@@ -1050,10 +1096,12 @@
                                     onclick="restartDevice()">🔄 Restart Service</button>
                             <button class="btn" style="background:rgba(192,57,43,0.2);border:1px solid rgba(231,76,60,0.45);color:#e74c3c;"
                                     onclick="rebootDevice()">⏻ Reboot Pi</button>
+                            <button class="btn" style="background:rgba(44,62,80,0.55);border:1px solid rgba(127,140,141,0.6);color:#bdc3c7;"
+                                    onclick="shutdownDevice()">⏻ Shut down Pi</button>
                             <span id="restartMsg" style="font-size:0.8rem;color:rgba(255,255,255,0.4);"></span>
                         </div>
                         <p style="font-size:0.73rem;color:rgba(255,255,255,0.3);margin:8px 0 0;">
-                            <strong>Restart service</strong> — PisailBox process only (~10–60 s via MQTT poll). <strong>Reboot Pi</strong> — full Linux reboot (modem/GPS re-init; device offline ~1–2 min). Reboot needs <code style="font-size:0.68rem;">sudo</code> permission (see Pi install script).
+                            <strong>Restart service</strong> — PisailBox process only (~10–60 s via MQTT poll). <strong>Reboot Pi</strong> — full Linux reboot (modem/GPS re-init; device offline ~1–2 min). <strong>Shut down Pi</strong> — clean poweroff (<code style="font-size:0.68rem;">sync</code> then <code style="font-size:0.68rem;">shutdown -h now</code>); stays off until power cycled. Reboot/shutdown need <code style="font-size:0.68rem;">sudo</code> on the Pi (see install script — re-run installer or update <code style="font-size:0.68rem;">/etc/sudoers.d/99-pisailbox-reboot</code> if shutdown is denied).
                         </p>
                     </div>
 
@@ -1887,6 +1935,36 @@
             }
         }
 
+        async function shutdownDevice() {
+            const d = selectedDevice;
+            if (!d) return;
+            const msg = document.getElementById('restartMsg');
+            if (!confirm(
+                `Shut down the Raspberry Pi "${d.name || d.device_id}"?\n\n` +
+                `This performs a clean shutdown (disk sync, then power off). The Pi will stay off until you power-cycle it. ` +
+                `You will lose SSH and portal access until then.`
+            )) return;
+            if (msg) msg.textContent = '⏳ Queuing shutdown…';
+            try {
+                const resp = await fetch(
+                    `/api/pi/devices/${encodeURIComponent(d.device_id)}/command`,
+                    {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ command: 'shutdown' })
+                    }
+                );
+                const data = await resp.json();
+                if (msg) {
+                    msg.textContent = data.ok
+                        ? '✅ Shutdown queued — Pi should power off within ~60s (after SIM MQTT poll)'
+                        : `❌ ${data.error}`;
+                    setTimeout(() => { if (msg) msg.textContent = ''; }, 12000);
+                }
+            } catch (e) {
+                if (msg) { msg.textContent = '❌ ' + e.message; setTimeout(() => { if (msg) msg.textContent = ''; }, 5000); }
+            }
+        }
+
         // ── IP addresses display ──────────────────────────────────────────────────
         function renderIpAddresses(d) {
             const ips = (typeof d.ip_addresses === 'string'
@@ -1993,15 +2071,25 @@
 
             listEl.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</div>';
 
+            const mapEl = document.getElementById('gpsMap');
+
+            // When the panel is re-rendered, Leaflet may still point to an old detached container.
+            // Recreate the map if its container is stale so the map keeps updating on each refresh cycle.
+            if (gpsMap && mapEl && gpsMap.getContainer() !== mapEl) {
+                gpsMap.remove();
+                gpsMap = null;
+                gpsMapLayers = [];
+            }
+
             // Init map lazily
-            if (!gpsMap) {
-                const mapEl = document.getElementById('gpsMap');
-                if (mapEl) {
-                    gpsMap = L.map(mapEl, { zoomControl: true }).setView([51.5, -0.1], 10);
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                        attribution: '© OpenStreetMap contributors', maxZoom: 19
-                    }).addTo(gpsMap);
-                }
+            if (!gpsMap && mapEl) {
+                gpsMap = L.map(mapEl, { zoomControl: true }).setView([51.5, -0.1], 10);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors', maxZoom: 19
+                }).addTo(gpsMap);
+            }
+            if (gpsMap) {
+                setTimeout(() => gpsMap.invalidateSize(), 60);
             }
 
             try {
@@ -2066,8 +2154,10 @@
                 </div>`;
                 }).join('');
 
-                // Auto-select the most recent (first) track
-                selectGpsTrack(tracks[0].id);
+                // Keep current selection when possible so the map updates in place each cycle.
+                const keepSelected = tracks.some(t => t.id === gpsSelectedTrack);
+                const trackToSelect = keepSelected ? gpsSelectedTrack : tracks[0].id;
+                await selectGpsTrack(trackToSelect);
 
             } catch (e) {
                 if (listEl) listEl.innerHTML = `<div style="color:#e74c3c;font-size:0.85rem;">Error: ${e.message}</div>`;
@@ -2247,6 +2337,8 @@
 
         // ── Init ──────────────────────────────────────────────────────────────────
         loadDevices();
+        refreshLiveMapPin();
+        setInterval(refreshLiveMapPin, 30000);
         setInterval(() => { refreshCurrentView({ silent: true }); }, 60000);
     </script>
 </body>
