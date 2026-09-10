@@ -353,6 +353,36 @@ function nearestRnCategory($, $el) {
     return '';
 }
 
+const RN_LETTER_SCORES = 'DNC|DNS|DNF|DSQ|DNE|DGM|OCS|UFD|BFD|SCP|ZFP|TLE|NSC|RET|RAF|RDG|DPI|DCT|STP';
+const RN_RACE_SCORE_RE = new RegExp(
+    `^(?:\\(?\\d+(?:\\.\\d+)?\\)?(?:\\[[^\\]]+\\])?|\\d+(?:\\.\\d+)?\\/(?:${RN_LETTER_SCORES})|(?:${RN_LETTER_SCORES})(?:\\/\\d+(?:\\.\\d+)?)?)$`,
+    'i'
+);
+const RN_SKIP_CELL_CLASS_RE = /pos|sail-num|boatname|handicap|country|corrected-time|elapsed-time|finish-time/;
+
+function isRnClockTime(text) {
+    const t = normalizeSpace(text);
+    if (/^NO\s*TIME$/i.test(t)) return true;
+    return /^\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?$/.test(t.replace(/\s+/g, ''));
+}
+
+function isRnRaceScore(text) {
+    const t = normalizeSpace(text).replace(/\s+/g, '');
+    if (!t || isRnClockTime(t)) return false;
+    return RN_RACE_SCORE_RE.test(t);
+}
+
+function firstNumericRnPos($, $tr) {
+    let pos = '';
+    $tr.find('td.pos').each((_, td) => {
+        if (pos) return;
+        const t = cellText($, $(td));
+        const n = t.replace(/[^\d.]/g, '');
+        if (n) pos = n;
+    });
+    return pos;
+}
+
 function extractRnResultRow($, $tr, category) {
     const $score = $tr.find('.the-score').first();
     const skipper = normalizeSpace($score.attr('data-skipper') || cellText($, $tr.find('td.country').first()));
@@ -360,7 +390,7 @@ function extractRnResultRow($, $tr, category) {
     const boat = normalizeSpace($score.attr('data-boat') || cellText($, $tr.find('td.boatname').first()));
     if (!skipper && !sail) return null;
 
-    const pos = normalizeSpace(cellText($, $tr.find('td.pos').first()));
+    const pos = firstNumericRnPos($, $tr);
     const total = normalizeSpace(cellText($, $score));
 
     let yachtClub = '';
@@ -371,11 +401,11 @@ function extractRnResultRow($, $tr, category) {
             const cls = ($n.attr('class') || '');
             const bg = ($n.attr('bgcolor') || '').toUpperCase();
             const t = cellText($, $n);
-            if (bg === '#999999' || cls.includes('pos') || $n.find('.the-score').length) {
+            if (bg === '#999999' || RN_SKIP_CELL_CLASS_RE.test(cls) || $n.find('.the-score').length) {
                 $n = $n.next();
                 continue;
             }
-            if (t) {
+            if (t && !isRnClockTime(t) && !isRnRaceScore(t)) {
                 yachtClub = t;
                 break;
             }
@@ -387,17 +417,17 @@ function extractRnResultRow($, $tr, category) {
     $tr.children('td').each((_, td) => {
         const $td = $(td);
         const cls = $td.attr('class') || '';
-        if (/pos|sail-num|boatname|handicap|country/.test(cls)) return;
+        if (RN_SKIP_CELL_CLASS_RE.test(cls)) return;
         if ($td.find('.the-score').length) return;
         const bg = ($td.attr('bgcolor') || '').toUpperCase();
         if (bg === '#999999') return;
         const t = cellText($, $td);
-        if (t) raceBits.push(t);
+        if (isRnRaceScore(t)) raceBits.push(t.replace(/\s+/g, ''));
     });
 
     return {
         category: category || nearestRnCategory($, $tr),
-        position: pos.replace(/[^\d.]/g, '') || pos,
+        position: pos || null,
         sail_number: sail,
         boat_name: boat || null,
         skipper,
