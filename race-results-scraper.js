@@ -340,6 +340,15 @@ function cheerioLoadText(fragment) {
         .trim();
 }
 
+function cleanRnCategory(text) {
+    return normalizeSpace(text)
+        .replace(/\(top\)/ig, ' ')
+        .replace(/Series Standing.*/i, ' ')
+        .replace(/\(\s*\d+\s*boats?\)/ig, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 function nearestRnCategory($, $el) {
     const $tbody = $el.closest('tbody');
     const fleet = ($tbody.attr('data-fleet') || '').trim();
@@ -347,15 +356,15 @@ function nearestRnCategory($, $el) {
     const $h2 = $el.closest('table').prevAll('h2').first();
     if ($h2.length) {
         const named = cellText($, $h2.find('a[name]').first()) || cellText($, $h2.find('a').first());
-        if (named) return named.replace(/\(top\)/ig, '').trim();
-        return cellText($, $h2).replace(/\(top\)/ig, '').replace(/Series Standing.*/i, '').trim();
+        if (named) return cleanRnCategory(named);
+        return cleanRnCategory(cellText($, $h2));
     }
     return '';
 }
 
 const RN_LETTER_SCORES = 'DNC|DNS|DNF|DSQ|DNE|DGM|OCS|UFD|BFD|SCP|ZFP|TLE|NSC|RET|RAF|RDG|DPI|DCT|STP';
 const RN_RACE_SCORE_RE = new RegExp(
-    `^(?:\\(?\\d+(?:\\.\\d+)?\\)?(?:\\[[^\\]]+\\])?|\\d+(?:\\.\\d+)?\\/(?:${RN_LETTER_SCORES})|(?:${RN_LETTER_SCORES})(?:\\/\\d+(?:\\.\\d+)?)?)$`,
+    `^(?:\\d+(?:\\.\\d+)?(?:\\/(?:${RN_LETTER_SCORES}))?|(?:${RN_LETTER_SCORES})(?:\\/\\d+(?:\\.\\d+)?)?)$`,
     'i'
 );
 const RN_SKIP_CELL_CLASS_RE = /pos|sail-num|boatname|handicap|country|corrected-time|elapsed-time|finish-time/;
@@ -366,10 +375,60 @@ function isRnClockTime(text) {
     return /^\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?$/.test(t.replace(/\s+/g, ''));
 }
 
-function isRnRaceScore(text) {
+function unwrapRnScore(text) {
     const t = normalizeSpace(text).replace(/\s+/g, '');
-    if (!t || isRnClockTime(t)) return false;
-    return RN_RACE_SCORE_RE.test(t);
+    const m = t.match(/^\[(.+)\]$/) || t.match(/^\((.+)\)$/);
+    return m ? m[1] : t;
+}
+
+function isRnRaceScore(text) {
+    const inner = unwrapRnScore(text);
+    if (!inner || isRnClockTime(inner)) return false;
+    if (RN_RACE_SCORE_RE.test(inner)) return true;
+    return /^\d+(?:\.\d+)?\/[A-Z]{2,8}(?:-[A-Z0-9]{1,8})?$/i.test(inner);
+}
+
+function hrefMatchesRnFleet(href, fleet) {
+    if (!fleet) return true;
+    const decoded = decodeURIComponent(String(href || '').replace(/\+/g, '%20')).replace(/\s+/g, ' ');
+    const want = String(fleet).replace(/\s+/g, ' ');
+    return decoded.toLowerCase().includes(want.toLowerCase());
+}
+
+function getRnRaceColumnIndexes($, $tbody) {
+    const fleet = (($tbody && $tbody.attr && $tbody.attr('data-fleet')) || '').trim();
+    const findHeader = (scope, matchFleet) => {
+        let $header = null;
+        if (!scope || !scope.length) return null;
+        scope.find('tr').each((_, tr) => {
+            const $tr = $(tr);
+            const $link = $tr.find('a[href*="race_num="]').first();
+            if (!$link.length) return;
+            if (matchFleet && !hrefMatchesRnFleet($link.attr('href'), fleet)) return;
+            $header = $tr;
+            return false;
+        });
+        return $header;
+    };
+
+    const $table = $tbody && $tbody.closest ? $tbody.closest('table') : null;
+    let $header = $table && $table.length ? findHeader($table, false) : null;
+    if (!$header) {
+        $('tr').each((_, tr) => {
+            const $tr = $(tr);
+            const $link = $tr.find('a[href*="race_num="]').first();
+            if (!$link.length) return;
+            if (fleet && !hrefMatchesRnFleet($link.attr('href'), fleet)) return;
+            $header = $tr;
+            return false;
+        });
+    }
+    if (!$header || !$header.length) return [];
+    const idxs = [];
+    $header.children('td, th').each((i, cell) => {
+        if ($(cell).find('a[href*="race_num="]').length) idxs.push(i);
+    });
+    return idxs;
 }
 
 function firstNumericRnPos($, $tr) {
@@ -383,7 +442,26 @@ function firstNumericRnPos($, $tr) {
     return pos;
 }
 
-function extractRnResultRow($, $tr, category) {
+function extractRnRaceBits($, $tr, raceIdxs) {
+    if (raceIdxs && raceIdxs.length) {
+        const $cells = $tr.children('td');
+        return raceIdxs.map((i) => cellText($, $cells.eq(i)).replace(/\s+/g, ''));
+    }
+    const raceBits = [];
+    $tr.children('td').each((_, td) => {
+        const $td = $(td);
+        const cls = $td.attr('class') || '';
+        if (RN_SKIP_CELL_CLASS_RE.test(cls)) return;
+        if ($td.find('.the-score').length) return;
+        const bg = ($td.attr('bgcolor') || '').toUpperCase();
+        if (bg === '#999999') return;
+        const t = cellText($, $td);
+        if (isRnRaceScore(t)) raceBits.push(t.replace(/\s+/g, ''));
+    });
+    return raceBits;
+}
+
+function extractRnResultRow($, $tr, category, raceIdxs) {
     const $score = $tr.find('.the-score').first();
     const skipper = normalizeSpace($score.attr('data-skipper') || cellText($, $tr.find('td.country').first()));
     const sail = normalizeSpace($score.attr('data-sail') || cellText($, $tr.find('td.sail-num').first()));
@@ -413,17 +491,7 @@ function extractRnResultRow($, $tr, category) {
         }
     }
 
-    const raceBits = [];
-    $tr.children('td').each((_, td) => {
-        const $td = $(td);
-        const cls = $td.attr('class') || '';
-        if (RN_SKIP_CELL_CLASS_RE.test(cls)) return;
-        if ($td.find('.the-score').length) return;
-        const bg = ($td.attr('bgcolor') || '').toUpperCase();
-        if (bg === '#999999') return;
-        const t = cellText($, $td);
-        if (isRnRaceScore(t)) raceBits.push(t.replace(/\s+/g, ''));
-    });
+    const raceBits = extractRnRaceBits($, $tr, raceIdxs);
 
     return {
         category: category || nearestRnCategory($, $tr),
@@ -458,14 +526,16 @@ function parseRnResultsPage($, event) {
     $('tbody.results, tbody[data-fleet]').each((_, tbody) => {
         const $tbody = $(tbody);
         const category = ($tbody.attr('data-fleet') || '').trim();
-        $tbody.find('tr').each((__, tr) => add(extractRnResultRow($, $(tr), category)));
+        const raceIdxs = getRnRaceColumnIndexes($, $tbody);
+        $tbody.find('tr').each((__, tr) => add(extractRnResultRow($, $(tr), category, raceIdxs)));
     });
 
     if (!rows.length) {
         $('tr').each((_, tr) => {
             const $tr = $(tr);
             if (!$tr.find('.the-score, td.sail-num, td.boatname').length) return;
-            add(extractRnResultRow($, $tr, nearestRnCategory($, $tr)));
+            const raceIdxs = getRnRaceColumnIndexes($, $tr.closest('tbody, table'));
+            add(extractRnResultRow($, $tr, nearestRnCategory($, $tr), raceIdxs));
         });
     }
     return rows;

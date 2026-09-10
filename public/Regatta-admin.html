@@ -881,7 +881,7 @@
 
         <div class="scrape-section" id="raceResultsSection">
             <h2>Scrape Race Results</h2>
-            <p>Collect results from Regatta Network and ClubSpot into <code>scraped_race_results</code>. Existing chatbot data is not changed. Re-running a scrape <strong>updates</strong> matching rows (same event, class, sail number, skipper) instead of inserting duplicates.</p>
+            <p>Collect results from Regatta Network and ClubSpot into <code>scraped_race_results</code>. Each sailor row stores the race class (for example ISCA/Sunfish), overall place, and every race score in order — including throwouts in brackets and DNC/DNF. Existing chatbot data is not changed. Re-running a scrape <strong>updates</strong> matching rows instead of inserting duplicates.</p>
 
             <div id="raceResultsStats" class="stats-container" style="margin-top: 16px;"></div>
 
