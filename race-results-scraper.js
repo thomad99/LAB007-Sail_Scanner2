@@ -132,10 +132,6 @@ function cellText($, el) {
     return $(el).text().replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-function normalizeHeader(text) {
-    return String(text || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
-}
-
 async function ensureScrapedResultsTable(pool) {
     await pool.query(`
         CREATE TABLE IF NOT EXISTS ${TABLE} (
@@ -332,62 +328,114 @@ function parseRnListing($, lookbackDays) {
 }
 
 function cheerioLoadText(fragment) {
-    return String(fragment || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    return String(fragment || '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function nearestRnCategory($, $el) {
+    const $tbody = $el.closest('tbody');
+    const fleet = ($tbody.attr('data-fleet') || '').trim();
+    if (fleet) return fleet;
+    const $h2 = $el.closest('table').prevAll('h2').first();
+    if ($h2.length) {
+        const named = cellText($, $h2.find('a[name]').first()) || cellText($, $h2.find('a').first());
+        if (named) return named.replace(/\(top\)/ig, '').trim();
+        return cellText($, $h2).replace(/\(top\)/ig, '').replace(/Series Standing.*/i, '').trim();
+    }
+    return '';
+}
+
+function extractRnResultRow($, $tr, category) {
+    const $score = $tr.find('.the-score').first();
+    const skipper = normalizeSpace($score.attr('data-skipper') || cellText($, $tr.find('td.country').first()));
+    const sail = normalizeSpace($score.attr('data-sail') || cellText($, $tr.find('td.sail-num').first()));
+    const boat = normalizeSpace($score.attr('data-boat') || cellText($, $tr.find('td.boatname').first()));
+    if (!skipper && !sail) return null;
+
+    const pos = normalizeSpace(cellText($, $tr.find('td.pos').first()));
+    const total = normalizeSpace(cellText($, $score));
+
+    let yachtClub = '';
+    const $country = $tr.find('td.country').first();
+    if ($country.length) {
+        let $n = $country.next();
+        while ($n.length) {
+            const cls = ($n.attr('class') || '');
+            const bg = ($n.attr('bgcolor') || '').toUpperCase();
+            const t = cellText($, $n);
+            if (bg === '#999999' || cls.includes('pos') || $n.find('.the-score').length) {
+                $n = $n.next();
+                continue;
+            }
+            if (t) {
+                yachtClub = t;
+                break;
+            }
+            $n = $n.next();
+        }
+    }
+
+    const raceBits = [];
+    $tr.children('td').each((_, td) => {
+        const $td = $(td);
+        const cls = $td.attr('class') || '';
+        if (/pos|sail-num|boatname|handicap|country/.test(cls)) return;
+        if ($td.find('.the-score').length) return;
+        const bg = ($td.attr('bgcolor') || '').toUpperCase();
+        if (bg === '#999999') return;
+        const t = cellText($, $td);
+        if (t) raceBits.push(t);
+    });
+
+    return {
+        category: category || nearestRnCategory($, $tr),
+        position: pos.replace(/[^\d.]/g, '') || pos,
+        sail_number: sail,
+        boat_name: boat || null,
+        skipper,
+        yacht_club: yachtClub || null,
+        results: raceBits.join(',') || null,
+        total_points: total || null
+    };
 }
 
 function parseRnResultsPage($, event) {
     const rows = [];
-    $('tbody.results').each((_, tbody) => {
+    const seen = new Set();
+    const add = (parsed) => {
+        if (!parsed) return;
+        const key = `${parsed.category}|${parsed.sail_number}|${parsed.skipper}`.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        rows.push({
+            source: 'regattanetwork',
+            source_event_id: event.source_event_id,
+            source_url: event.results_url,
+            regatta_name: event.regatta_name,
+            regatta_date: event.regatta_date,
+            ...parsed
+        });
+    };
+
+    $('tbody.results, tbody[data-fleet]').each((_, tbody) => {
         const $tbody = $(tbody);
         const category = ($tbody.attr('data-fleet') || '').trim();
-        const $table = $tbody.closest('table');
-        const headerCells = $table.find('thead tr').first().children('td, th');
-        const headers = [];
-        headerCells.each((i, td) => {
-            const text = normalizeHeader($(td));
-            headers.push({ i, text });
-        });
-
-        const col = (name) => {
-            const hit = headers.find(h => h.text === name || h.text.startsWith(name));
-            return hit ? hit.i : -1;
-        };
-        const posIdx = col('pos');
-        const sailIdx = col('sail');
-        const boatIdx = col('boat');
-        const skipperIdx = col('skipper');
-        const clubIdx = headers.findIndex(h => h.text.includes('yacht') && h.text.includes('club')) >= 0
-            ? headers.findIndex(h => h.text.includes('yacht') && h.text.includes('club'))
-            : col('club');
-        const totalIdx = col('total');
-        const raceIdxs = headers.filter(h => /^\d+$/.test(h.text)).map(h => h.i);
-
-        $tbody.children('tr').each((__, tr) => {
-            const $tds = $(tr).children('td');
-            if (!$tds.length) return;
-            const val = (idx) => (idx >= 0 && idx < $tds.length) ? cellText($, $tds.eq(idx)) : '';
-            const skipper = val(skipperIdx);
-            const sail = val(sailIdx);
-            if (!skipper && !sail) return;
-
-            const raceBits = raceIdxs.map(i => val(i)).filter(Boolean);
-            rows.push({
-                source: 'regattanetwork',
-                source_event_id: event.source_event_id,
-                source_url: event.results_url,
-                regatta_name: event.regatta_name,
-                regatta_date: event.regatta_date,
-                category,
-                position: val(posIdx).replace(/[^\d.]/g, '') || val(posIdx),
-                sail_number: sail,
-                boat_name: val(boatIdx) || null,
-                skipper,
-                yacht_club: val(clubIdx) || event.host_club || null,
-                results: raceBits.join(',') || null,
-                total_points: val(totalIdx) || null
-            });
-        });
+        $tbody.find('tr').each((__, tr) => add(extractRnResultRow($, $(tr), category)));
     });
+
+    if (!rows.length) {
+        $('tr').each((_, tr) => {
+            const $tr = $(tr);
+            if (!$tr.find('.the-score, td.sail-num, td.boatname').length) return;
+            add(extractRnResultRow($, $tr, nearestRnCategory($, $tr)));
+        });
+    }
     return rows;
 }
 
@@ -482,7 +530,11 @@ async function scrapeRegattaNetwork(axios, cheerio, pool, lookbackDays) {
             job.stats.regattanetwork.eventsScraped += 1;
             job.stats.regattanetwork.rowsInserted += n.inserted;
             job.stats.regattanetwork.rowsUpdated += n.updated;
-            logLine(`RN ${event.source_event_id}: ${event.regatta_name} → ${n.inserted} new, ${n.updated} updated`);
+            if (!rows.length) {
+                logLine(`RN ${event.source_event_id}: ${event.regatta_name} → no standing rows parsed`);
+            } else {
+                logLine(`RN ${event.source_event_id}: ${event.regatta_name} → ${n.inserted} new, ${n.updated} updated (${rows.length} parsed)`);
+            }
         } catch (err) {
             job.stats.regattanetwork.errors += 1;
             logLine(`RN ${event.source_event_id} error: ${err.message}`);
