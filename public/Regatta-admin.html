@@ -692,6 +692,56 @@
             white-space: pre-wrap;
             margin-top: 12px;
         }
+
+        .admin-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 0;
+            margin: 24px auto 8px;
+            width: 100%;
+            max-width: 560px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 10px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .admin-tab {
+            flex: 1;
+            padding: 14px 18px;
+            border: none;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 1.05em;
+            font-weight: bold;
+            cursor: pointer;
+            letter-spacing: 0.3px;
+        }
+
+        .admin-tab.active {
+            background: #0066cc;
+            color: white;
+        }
+
+        .admin-tab:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.08);
+            color: white;
+        }
+
+        .tab-panel {
+            display: none;
+            width: 100%;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
+
+        .lookback-hint {
+            color: #aaa;
+            font-size: 0.9em;
+            margin-top: 8px;
+        }
     </style>
 </head>
 
@@ -700,7 +750,14 @@
 
     <div class="content">
         <h1>Regatta Admin Dashboard</h1>
-        <p>View regatta database statistics and scraping history</p>
+
+        <div class="admin-tabs" role="tablist">
+            <button type="button" class="admin-tab active" id="tabBtnDates" onclick="showAdminTab('dates')">Regatta Dates</button>
+            <button type="button" class="admin-tab" id="tabBtnResults" onclick="showAdminTab('results')">Regatta Results</button>
+        </div>
+
+        <div id="tab-dates" class="tab-panel active">
+        <p>Upcoming / calendar events from Regatta Network, Clubspot, and High School Sailing</p>
 
         <div class="action-buttons">
             <button class="refresh-button" id="refreshButton" onclick="loadAll()">Refresh All</button>
@@ -710,7 +767,7 @@
 
         <div id="clearWarning" class="clear-warning" style="display: none;">
             <h3>⚠️ Warning: This will delete ALL regattas!</h3>
-            <p>This action cannot be undone. All regatta data will be permanently deleted from the database.</p>
+            <p>This action cannot be undone. All regatta date/calendar data will be permanently deleted from the database. Scraped race results are not affected.</p>
             <p>Are you absolutely sure you want to proceed?</p>
             <div class="confirm-buttons">
                 <button class="confirm-button yes" onclick="clearAllRegattas()">Yes, Delete All</button>
@@ -719,8 +776,8 @@
         </div>
 
         <div class="scrape-section">
-            <h2>Scrape Regattas</h2>
-            <p>Pull the latest regatta data from Regatta Network, Clubspot, and High School Sailing</p>
+            <h2>Scrape Regatta Dates</h2>
+            <p>Pull upcoming event listings (name, date, location, links) — not race results</p>
             
             <div class="scrape-source-select">
                 <label for="scrapeSourceSelect">Select Source:</label>
@@ -743,41 +800,6 @@
             <h2>Scheduled Scrape Status</h2>
             <p>Weekly scrape runs every Sunday at 02:00 UTC for all 3 sources.</p>
             <div id="scheduledScrapeStatusContainer" class="loading">Loading...</div>
-        </div>
-
-        <div class="scrape-section" id="raceResultsSection">
-            <h2>Scrape Race Results (test)</h2>
-            <p>Collect skipper / sail / class / points from Regatta Network and ClubSpot into a <strong>new</strong> table (<code>scraped_race_results</code>), leaving the existing chatbot data untouched. Test cap: last <strong>2 months</strong> only.</p>
-
-            <div id="raceResultsStats" class="stats-container" style="margin-top: 16px;"></div>
-
-            <div class="scrape-source-select">
-                <label for="resultsSourceSelect">Select Source:</label>
-                <select id="resultsSourceSelect">
-                    <option value="all">Both sources</option>
-                    <option value="regattanetwork">Regatta Network only</option>
-                    <option value="clubspot">ClubSpot only</option>
-                </select>
-            </div>
-
-            <div class="action-buttons">
-                <button class="action-button scrape" id="resultsScrapeButton" onclick="startResultsScrape()">Start Results Scrape</button>
-                <button class="action-button" onclick="loadRaceResultsStats()">Refresh Stats</button>
-                <button class="action-button danger" onclick="clearScrapedResults()">Clear Scraped Results</button>
-            </div>
-
-            <div class="scrape-status" id="resultsScrapeStatus"></div>
-            <div class="results-log" id="resultsScrapeLog"></div>
-
-            <div class="results-chat">
-                <h3 style="margin-top: 0; color: #7ecfff;">Ask the scraped data</h3>
-                <p style="color: #aaa; font-size: 0.9em;">LLM chat against the new table only. Try “what's in the data”, “who won Wickford Regatta”, or a sailor name.</p>
-                <div class="results-chat-log" id="resultsChatLog"></div>
-                <div class="results-chat-row">
-                    <input id="resultsChatInput" type="text" placeholder="Ask about sailors, winners, clubs...">
-                    <button type="button" id="resultsChatSend" onclick="sendResultsChat()">Send</button>
-                </div>
-            </div>
         </div>
 
         <div id="statsContainer" class="loading">Loading statistics...</div>
@@ -852,6 +874,60 @@
                 </table>
             </div>
         </div>
+        </div>
+
+        <div id="tab-results" class="tab-panel">
+        <p>Past race standings (skipper, sail, class, points) stored in a separate table for chatbot testing</p>
+
+        <div class="scrape-section" id="raceResultsSection">
+            <h2>Scrape Race Results</h2>
+            <p>Collect results from Regatta Network and ClubSpot into <code>scraped_race_results</code>. Existing chatbot data is not changed. Re-running a scrape <strong>updates</strong> matching rows (same event, class, sail number, skipper) instead of inserting duplicates.</p>
+
+            <div id="raceResultsStats" class="stats-container" style="margin-top: 16px;"></div>
+
+            <div class="scrape-source-select">
+                <label for="resultsLookbackSelect">How far back to collect:</label>
+                <select id="resultsLookbackSelect" onchange="updateLookbackHint()">
+                    <option value="7">Last 7 days</option>
+                    <option value="14">Last 14 days</option>
+                    <option value="30">Last 1 month</option>
+                    <option value="60" selected>Last 2 months</option>
+                    <option value="90">Last 3 months</option>
+                    <option value="180">Last 6 months</option>
+                    <option value="365">Last 1 year</option>
+                </select>
+                <p class="lookback-hint" id="lookbackHint"></p>
+            </div>
+
+            <div class="scrape-source-select">
+                <label for="resultsSourceSelect">Select Source:</label>
+                <select id="resultsSourceSelect">
+                    <option value="all">Both sources</option>
+                    <option value="regattanetwork">Regatta Network only</option>
+                    <option value="clubspot">ClubSpot only</option>
+                </select>
+            </div>
+
+            <div class="action-buttons">
+                <button class="action-button scrape" id="resultsScrapeButton" onclick="startResultsScrape()">Start Results Scrape</button>
+                <button class="action-button" onclick="loadRaceResultsStats()">Refresh Stats</button>
+                <button class="action-button danger" onclick="clearScrapedResults()">Clear Scraped Results</button>
+            </div>
+
+            <div class="scrape-status" id="resultsScrapeStatus"></div>
+            <div class="results-log" id="resultsScrapeLog"></div>
+
+            <div class="results-chat">
+                <h3 style="margin-top: 0; color: #7ecfff;">Ask the scraped data</h3>
+                <p style="color: #aaa; font-size: 0.9em;">LLM chat against the new table only. Try “what's in the data”, “who won Wickford Regatta”, or a sailor name.</p>
+                <div class="results-chat-log" id="resultsChatLog"></div>
+                <div class="results-chat-row">
+                    <input id="resultsChatInput" type="text" placeholder="Ask about sailors, winners, clubs...">
+                    <button type="button" id="resultsChatSend" onclick="sendResultsChat()">Send</button>
+                </div>
+            </div>
+        </div>
+        </div>
 
         <a href="index.html" class="back-link">← Back to Home</a>
     </div>
@@ -875,6 +951,33 @@
     </div>
 
     <script>
+        function showAdminTab(name) {
+            const dates = name === 'dates';
+            document.getElementById('tab-dates').classList.toggle('active', dates);
+            document.getElementById('tab-results').classList.toggle('active', !dates);
+            document.getElementById('tabBtnDates').classList.toggle('active', dates);
+            document.getElementById('tabBtnResults').classList.toggle('active', !dates);
+            if (location.hash !== '#' + name) {
+                history.replaceState(null, '', '#' + name);
+            }
+        }
+
+        function lookbackLabel(days) {
+            const n = parseInt(days, 10);
+            const d = new Date();
+            d.setDate(d.getDate() - n);
+            const from = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            return `Will collect results from ${from} through today (${n} days). Longer windows take more time.`;
+        }
+
+        function updateLookbackHint() {
+            const sel = document.getElementById('resultsLookbackSelect');
+            if (!sel) return;
+            localStorage.setItem('raceResultsLookbackDays', sel.value);
+            const hint = document.getElementById('lookbackHint');
+            if (hint) hint.textContent = lookbackLabel(sel.value);
+        }
+
         function toggleMenu() {
             const mobileMenu = document.getElementById('mobileMenu');
             if (mobileMenu.style.display === 'flex') {
@@ -1399,7 +1502,7 @@
                 const cs = st.clubspot || {};
                 if (data.running) {
                     showResultsStatus(
-                        `Scraping… RN events ${rn.eventsScraped || 0}/${rn.eventsFound || 0} (${rn.rowsUpserted || 0} rows). ClubSpot ${cs.eventsScraped || 0}/${cs.eventsFound || 0} (${cs.rowsUpserted || 0} rows).`,
+                        `Scraping last ${data.lookbackDays || '?'} days… RN ${rn.eventsScraped || 0}/${rn.eventsFound || 0} events (${rn.rowsInserted || 0} new, ${rn.rowsUpdated || 0} updated). ClubSpot ${cs.eventsScraped || 0}/${cs.eventsFound || 0} (${cs.rowsInserted || 0} new, ${cs.rowsUpdated || 0} updated).`,
                         ''
                     );
                     document.getElementById('resultsScrapeButton').disabled = true;
@@ -1415,9 +1518,9 @@
                     if (data.finishedAt) {
                         const kind = data.error ? 'error' : 'success';
                         showResultsStatus(
-                            `${data.error ? 'Finished with errors: ' + escapeHtml(data.error) : 'Last scrape finished.'}<br>` +
-                            `Regatta Network: ${rn.eventsScraped || 0} events, ${rn.rowsUpserted || 0} rows, ${rn.errors || 0} errors.<br>` +
-                            `ClubSpot: ${cs.eventsScraped || 0} events, ${cs.rowsUpserted || 0} rows, ${cs.errors || 0} errors.`,
+                            `${data.error ? 'Finished with errors: ' + escapeHtml(data.error) : 'Last scrape finished (duplicates are updated, not re-inserted).'}<br>` +
+                            `Regatta Network: ${rn.eventsScraped || 0} events, ${rn.rowsInserted || 0} new, ${rn.rowsUpdated || 0} updated, ${rn.errors || 0} errors.<br>` +
+                            `ClubSpot: ${cs.eventsScraped || 0} events, ${cs.rowsInserted || 0} new, ${cs.rowsUpdated || 0} updated, ${cs.errors || 0} errors.`,
                             kind
                         );
                         if (!once) loadRaceResultsStats();
@@ -1430,13 +1533,14 @@
 
         async function startResultsScrape() {
             const source = document.getElementById('resultsSourceSelect').value;
+            const lookbackDays = parseInt(document.getElementById('resultsLookbackSelect').value, 10) || 60;
             document.getElementById('resultsScrapeButton').disabled = true;
-            showResultsStatus('Starting results scrape (last 2 months)…', '');
+            showResultsStatus(`Starting results scrape (last ${lookbackDays} days)…`, '');
             try {
                 const res = await fetch('/api/race-results/scrape', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ source, lookbackDays: 60 })
+                    body: JSON.stringify({ source, lookbackDays })
                 });
                 const data = await res.json();
                 if (!data.success && res.status !== 409) throw new Error(data.error || 'Failed to start');
@@ -1500,6 +1604,20 @@
 
         // Load stats and regattas on page load
         window.addEventListener('DOMContentLoaded', () => {
+            const savedLookback = localStorage.getItem('raceResultsLookbackDays');
+            const lookSel = document.getElementById('resultsLookbackSelect');
+            if (lookSel && savedLookback && [...lookSel.options].some(o => o.value === savedLookback)) {
+                lookSel.value = savedLookback;
+            }
+            updateLookbackHint();
+
+            const hash = (location.hash || '').replace('#', '');
+            showAdminTab(hash === 'results' ? 'results' : 'dates');
+            window.addEventListener('hashchange', () => {
+                const h = (location.hash || '').replace('#', '');
+                showAdminTab(h === 'results' ? 'results' : 'dates');
+            });
+
             loadAll();
             
             // Allow Enter key to apply filters

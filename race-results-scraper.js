@@ -3,10 +3,11 @@
  * Stores rows in scraped_race_results (separate from the existing
  * regattanetworkdata table used by the public chatbot).
  *
- * Test cap: last LOOKBACK_DAYS (default 60) of events only.
+ * Lookback window is chosen in the admin UI (default 60 days, max 365).
  */
 
 const LOOKBACK_DAYS = 60;
+const LOOKBACK_MAX_DAYS = 365;
 const TABLE = 'scraped_race_results';
 const PARSE_APP_ID = 'myclubspot2017';
 const PARSE_REGATTAS_URL = 'https://theclubspot.com/parse/classes/regattas';
@@ -29,9 +30,52 @@ const job = {
 
 function emptyStats() {
     return {
-        regattanetwork: { eventsFound: 0, eventsScraped: 0, rowsUpserted: 0, errors: 0 },
-        clubspot: { eventsFound: 0, eventsScraped: 0, rowsUpserted: 0, errors: 0 }
+        regattanetwork: { eventsFound: 0, eventsScraped: 0, rowsInserted: 0, rowsUpdated: 0, errors: 0 },
+        clubspot: { eventsFound: 0, eventsScraped: 0, rowsInserted: 0, rowsUpdated: 0, errors: 0 }
     };
+}
+
+function normalizeSpace(s) {
+    return String(s == null ? '' : s).replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function normalizeSail(s) {
+    return normalizeSpace(s).replace(/[\s-]/g, '').toUpperCase();
+}
+
+function resultDedupeKey(row) {
+    return [
+        normalizeSpace(row.source).toLowerCase(),
+        normalizeSpace(row.source_event_id).toLowerCase(),
+        normalizeSpace(row.category).toLowerCase(),
+        normalizeSail(row.sail_number),
+        normalizeSpace(row.skipper).toLowerCase()
+    ].join('|');
+}
+
+function normalizeResultRow(row) {
+    return {
+        ...row,
+        category: normalizeSpace(row.category),
+        sail_number: normalizeSpace(row.sail_number),
+        skipper: normalizeSpace(row.skipper),
+        boat_name: normalizeSpace(row.boat_name) || null,
+        yacht_club: normalizeSpace(row.yacht_club) || null,
+        position: normalizeSpace(row.position) || null,
+        results: normalizeSpace(row.results) || null,
+        total_points: normalizeSpace(row.total_points) || null,
+        dedupe_key: resultDedupeKey(row)
+    };
+}
+
+function dedupeResultRows(rows) {
+    const byKey = new Map();
+    for (const raw of rows) {
+        const row = normalizeResultRow(raw);
+        if (!row.dedupe_key || (!row.skipper && !row.sail_number)) continue;
+        byKey.set(row.dedupe_key, row);
+    }
+    return Array.from(byKey.values());
 }
 
 function snapshotJob() {
@@ -110,9 +154,64 @@ async function ensureScrapedResultsTable(pool) {
             results TEXT,
             total_points TEXT,
             scraped_at TIMESTAMP NOT NULL DEFAULT NOW(),
-            UNIQUE (source, source_event_id, category, sail_number, skipper)
+            dedupe_key TEXT
         )
     `);
+    await pool.query(`ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS dedupe_key TEXT`);
+
+    await pool.query(`
+        UPDATE ${TABLE} SET
+            category = TRIM(REGEXP_REPLACE(COALESCE(category, ''), '\\s+', ' ', 'g')),
+            skipper = TRIM(REGEXP_REPLACE(COALESCE(skipper, ''), '\\s+', ' ', 'g')),
+            sail_number = TRIM(REGEXP_REPLACE(COALESCE(sail_number, ''), '\\s+', ' ', 'g')),
+            boat_name = NULLIF(TRIM(REGEXP_REPLACE(COALESCE(boat_name, ''), '\\s+', ' ', 'g')), ''),
+            yacht_club = NULLIF(TRIM(REGEXP_REPLACE(COALESCE(yacht_club, ''), '\\s+', ' ', 'g')), '')
+    `);
+    await pool.query(`
+        UPDATE ${TABLE} SET dedupe_key =
+            LOWER(TRIM(source)) || '|' ||
+            LOWER(TRIM(source_event_id)) || '|' ||
+            LOWER(TRIM(COALESCE(category, ''))) || '|' ||
+            UPPER(REGEXP_REPLACE(TRIM(COALESCE(sail_number, '')), '[\\s-]+', '', 'g')) || '|' ||
+            LOWER(TRIM(COALESCE(skipper, '')))
+        WHERE dedupe_key IS NULL OR TRIM(dedupe_key) = ''
+           OR dedupe_key IS DISTINCT FROM (
+            LOWER(TRIM(source)) || '|' ||
+            LOWER(TRIM(source_event_id)) || '|' ||
+            LOWER(TRIM(COALESCE(category, ''))) || '|' ||
+            UPPER(REGEXP_REPLACE(TRIM(COALESCE(sail_number, '')), '[\\s-]+', '', 'g')) || '|' ||
+            LOWER(TRIM(COALESCE(skipper, '')))
+           )
+    `);
+
+    const cleaned = await pool.query(`
+        DELETE FROM ${TABLE} a
+        USING ${TABLE} b
+        WHERE a.dedupe_key = b.dedupe_key
+          AND a.dedupe_key IS NOT NULL
+          AND a.id > b.id
+    `);
+    if (cleaned.rowCount) {
+        console.log(`[race-results] Removed ${cleaned.rowCount} duplicate row(s)`);
+    }
+
+    await pool.query(`
+        DO $$
+        DECLARE r RECORD;
+        BEGIN
+            FOR r IN
+                SELECT c.conname
+                FROM pg_constraint c
+                JOIN pg_class t ON c.conrelid = t.oid
+                WHERE t.relname = 'scraped_race_results'
+                  AND c.contype = 'u'
+            LOOP
+                EXECUTE format('ALTER TABLE scraped_race_results DROP CONSTRAINT IF EXISTS %I', r.conname);
+            END LOOP;
+        END $$;
+    `);
+
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_srr_dedupe_key ON ${TABLE}(dedupe_key)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_date ON ${TABLE}(regatta_date)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_skipper ON ${TABLE}(skipper)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_regatta ON ${TABLE}(regatta_name)`);
@@ -120,14 +219,16 @@ async function ensureScrapedResultsTable(pool) {
 }
 
 async function upsertRows(pool, rows) {
-    if (!rows.length) return 0;
-    let upserted = 0;
+    const uniqueRows = dedupeResultRows(rows);
+    if (!uniqueRows.length) return { inserted: 0, updated: 0, total: 0 };
+    let inserted = 0;
+    let updated = 0;
     const BATCH = 40;
-    for (let i = 0; i < rows.length; i += BATCH) {
-        const batch = rows.slice(i, i + BATCH);
+    for (let i = 0; i < uniqueRows.length; i += BATCH) {
+        const batch = uniqueRows.slice(i, i + BATCH);
         const values = [];
         const placeholders = batch.map((r, idx) => {
-            const b = idx * 13;
+            const b = idx * 14;
             values.push(
                 r.source,
                 r.source_event_id,
@@ -141,32 +242,40 @@ async function upsertRows(pool, rows) {
                 r.skipper || '',
                 r.yacht_club || null,
                 r.results || null,
-                r.total_points || null
+                r.total_points || null,
+                r.dedupe_key
             );
-            return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8},$${b + 9},$${b + 10},$${b + 11},$${b + 12},$${b + 13})`;
+            return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8},$${b + 9},$${b + 10},$${b + 11},$${b + 12},$${b + 13},$${b + 14})`;
         });
         const result = await pool.query(`
             INSERT INTO ${TABLE} (
                 source, source_event_id, source_url, regatta_name, regatta_date,
                 category, position, sail_number, boat_name, skipper, yacht_club,
-                results, total_points
+                results, total_points, dedupe_key
             )
             VALUES ${placeholders.join(',')}
-            ON CONFLICT (source, source_event_id, category, sail_number, skipper)
+            ON CONFLICT (dedupe_key)
             DO UPDATE SET
                 source_url = EXCLUDED.source_url,
                 regatta_name = EXCLUDED.regatta_name,
                 regatta_date = EXCLUDED.regatta_date,
+                category = EXCLUDED.category,
                 position = EXCLUDED.position,
+                sail_number = EXCLUDED.sail_number,
                 boat_name = EXCLUDED.boat_name,
+                skipper = EXCLUDED.skipper,
                 yacht_club = EXCLUDED.yacht_club,
                 results = EXCLUDED.results,
                 total_points = EXCLUDED.total_points,
                 scraped_at = NOW()
+            RETURNING (xmax = 0) AS inserted
         `, values);
-        upserted += result.rowCount || batch.length;
+        for (const row of result.rows) {
+            if (row.inserted) inserted += 1;
+            else updated += 1;
+        }
     }
-    return upserted;
+    return { inserted, updated, total: inserted + updated };
 }
 
 function parseRnListing($, lookbackDays) {
@@ -345,9 +454,22 @@ function rowsFromClubspotPayload(payload, event, classId) {
 
 async function scrapeRegattaNetwork(axios, cheerio, pool, lookbackDays) {
     logLine('Regatta Network: loading results archive');
-    const response = await axios.get(RN_ARCHIVE_URL, { headers: HTTP_HEADERS, timeout: 45000 });
-    const $ = cheerio.load(response.data);
-    const events = parseRnListing($, lookbackDays);
+    const from = lookbackCutoff(lookbackDays);
+    const fromYear = from.getUTCFullYear();
+    const thisYear = new Date().getUTCFullYear();
+    const urls = [RN_ARCHIVE_URL];
+    for (let y = fromYear; y <= thisYear; y++) {
+        urls.push(`https://www.regattanetwork.com/clubmgmt/applet_past_results.php?year=${y}`);
+    }
+
+    const byId = new Map();
+    for (const url of urls) {
+        const response = await axios.get(url, { headers: HTTP_HEADERS, timeout: 45000 });
+        const events = parseRnListing(cheerio.load(response.data), lookbackDays);
+        events.forEach(e => byId.set(e.source_event_id, e));
+        await sleep(150);
+    }
+    const events = Array.from(byId.values());
     job.stats.regattanetwork.eventsFound = events.length;
     logLine(`Regatta Network: ${events.length} events in last ${lookbackDays} days`);
 
@@ -358,8 +480,9 @@ async function scrapeRegattaNetwork(axios, cheerio, pool, lookbackDays) {
             const rows = parseRnResultsPage(cheerio.load(page.data), event);
             const n = await upsertRows(pool, rows);
             job.stats.regattanetwork.eventsScraped += 1;
-            job.stats.regattanetwork.rowsUpserted += n;
-            logLine(`RN ${event.source_event_id}: ${event.regatta_name} → ${rows.length} rows`);
+            job.stats.regattanetwork.rowsInserted += n.inserted;
+            job.stats.regattanetwork.rowsUpdated += n.updated;
+            logLine(`RN ${event.source_event_id}: ${event.regatta_name} → ${n.inserted} new, ${n.updated} updated`);
         } catch (err) {
             job.stats.regattanetwork.errors += 1;
             logLine(`RN ${event.source_event_id} error: ${err.message}`);
@@ -459,8 +582,9 @@ async function scrapeClubspot(axios, pool, lookbackDays) {
             }
             const n = await upsertRows(pool, eventRows);
             job.stats.clubspot.eventsScraped += 1;
-            job.stats.clubspot.rowsUpserted += n;
-            logLine(`CS ${event.source_event_id}: ${event.regatta_name} → ${eventRows.length} rows`);
+            job.stats.clubspot.rowsInserted += n.inserted;
+            job.stats.clubspot.rowsUpdated += n.updated;
+            logLine(`CS ${event.source_event_id}: ${event.regatta_name} → ${n.inserted} new, ${n.updated} updated`);
         } catch (err) {
             job.stats.clubspot.errors += 1;
             logLine(`CS ${event.source_event_id} error: ${err.message}`);
@@ -514,6 +638,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
             success: true,
             tableName: TABLE,
             lookbackDaysDefault: LOOKBACK_DAYS,
+            lookbackDaysMax: LOOKBACK_MAX_DAYS,
             ...snapshotJob()
         });
     });
@@ -564,7 +689,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
         if (!['all', 'regattanetwork', 'clubspot'].includes(source)) {
             return res.status(400).json({ success: false, error: 'source must be all, regattanetwork, or clubspot' });
         }
-        const lookbackDays = Math.min(60, Math.max(1, parseInt((req.body && req.body.lookbackDays) || LOOKBACK_DAYS, 10) || LOOKBACK_DAYS));
+        const lookbackDays = Math.min(LOOKBACK_MAX_DAYS, Math.max(1, parseInt((req.body && req.body.lookbackDays) || LOOKBACK_DAYS, 10) || LOOKBACK_DAYS));
         job.running = true;
         job.startedAt = new Date().toISOString();
         job.finishedAt = null;
@@ -771,6 +896,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
 
 module.exports = {
     LOOKBACK_DAYS,
+    LOOKBACK_MAX_DAYS,
     TABLE,
     ensureScrapedResultsTable,
     attachRaceResultsScraper,
