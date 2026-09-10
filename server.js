@@ -3754,6 +3754,7 @@ const SOZNODATA_EXCLUDE = ` AND NOT (
     UPPER(TRIM(COALESCE(category,''))) = 'SOZNODATA'
 )`;
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+const { parseChatIntent } = require('./chat-intent');
 
 app.get('/api/sailbot/stats', async (req, res) => {
     try {
@@ -4156,31 +4157,6 @@ app.post('/api/sailbot/upload', csvUpload.single('file'), async (req, res) => {
 });
 
 // ---------- Chatbot (OpenAI + SailBot search) ----------
-const CHAT_SYSTEM = `You are a sailing results assistant. Users ask about sailors, boats, clubs, regattas, rankings, or regions.
-
-First, interpret and refine the user's question into a clear, specific search (e.g. "top 10 sailors by regatta count" → top_sailors; "sailors who race for Coral Reef YC" → club_sailors with yacht_club).
-
-Then output a JSON object with:
-- "intent": one of sailor_search, boat_search, club_search, regatta_search, club_sailors, top_sailors, top_clubs, clubs_in_region
-- "skipper": person name when searching for a sailor's results
-- "boat_name": when searching by boat
-- "yacht_club": club name when searching by club or "sailors at club X"
-- "regatta_name": when searching by regatta
-- "year": optional integer (e.g. 2024)
-- "region": location/state name for "clubs in X" (e.g. "Florida", "Texas")
-
-Rules:
-- If the user's message contains "regatta" (or "the regatta") and any name or phrase → intent "regatta_search", "regatta_name": that phrase. Extract the regatta name (e.g. "Optimist regatta", "Coral Reef", "Natl Champs") and use it as regatta_name. Do NOT treat it as a sailor. Match broadly: even partial names like "Optimist" or "Spring" are fine.
-- Person name only, no "regatta" (e.g. "Dominic Thomas") → intent "sailor_search", "skipper": "Dominic Thomas"
-- "Sailors at [club]" / "who races for [club]" / "[club name]" when meaning list sailors → intent "club_sailors", "yacht_club": "[club]"
-- "Top 10 sailors" / "best sailors" / "most active sailors" → intent "top_sailors"
-- "Top 10 clubs" / "most active clubs" → intent "top_clubs"
-- "Clubs in Florida" / "Florida clubs" → intent "clubs_in_region", "region": "Florida"
-- Use the most specific intent that matches. Prefer club_sailors over club_search when user wants a list of sailors at a club.
-- For regatta_search, always set regatta_name to the best matching phrase from the user (even if vague); we will match flexibly.
-
-Reply with ONLY valid JSON, no markdown or extra text.`;
-
 async function runSailbotSearch(criteria) {
     const { skipper, boat_name, yacht_club, regatta_name, year } = criteria || {};
     const params = [];
@@ -4319,26 +4295,7 @@ app.post('/api/chat', async (req, res) => {
         if (!message || !String(message).trim()) {
             return res.status(400).json({ success: false, error: 'Message required' });
         }
-        if (!openai) {
-            return res.status(503).json({ success: false, error: 'OpenAI not configured (OPENAI_API_KEY)' });
-        }
-        const completion = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [
-                { role: 'system', content: CHAT_SYSTEM },
-                { role: 'user', content: String(message).trim() }
-            ],
-            max_tokens: 256,
-            temperature: 0
-        });
-        const raw = completion.choices?.[0]?.message?.content?.trim() || '{}';
-        let parsed = {};
-        try {
-            const json = raw.replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
-            parsed = JSON.parse(json);
-        } catch (_) {
-            return res.status(502).json({ success: false, error: 'Could not parse OpenAI reply as JSON' });
-        }
+        const parsed = await parseChatIntent(message, openai);
         const intent = (parsed.intent || '').toLowerCase();
         const criteria = {
             skipper: parsed.skipper,
@@ -4357,14 +4314,16 @@ app.post('/api/chat', async (req, res) => {
             return res.json({
                 success: true,
                 reply: "Which regatta? Please include the regatta name (e.g. \"Optimist regatta\", \"Spring Champs\"). I'll show dates, sailor count, and top 5 per class.",
-                data: null
+                data: null,
+                parser: parsed.parser || 'rules'
             });
         }
         if (!hasSearchCriteria && !hasAggregateIntent && !hasClubSailors && !hasClubsInRegion) {
             return res.json({
                 success: true,
                 reply: "I couldn't determine what to look up. Try a sailor name, boat, club, a regatta name (e.g. \"Optimist regatta\"), \"sailors at [club]\", \"top 10 sailors\", \"top 10 clubs\", or \"clubs in Florida\".",
-                data: null
+                data: null,
+                parser: parsed.parser || 'rules'
             });
         }
 
@@ -4455,7 +4414,8 @@ app.post('/api/chat', async (req, res) => {
         res.json({
             success: true,
             reply,
-            data
+            data,
+            parser: parsed.parser || 'rules'
         });
     } catch (e) {
         console.error('Chat API error:', e);

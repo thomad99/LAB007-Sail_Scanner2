@@ -919,7 +919,7 @@
 
             <div class="results-chat">
                 <h3 style="margin-top: 0; color: #7ecfff;">Ask the scraped data</h3>
-                <p style="color: #aaa; font-size: 0.9em;">LLM chat against the new table only. Try “what's in the data”, “who won Wickford Regatta”, or a sailor name.</p>
+                <p style="color: #aaa; font-size: 0.9em;">Sailor names, “who won …”, and “what’s in the data” are answered locally (no OpenAI cost). Unclear questions use gpt-4o-mini, then fall back to rules if the API is down.</p>
                 <div class="results-chat-log" id="resultsChatLog"></div>
                 <div class="results-chat-row">
                     <input id="resultsChatInput" type="text" placeholder="Ask about sailors, winners, clubs...">
@@ -1594,6 +1594,8 @@
                 if (data.data && data.data.rows && data.data.rows.length) {
                     html += renderResultsMiniTable(data.data.rows);
                 }
+                const via = { rules: 'local rules', openai: 'OpenAI', cache: 'cached', fallback: 'rules fallback' }[data.parser] || data.parser;
+                if (via) html += `<div style="margin-top:8px;color:#888;font-size:0.75em;">Interpreted via ${escapeHtml(via)}</div>`;
                 addResultsChat('bot', html);
             } catch (err) {
                 addResultsChat('bot', 'Error: ' + escapeHtml(err.message));

@@ -6,6 +6,8 @@
  * Lookback window is chosen in the admin UI (default 60 days, max 365).
  */
 
+const { parseChatIntent } = require('./chat-intent');
+
 const LOOKBACK_DAYS = 60;
 const LOOKBACK_MAX_DAYS = 365;
 const TABLE = 'scraped_race_results';
@@ -665,25 +667,6 @@ async function runScrape({ axios, cheerio, pool, source, lookbackDays }) {
     }
 }
 
-const CHAT_SYSTEM = `You are a sailing results assistant querying a NEW test table of recently scraped race results (last ~2 months from Regatta Network and ClubSpot).
-
-Interpret the user's question and output ONLY a JSON object with:
-- "intent": one of sailor_search, boat_search, club_search, regatta_search, club_sailors, top_sailors, top_clubs, clubs_in_region, data_summary, sample
-- "skipper": sailor name when searching a person
-- "boat_name": when searching by boat
-- "yacht_club": club name
-- "regatta_name": when searching a regatta / who won an event
-- "year": optional integer
-- "region": location/state for "clubs in X"
-- "source": optional "regattanetwork" or "clubspot"
-
-Rules:
-- Overview / "what's in the data" / counts → intent "data_summary"
-- "show me some rows" / "sample" → intent "sample"
-- Message contains "regatta" or "who won" plus a name → intent "regatta_search"
-- Person name only → intent "sailor_search"
-- Reply with ONLY valid JSON.`;
-
 function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
     app.get('/api/race-results/status', (req, res) => {
         res.json({
@@ -781,29 +764,12 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
             if (!message || !String(message).trim()) {
                 return res.status(400).json({ success: false, error: 'Message required' });
             }
-            if (!openai) {
-                return res.status(503).json({ success: false, error: 'OpenAI not configured (OPENAI_API_KEY)' });
-            }
             await ensureScrapedResultsTable(pool);
 
-            const completion = await openai.chat.completions.create({
-                model: 'gpt-4o-mini',
-                messages: [
-                    { role: 'system', content: CHAT_SYSTEM },
-                    { role: 'user', content: String(message).trim() }
-                ],
-                max_tokens: 256,
-                temperature: 0
-            });
-            const raw = completion.choices?.[0]?.message?.content?.trim() || '{}';
-            let parsed = {};
-            try {
-                parsed = JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, '').trim());
-            } catch (_) {
-                parsed = { intent: 'sailor_search', skipper: String(message).trim() };
-            }
-
+            const parsed = await parseChatIntent(message, openai);
             const intent = (parsed.intent || '').toLowerCase();
+            const parser = parsed.parser || 'rules';
+            const ok = (body) => res.json({ parser, ...body });
             const criteria = {
                 skipper: parsed.skipper,
                 boat_name: parsed.boat_name,
@@ -825,7 +791,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 const by = await pool.query(`SELECT source, COUNT(*)::int AS count FROM ${TABLE} GROUP BY source`);
                 const row = r.rows[0];
                 const src = by.rows.map(x => `${x.source}: ${x.count}`).join(', ') || 'none';
-                return res.json({
+                return ok({
                     success: true,
                     reply: `Scraped results table **${TABLE}** has **${row.total_records}** rows, **${row.sailors}** sailors, **${row.regattas}** regattas. Dates ${row.earliest_date || '—'} to ${row.latest_date || '—'}. By source: ${src}.`,
                     data: { resultType: 'summary', ...row, bySource: by.rows }
@@ -839,7 +805,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                     ORDER BY regatta_date DESC NULLS LAST, position ASC NULLS LAST
                     LIMIT 25
                 `);
-                return res.json({
+                return ok({
                     success: true,
                     reply: r.rows.length ? `Here are ${r.rows.length} recent scraped result rows.` : 'The scraped table is empty. Run a results scrape first.',
                     data: { resultType: 'rows', rows: r.rows }
@@ -873,7 +839,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                     WHERE skipper IS NOT NULL AND TRIM(skipper) <> ''
                     GROUP BY skipper ORDER BY count DESC, skipper ASC LIMIT 15
                 `);
-                return res.json({
+                return ok({
                     success: true,
                     reply: r.rows.length ? 'Top sailors in the scraped table (by result rows):' : 'No sailor data yet.',
                     data: { resultType: 'list', rows: r.rows }
@@ -886,7 +852,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                     WHERE yacht_club IS NOT NULL AND TRIM(yacht_club) <> ''
                     GROUP BY yacht_club ORDER BY count DESC, yacht_club ASC LIMIT 15
                 `);
-                return res.json({
+                return ok({
                     success: true,
                     reply: r.rows.length ? 'Top clubs in the scraped table:' : 'No club data yet.',
                     data: { resultType: 'list', rows: r.rows }
@@ -899,7 +865,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                     WHERE yacht_club ILIKE $1 AND skipper IS NOT NULL AND TRIM(skipper) <> ''
                     GROUP BY skipper ORDER BY count DESC LIMIT 40
                 `, ['%' + String(criteria.yacht_club).trim() + '%']);
-                return res.json({
+                return ok({
                     success: true,
                     reply: r.rows.length ? `Sailors at ${criteria.yacht_club}:` : `No sailors found for ${criteria.yacht_club}.`,
                     data: { resultType: 'list', rows: r.rows }
@@ -907,7 +873,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
             }
 
             if (n === 0 && !['regatta_search', 'sailor_search', 'boat_search', 'club_search'].includes(intent)) {
-                return res.json({
+                return ok({
                     success: true,
                     reply: 'Try a sailor name, boat, club, regatta, "who won [event]", "top sailors", or "what\'s in the data".',
                     data: null
@@ -934,7 +900,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 reply = `Found **${result.rows.length}** matching result row(s) in the scraped table.`;
             }
 
-            res.json({
+            return ok({
                 success: true,
                 reply,
                 data: { resultType: 'rows', rows: result.rows }
