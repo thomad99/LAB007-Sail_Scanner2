@@ -29,6 +29,7 @@ const cron = require('node-cron');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
+const { attachRaceResultsScraper, ensureScrapedResultsTable } = require('./race-results-scraper');
 
 // Load Puppeteer only if ENABLE_PUPPETEER environment variable is set to 'true'
 // Main server should NOT have this set - only the dedicated scraper service should
@@ -4462,6 +4463,8 @@ app.post('/api/chat', async (req, res) => {
     }
 });
 
+attachRaceResultsScraper(app, { pool, openai, axios, cheerio });
+
 // Static file serving (AFTER all API routes)
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(UPLOAD_DIR));
@@ -5827,6 +5830,7 @@ async function initializeServer() {
         await createUserTables();
         await createRegattasTable();
         await ensureRegattaNetworkDataTable();
+        await ensureScrapedResultsTable(pool);
         await createTrackerTables();
         await createPiTables();
         await testS3Connection();
@@ -6028,10 +6032,8 @@ app.post('/api/pi/devices/:deviceId/command', express.json(), async (req, res) =
         // start_track / stop_track: manage the track server-side so it works over SIM MQTT
         if (command === 'start_track') {
             // Create the track now so we can embed the id in the MQTT config
-            const now = new Date();
-            const etOffset = -5 * 60;  // ET = UTC-5 (close enough for name label)
-            const etTime = new Date(now.getTime() + etOffset * 60000);
-            const trackName = `${deviceId} — ${etTime.toISOString().slice(0, 16).replace('T', ' ')} ET`;
+            // Name must use real America/New_York (DST-aware), same as PiControl / Tracker UIs — not UTC nor fixed UTC-5.
+            const trackName = formatPiTrackNameEt(deviceId, new Date());
             const trackResult = await pool.query(
                 `INSERT INTO tracks (name, device_name) VALUES ($1, $2) RETURNING id`,
                 [trackName, deviceId]
@@ -6518,6 +6520,30 @@ app.get('/api/tracks/live', async (req, res) => {
 
 // Eastern labels for replay sessions (server TZ is often UTC on cloud hosts)
 const TRACKER_DISPLAY_TZ = 'America/New_York';
+
+/** Pi-style track title: "deviceId — YYYY-MM-DD HH:MM ET" in America/New_York (matches Pi main.py + UI). */
+function formatPiTrackNameEt(deviceId, d = new Date()) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: TRACKER_DISPLAY_TZ,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    }).formatToParts(d);
+    const map = {};
+    for (const p of parts) {
+        if (p.type !== 'literal') map[p.type] = p.value;
+    }
+    const y = map.year;
+    const mo = String(map.month || '').padStart(2, '0');
+    const da = String(map.day || '').padStart(2, '0');
+    const h = String(map.hour || '').padStart(2, '0');
+    const mi = String(map.minute || '').padStart(2, '0');
+    return `${deviceId} — ${y}-${mo}-${da} ${h}:${mi} ET`;
+}
+
 function formatSessionLabelEt(isoOrDate) {
     const d = isoOrDate instanceof Date ? isoOrDate : new Date(isoOrDate);
     const dateOpts = { timeZone: TRACKER_DISPLAY_TZ, month: 'numeric', day: 'numeric', year: 'numeric' };

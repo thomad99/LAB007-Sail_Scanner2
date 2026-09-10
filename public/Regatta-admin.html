@@ -600,6 +600,98 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        .results-chat {
+            text-align: left;
+            margin-top: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .results-chat-log {
+            max-height: 320px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .results-chat-msg {
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 0.92em;
+            line-height: 1.4;
+            white-space: pre-wrap;
+        }
+
+        .results-chat-msg.user {
+            background: rgba(0, 136, 255, 0.25);
+            align-self: flex-end;
+            max-width: 85%;
+        }
+
+        .results-chat-msg.bot {
+            background: rgba(255, 255, 255, 0.08);
+            align-self: flex-start;
+            width: 100%;
+        }
+
+        .results-chat-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .results-chat-row input {
+            flex: 1;
+            padding: 10px 12px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 1em;
+        }
+
+        .results-chat-row button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            background: #0066cc;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .results-mini-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 0.78em;
+        }
+
+        .results-mini-table th,
+        .results-mini-table td {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+            padding: 5px 6px;
+            text-align: left;
+            color: #ddd;
+        }
+
+        .results-mini-table th {
+            color: #7ecfff;
+        }
+
+        .results-log {
+            text-align: left;
+            font-family: Consolas, monospace;
+            font-size: 0.75em;
+            color: #bbb;
+            max-height: 180px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin-top: 12px;
+        }
     </style>
 </head>
 
@@ -651,6 +743,41 @@
             <h2>Scheduled Scrape Status</h2>
             <p>Weekly scrape runs every Sunday at 02:00 UTC for all 3 sources.</p>
             <div id="scheduledScrapeStatusContainer" class="loading">Loading...</div>
+        </div>
+
+        <div class="scrape-section" id="raceResultsSection">
+            <h2>Scrape Race Results (test)</h2>
+            <p>Collect skipper / sail / class / points from Regatta Network and ClubSpot into a <strong>new</strong> table (<code>scraped_race_results</code>), leaving the existing chatbot data untouched. Test cap: last <strong>2 months</strong> only.</p>
+
+            <div id="raceResultsStats" class="stats-container" style="margin-top: 16px;"></div>
+
+            <div class="scrape-source-select">
+                <label for="resultsSourceSelect">Select Source:</label>
+                <select id="resultsSourceSelect">
+                    <option value="all">Both sources</option>
+                    <option value="regattanetwork">Regatta Network only</option>
+                    <option value="clubspot">ClubSpot only</option>
+                </select>
+            </div>
+
+            <div class="action-buttons">
+                <button class="action-button scrape" id="resultsScrapeButton" onclick="startResultsScrape()">Start Results Scrape</button>
+                <button class="action-button" onclick="loadRaceResultsStats()">Refresh Stats</button>
+                <button class="action-button danger" onclick="clearScrapedResults()">Clear Scraped Results</button>
+            </div>
+
+            <div class="scrape-status" id="resultsScrapeStatus"></div>
+            <div class="results-log" id="resultsScrapeLog"></div>
+
+            <div class="results-chat">
+                <h3 style="margin-top: 0; color: #7ecfff;">Ask the scraped data</h3>
+                <p style="color: #aaa; font-size: 0.9em;">LLM chat against the new table only. Try “what's in the data”, “who won Wickford Regatta”, or a sailor name.</p>
+                <div class="results-chat-log" id="resultsChatLog"></div>
+                <div class="results-chat-row">
+                    <input id="resultsChatInput" type="text" placeholder="Ask about sailors, winners, clubs...">
+                    <button type="button" id="resultsChatSend" onclick="sendResultsChat()">Send</button>
+                </div>
+            </div>
         </div>
 
         <div id="statsContainer" class="loading">Loading statistics...</div>
@@ -1102,7 +1229,7 @@
             button.disabled = true;
             button.textContent = 'Loading...';
 
-            await Promise.all([loadStats(), loadRegattas(), loadScrapeStatus()]);
+            await Promise.all([loadStats(), loadRegattas(), loadScrapeStatus(), loadRaceResultsStats()]);
 
             button.disabled = false;
             button.textContent = 'Refresh All';
@@ -1212,6 +1339,165 @@
             }
         }
 
+        let resultsPollTimer = null;
+
+        function escapeHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function renderResultsMiniTable(rows) {
+            if (!rows || !rows.length) return '';
+            const cols = Object.keys(rows[0]).filter(k => k !== 'source_url').slice(0, 10);
+            let html = '<table class="results-mini-table"><thead><tr>';
+            cols.forEach(c => { html += `<th>${escapeHtml(c)}</th>`; });
+            html += '</tr></thead><tbody>';
+            rows.slice(0, 25).forEach(row => {
+                html += '<tr>';
+                cols.forEach(c => { html += `<td>${escapeHtml(row[c])}</td>`; });
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            return html;
+        }
+
+        async function loadRaceResultsStats() {
+            const box = document.getElementById('raceResultsStats');
+            if (!box) return;
+            try {
+                const res = await fetch('/api/race-results/stats');
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Failed');
+                const src = (data.bySource || []).map(s => `${s.source}: ${s.count} rows / ${s.events} events`).join(' · ') || 'No rows yet';
+                box.innerHTML = `
+                    <div class="stat-card"><h3>Scraped Rows</h3><div class="value">${data.total_records || 0}</div><div class="label">${src}</div></div>
+                    <div class="stat-card"><h3>Sailors</h3><div class="value">${data.total_sailors || 0}</div><div class="label">Distinct skippers</div></div>
+                    <div class="stat-card"><h3>Regattas</h3><div class="value">${data.total_regattas || 0}</div><div class="label">${data.earliest_date || '—'} to ${data.latest_date || '—'}</div></div>
+                `;
+            } catch (err) {
+                box.innerHTML = `<div class="loading" style="color:#ff6666;">Could not load scraped-results stats: ${escapeHtml(err.message)}</div>`;
+            }
+        }
+
+        function showResultsStatus(text, kind) {
+            const el = document.getElementById('resultsScrapeStatus');
+            el.className = 'scrape-status active' + (kind ? ' ' + kind : '');
+            el.innerHTML = text;
+        }
+
+        async function pollResultsScrape(once) {
+            try {
+                const res = await fetch('/api/race-results/status');
+                const data = await res.json();
+                const logEl = document.getElementById('resultsScrapeLog');
+                if (logEl && data.log) logEl.textContent = (data.log || []).join('\n');
+                const st = data.stats || {};
+                const rn = st.regattanetwork || {};
+                const cs = st.clubspot || {};
+                if (data.running) {
+                    showResultsStatus(
+                        `Scraping… RN events ${rn.eventsScraped || 0}/${rn.eventsFound || 0} (${rn.rowsUpserted || 0} rows). ClubSpot ${cs.eventsScraped || 0}/${cs.eventsFound || 0} (${cs.rowsUpserted || 0} rows).`,
+                        ''
+                    );
+                    document.getElementById('resultsScrapeButton').disabled = true;
+                    document.getElementById('resultsScrapeButton').textContent = 'Scraping…';
+                    if (!resultsPollTimer) resultsPollTimer = setInterval(() => pollResultsScrape(false), 2500);
+                } else {
+                    document.getElementById('resultsScrapeButton').disabled = false;
+                    document.getElementById('resultsScrapeButton').textContent = 'Start Results Scrape';
+                    if (resultsPollTimer) {
+                        clearInterval(resultsPollTimer);
+                        resultsPollTimer = null;
+                    }
+                    if (data.finishedAt) {
+                        const kind = data.error ? 'error' : 'success';
+                        showResultsStatus(
+                            `${data.error ? 'Finished with errors: ' + escapeHtml(data.error) : 'Last scrape finished.'}<br>` +
+                            `Regatta Network: ${rn.eventsScraped || 0} events, ${rn.rowsUpserted || 0} rows, ${rn.errors || 0} errors.<br>` +
+                            `ClubSpot: ${cs.eventsScraped || 0} events, ${cs.rowsUpserted || 0} rows, ${cs.errors || 0} errors.`,
+                            kind
+                        );
+                        if (!once) loadRaceResultsStats();
+                    }
+                }
+            } catch (err) {
+                if (!once) console.error('results scrape poll', err);
+            }
+        }
+
+        async function startResultsScrape() {
+            const source = document.getElementById('resultsSourceSelect').value;
+            document.getElementById('resultsScrapeButton').disabled = true;
+            showResultsStatus('Starting results scrape (last 2 months)…', '');
+            try {
+                const res = await fetch('/api/race-results/scrape', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ source, lookbackDays: 60 })
+                });
+                const data = await res.json();
+                if (!data.success && res.status !== 409) throw new Error(data.error || 'Failed to start');
+                pollResultsScrape(false);
+                if (!resultsPollTimer) resultsPollTimer = setInterval(() => pollResultsScrape(false), 2500);
+            } catch (err) {
+                showResultsStatus('Error: ' + escapeHtml(err.message), 'error');
+                document.getElementById('resultsScrapeButton').disabled = false;
+            }
+        }
+
+        async function clearScrapedResults() {
+            if (!confirm('Delete ALL rows in scraped_race_results? Existing chatbot data is not touched.')) return;
+            try {
+                const res = await fetch('/api/race-results/clear', { method: 'POST' });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Clear failed');
+                showResultsStatus(`Cleared ${data.deleted} scraped result row(s).`, 'success');
+                loadRaceResultsStats();
+            } catch (err) {
+                showResultsStatus('Error: ' + escapeHtml(err.message), 'error');
+            }
+        }
+
+        function addResultsChat(role, html) {
+            const log = document.getElementById('resultsChatLog');
+            const div = document.createElement('div');
+            div.className = 'results-chat-msg ' + role;
+            div.innerHTML = html;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        async function sendResultsChat() {
+            const input = document.getElementById('resultsChatInput');
+            const text = (input.value || '').trim();
+            if (!text) return;
+            input.value = '';
+            addResultsChat('user', escapeHtml(text));
+            const btn = document.getElementById('resultsChatSend');
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/race-results/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text })
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Chat failed');
+                let html = escapeHtml(data.reply || '').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                if (data.data && data.data.rows && data.data.rows.length) {
+                    html += renderResultsMiniTable(data.data.rows);
+                }
+                addResultsChat('bot', html);
+            } catch (err) {
+                addResultsChat('bot', 'Error: ' + escapeHtml(err.message));
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
         // Load stats and regattas on page load
         window.addEventListener('DOMContentLoaded', () => {
             loadAll();
@@ -1227,6 +1513,14 @@
                     });
                 }
             });
+
+            const chatInput = document.getElementById('resultsChatInput');
+            if (chatInput) {
+                chatInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') sendResultsChat();
+                });
+            }
+            pollResultsScrape(true);
         });
     </script>
 </body>
