@@ -85,8 +85,8 @@ async function clubspotGet(axios, url, config = {}, opts = {}) {
             if (isRetryableStatus(status) && attempt < MAX_RETRIES) {
                 const backoff = Math.min(
                     BACKOFF_MAX_MS,
-                    BACKOFF_BASE_MS * Math.pow(2, attempt)
-                ) + jitter(0, 1000);
+                    BACKOFF_BASE_MS * Math.pow(2, attempt) + jitter(0, 1000)
+                );
                 log(`ClubSpot ${status} on ${url} — backing off ${backoff}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
                 await sleep(backoff);
                 continue;
