@@ -464,11 +464,12 @@ function extractRnRaceBits($, $tr, raceIdxs) {
 
 function extractRnResultRow($, $tr, category, raceIdxs) {
     const $score = $tr.find('.the-score').first();
-    const skipper = normalizeSpace($score.attr('data-skipper') || cellText($, $tr.find('td.country').first()));
+    const rawSkipper = normalizeSpace($score.attr('data-skipper') || cellText($, $tr.find('td.country').first()));
     const sail = normalizeSpace($score.attr('data-sail') || cellText($, $tr.find('td.sail-num').first()));
     const boat = normalizeSpace($score.attr('data-boat') || cellText($, $tr.find('td.boatname').first()));
-    if (!skipper && !sail) return null;
+    if (!rawSkipper && !sail) return [];
 
+    const cat = category || nearestRnCategory($, $tr);
     const pos = firstNumericRnPos($, $tr);
     const total = normalizeSpace(cellText($, $score));
 
@@ -493,9 +494,10 @@ function extractRnResultRow($, $tr, category, raceIdxs) {
     }
 
     const raceBits = extractRnRaceBits($, $tr, raceIdxs);
-
-    return {
-        category: category || nearestRnCategory($, $tr),
+    const sailors = splitSailorNames(rawSkipper, cat);
+    const names = sailors.length ? sailors : [rawSkipper || ''];
+    return names.map((skipper) => ({
+        category: cat,
         position: pos || null,
         sail_number: sail,
         boat_name: boat || null,
@@ -503,24 +505,27 @@ function extractRnResultRow($, $tr, category, raceIdxs) {
         yacht_club: yachtClub || null,
         results: raceBits.join(',') || null,
         total_points: total || null
-    };
+    })).filter(r => r.skipper || r.sail_number);
 }
 
 function parseRnResultsPage($, event) {
     const rows = [];
     const seen = new Set();
-    const add = (parsed) => {
-        if (!parsed) return;
-        const key = `${parsed.category}|${parsed.sail_number}|${parsed.skipper}`.toLowerCase();
-        if (seen.has(key)) return;
-        seen.add(key);
-        rows.push({
-            source: 'regattanetwork',
-            source_event_id: event.source_event_id,
-            source_url: event.results_url,
-            regatta_name: event.regatta_name,
-            regatta_date: event.regatta_date,
-            ...parsed
+    const add = (parsedList) => {
+        const list = Array.isArray(parsedList) ? parsedList : (parsedList ? [parsedList] : []);
+        list.forEach((parsed) => {
+            if (!parsed) return;
+            const key = `${parsed.category}|${parsed.sail_number}|${parsed.skipper}`.toLowerCase();
+            if (seen.has(key)) return;
+            seen.add(key);
+            rows.push({
+                source: 'regattanetwork',
+                source_event_id: event.source_event_id,
+                source_url: event.results_url,
+                regatta_name: event.regatta_name,
+                regatta_date: event.regatta_date,
+                ...parsed
+            });
         });
     };
 
@@ -561,6 +566,50 @@ function formatClubspotRaceCells(scoringData) {
     }).filter(Boolean).join(',') || null;
 }
 
+/** Classes that are almost always one sailor (don't pair-split long names). */
+const SINGLEHANDED_CLASS_RE = /\b(optimist|opti|green|red|white|blue|rwb|ilca(?:\s*[467])?|laser(?:\s*(?:radial|4\.7|standard))?|sunfish|byte|finn|ok\s*dinghy|rs\s*aero|waszp)\b/i;
+
+function isLikelySinglehandedClass(category) {
+    return SINGLEHANDED_CLASS_RE.test(String(category || ''));
+}
+
+/**
+ * Expand a skipper/crew cell into one or more person names.
+ * Prefer explicit separators; for doublehanded fleets, also pair "First Last First Last".
+ */
+function splitSailorNames(raw, category) {
+    const text = normalizeSpace(raw);
+    if (!text) return [];
+
+    const separated = text
+        .split(/\s*(?:\/|&|\+|•|\band\b|;|\n|\r|,)\s*/i)
+        .map(normalizeSpace)
+        .filter(Boolean);
+    if (separated.length > 1) return separated;
+
+    if (isLikelySinglehandedClass(category)) return [text];
+
+    const words = text.split(/\s+/).filter(Boolean);
+    // "Coco Claypoole Dominic Thomas" → two First+Last names
+    if (words.length >= 4 && words.length % 2 === 0) {
+        const names = [];
+        for (let i = 0; i < words.length; i += 2) {
+            names.push(`${words[i]} ${words[i + 1]}`);
+        }
+        return names;
+    }
+    return [text];
+}
+
+function sailorNamesFromClubspotRegistration(ro, category) {
+    if (Array.isArray(ro.participantNames) && ro.participantNames.length) {
+        const named = ro.participantNames.map(normalizeSpace).filter(Boolean);
+        if (named.length) return named;
+    }
+    const combined = `${ro.firstName || ''} ${ro.lastName || ''}`.trim();
+    return splitSailorNames(combined, category);
+}
+
 function rowsFromClubspotPayload(payload, event, classId) {
     const regs = (payload && payload.scoresByRegistration) || [];
     if (!regs.length) return [];
@@ -576,16 +625,15 @@ function rowsFromClubspotPayload(payload, event, classId) {
         };
     }).sort((a, b) => a.net - b.net || a.total - b.total || a.idx - b.idx);
 
-    return ranked.map((item, place) => {
+    const rows = [];
+    ranked.forEach((item, place) => {
         const ro = item.entry.registrationObject || {};
         const className = (ro.boatClassObject && ro.boatClassObject.name) || classId || '';
-        const skipper = `${ro.firstName || ''} ${ro.lastName || ''}`.trim()
-            || (Array.isArray(ro.participantNames) ? ro.participantNames[0] : '')
-            || '';
+        const sailors = sailorNamesFromClubspotRegistration(ro, className);
         const net = item.entry.net;
         const total = item.entry.total;
         const points = (net != null && net !== '') ? String(net) : (total != null ? String(total) : null);
-        return {
+        const base = {
             source: 'clubspot',
             source_event_id: event.source_event_id,
             source_url: event.results_url,
@@ -595,12 +643,19 @@ function rowsFromClubspotPayload(payload, event, classId) {
             position: String(place + 1),
             sail_number: ro.sailNumber != null ? String(ro.sailNumber) : '',
             boat_name: ro.boatName || null,
-            skipper,
             yacht_club: ro.clubName || event.host_club || null,
             results: formatClubspotRaceCells(item.entry.scoring_data),
             total_points: points
         };
-    }).filter(r => r.skipper || r.sail_number);
+        if (!sailors.length) {
+            if (base.sail_number) rows.push({ ...base, skipper: '' });
+            return;
+        }
+        sailors.forEach((name) => {
+            rows.push({ ...base, skipper: name });
+        });
+    });
+    return rows.filter(r => r.skipper || r.sail_number);
 }
 
 async function scrapeRegattaNetwork(axios, cheerio, pool, lookbackDays) {
