@@ -7,11 +7,11 @@
  */
 
 const { parseChatIntent } = require('./chat-intent');
+const { PARSE_APP_ID, clubspotGet, clubspotConfigSummary } = require('./clubspot-http');
 
 const LOOKBACK_DAYS = 60;
 const LOOKBACK_MAX_DAYS = 365;
 const TABLE = 'scraped_race_results';
-const PARSE_APP_ID = 'myclubspot2017';
 const PARSE_REGATTAS_URL = 'https://theclubspot.com/parse/classes/regattas';
 const PARSE_BOAT_CLASSES_URL = 'https://theclubspot.com/parse/classes/boatClasses';
 const CLUBSPOT_RESULTS_API = 'https://results.theclubspot.com/clubspot-results-v4';
@@ -825,11 +825,10 @@ async function fetchClubspotClassIds(axios, regattaId) {
         regattaObject: { __type: 'Pointer', className: 'regattas', objectId: regattaId }
     });
     try {
-        const res = await axios.get(PARSE_BOAT_CLASSES_URL, {
+        const res = await clubspotGet(axios, PARSE_BOAT_CLASSES_URL, {
             params: { where, limit: '100', keys: 'objectId,name' },
-            headers: { ...HTTP_HEADERS, 'X-Parse-Application-Id': PARSE_APP_ID },
-            timeout: 30000
-        });
+            headers: { 'X-Parse-Application-Id': PARSE_APP_ID }
+        }, { log: logLine });
         const ids = (res.data.results || []).map(c => c.objectId).filter(Boolean);
         if (ids.length) return [...new Set(ids)];
     } catch (err) {
@@ -857,10 +856,9 @@ async function listClubspotEvents(axios, window) {
     };
 
     const countParams = new URLSearchParams({ ...base, count: '1', limit: '0' });
-    const countRes = await axios.get(`${PARSE_REGATTAS_URL}?${countParams}`, {
-        headers: { ...HTTP_HEADERS, 'X-Parse-Application-Id': PARSE_APP_ID },
-        timeout: 30000
-    });
+    const countRes = await clubspotGet(axios, `${PARSE_REGATTAS_URL}?${countParams}`, {
+        headers: { 'X-Parse-Application-Id': PARSE_APP_ID }
+    }, { log: logLine });
     const total = countRes.data.count || 0;
     const BATCH = 100;
     const pages = Math.ceil(total / BATCH);
@@ -872,12 +870,10 @@ async function listClubspotEvents(axios, window) {
             limit: String(BATCH),
             skip: String(page * BATCH)
         });
-        const res = await axios.get(`${PARSE_REGATTAS_URL}?${params}`, {
-            headers: { ...HTTP_HEADERS, 'X-Parse-Application-Id': PARSE_APP_ID },
-            timeout: 30000
-        });
+        const res = await clubspotGet(axios, `${PARSE_REGATTAS_URL}?${params}`, {
+            headers: { 'X-Parse-Application-Id': PARSE_APP_ID }
+        }, { log: logLine });
         all.push(...(res.data.results || []));
-        if (page < pages - 1) await sleep(150);
     }
 
     const events = [];
@@ -893,7 +889,6 @@ async function listClubspotEvents(axios, window) {
         if (!classes.length) {
             classLookups += 1;
             classes = await fetchClubspotClassIds(axios, r.objectId);
-            await sleep(80);
         }
         if (!classes.length) continue;
 
@@ -924,7 +919,11 @@ async function listClubspotEvents(axios, window) {
 }
 
 async function scrapeClubspot(axios, pool, window) {
-    logLine(`ClubSpot: listing events via Parse API (${window.label})`);
+    const pace = clubspotConfigSummary();
+    logLine(
+        `ClubSpot: listing events via Parse API (${window.label}); ` +
+        `pacing ${pace.delayMinMs}-${pace.delayMaxMs}ms, retry on 429/5xx up to ${pace.maxRetries}`
+    );
     const events = await listClubspotEvents(axios, window);
     job.stats.clubspot.eventsFound = events.length;
     logLine(`ClubSpot: ${events.length} events for ${window.label}`);
@@ -935,13 +934,10 @@ async function scrapeClubspot(axios, pool, window) {
             const eventRows = [];
             for (const classId of event.class_ids) {
                 const url = `${CLUBSPOT_RESULTS_API}/${event.source_event_id}`;
-                const res = await axios.get(url, {
-                    params: { boatClassIDs: classId },
-                    headers: HTTP_HEADERS,
-                    timeout: 30000
-                });
+                const res = await clubspotGet(axios, url, {
+                    params: { boatClassIDs: classId }
+                }, { log: logLine });
                 eventRows.push(...rowsFromClubspotPayload(res.data, event, classId));
-                await sleep(80);
             }
             const n = await upsertRows(pool, eventRows);
             job.stats.clubspot.eventsScraped += 1;

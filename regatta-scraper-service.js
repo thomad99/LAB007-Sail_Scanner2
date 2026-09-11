@@ -4,6 +4,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const fs = require('fs');
 const path = require('path');
+const { PARSE_APP_ID, clubspotGet, clubspotConfigSummary } = require('./clubspot-http');
 
 // Note: Playwright/Puppeteer is no longer needed. Clubspot scraping uses the Parse Server REST API directly.
 
@@ -427,11 +428,14 @@ async function scrapeRegattaNetwork() {
 
 // Scrape Clubspot using the Parse Server REST API (no headless browser needed)
 async function scrapeClubspot() {
-    console.log('🌐 Starting Clubspot scrape via Parse Server API...');
+    const pace = clubspotConfigSummary();
+    console.log(
+        `🌐 Starting Clubspot scrape via Parse Server API ` +
+        `(pacing ${pace.delayMinMs}-${pace.delayMaxMs}ms, retry on 429/5xx up to ${pace.maxRetries})...`
+    );
 
     // ClubSpot uses Parse Server. Query it directly - no headless browser needed.
     const PARSE_API_URL = 'https://theclubspot.com/parse/classes/regattas';
-    const PARSE_APP_ID = 'myclubspot2017';
     const BATCH_SIZE = 100;
 
     try {
@@ -456,9 +460,8 @@ async function scrapeClubspot() {
         countParams.set('count', '1');
         countParams.set('limit', '0');
 
-        const countResponse = await axios.get(`${PARSE_API_URL}?${countParams}`, {
-            headers: { 'X-Parse-Application-Id': PARSE_APP_ID },
-            timeout: 30000
+        const countResponse = await clubspotGet(axios, `${PARSE_API_URL}?${countParams}`, {
+            headers: { 'X-Parse-Application-Id': PARSE_APP_ID }
         });
 
         const totalCount = countResponse.data.count || 0;
@@ -475,18 +478,12 @@ async function scrapeClubspot() {
 
             console.log(`📄 Fetching page ${page + 1}/${totalPages} (skip=${page * BATCH_SIZE})...`);
 
-            const response = await axios.get(`${PARSE_API_URL}?${pageParams}`, {
-                headers: { 'X-Parse-Application-Id': PARSE_APP_ID },
-                timeout: 30000
+            const response = await clubspotGet(axios, `${PARSE_API_URL}?${pageParams}`, {
+                headers: { 'X-Parse-Application-Id': PARSE_APP_ID }
             });
 
             const results = response.data.results || [];
             allRegattas.push(...results);
-
-            // Brief pause between pages to be polite
-            if (page < totalPages - 1) {
-                await new Promise(r => setTimeout(r, 200));
-            }
         }
 
         console.log(`✅ Fetched ${allRegattas.length} regattas from Clubspot API`);
