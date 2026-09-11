@@ -311,6 +311,120 @@
             background-color: rgba(255, 0, 0, 0.2);
         }
 
+        .results-progress-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 8px 16px;
+            margin-bottom: 14px;
+        }
+
+        .results-progress-header .progress-title {
+            color: #ffffff;
+            font-weight: 600;
+            font-size: 1.05em;
+        }
+
+        .results-progress-header .progress-meta {
+            color: #9ec9ff;
+            font-size: 0.9em;
+        }
+
+        .results-progress-tiles {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+        }
+
+        .results-progress-tile {
+            background: rgba(0, 0, 0, 0.22);
+            border: 1px solid rgba(126, 207, 255, 0.22);
+            border-radius: 10px;
+            padding: 14px 16px;
+        }
+
+        .results-progress-tile h4 {
+            margin: 0 0 10px;
+            color: #7ecfff;
+            font-size: 1em;
+            font-weight: 600;
+        }
+
+        .results-progress-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px 12px;
+        }
+
+        .results-progress-metric {
+            min-width: 0;
+        }
+
+        .results-progress-metric .metric-label {
+            display: block;
+            color: #9aa7b8;
+            font-size: 0.75em;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 2px;
+        }
+
+        .results-progress-metric .metric-value {
+            color: #e8f4ff;
+            font-size: 1.15em;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .results-progress-metric .metric-value.ok {
+            color: #00ff88;
+        }
+
+        .results-progress-metric .metric-value.warn {
+            color: #ffb347;
+        }
+
+        .results-progress-metric .metric-value.bad {
+            color: #ff8080;
+        }
+
+        .results-progress-bar {
+            margin-top: 12px;
+            height: 6px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.12);
+            overflow: hidden;
+        }
+
+        .results-progress-bar > span {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #0088ff, #00ff88);
+            transition: width 0.35s ease;
+        }
+
+        .results-progress-note {
+            margin-top: 12px;
+            color: #cccccc;
+            font-size: 0.92em;
+            line-height: 1.4;
+        }
+
+        .results-progress-tile.is-running {
+            box-shadow: 0 0 0 1px rgba(0, 255, 136, 0.18);
+        }
+
+        .results-progress-tile.is-running .results-progress-bar > span {
+            animation: resultsProgressPulse 1.4s ease-in-out infinite;
+        }
+
+        @keyframes resultsProgressPulse {
+            0%, 100% { opacity: 0.7; }
+            50% { opacity: 1; }
+        }
+
         .loading {
             text-align: center;
             padding: 40px;
@@ -1486,10 +1600,100 @@
             window.location.href = url;
         }
 
-        function showResultsStatus(text, kind) {
+        function showResultsStatus(html, kind) {
             const el = document.getElementById('resultsScrapeStatus');
             el.className = 'scrape-status active' + (kind ? ' ' + kind : '');
-            el.innerHTML = text;
+            el.innerHTML = html;
+        }
+
+        function resultsSourceIncluded(jobSource, sourceId) {
+            if (!jobSource || jobSource === 'all') return true;
+            return jobSource === sourceId;
+        }
+
+        function resultsSourceTile(displayName, stats, running) {
+            const found = Number(stats.eventsFound || 0);
+            const scraped = Number(stats.eventsScraped || 0);
+            const inserted = Number(stats.rowsInserted || 0);
+            const updated = Number(stats.rowsUpdated || 0);
+            const errors = Number(stats.errors || 0);
+            const pct = found > 0
+                ? Math.min(100, Math.round((scraped / found) * 100))
+                : (running ? 0 : 100);
+            const errorClass = errors > 0 ? 'bad' : 'ok';
+            const runningClass = running ? ' is-running' : '';
+            return `<div class="results-progress-tile${runningClass}">
+                <h4>${escapeHtml(displayName)}</h4>
+                <div class="results-progress-metrics">
+                    <div class="results-progress-metric">
+                        <span class="metric-label">Events</span>
+                        <span class="metric-value">${scraped}/${found}</span>
+                    </div>
+                    <div class="results-progress-metric">
+                        <span class="metric-label">New rows</span>
+                        <span class="metric-value ok">${inserted}</span>
+                    </div>
+                    <div class="results-progress-metric">
+                        <span class="metric-label">Updated</span>
+                        <span class="metric-value warn">${updated}</span>
+                    </div>
+                    <div class="results-progress-metric">
+                        <span class="metric-label">Errors</span>
+                        <span class="metric-value ${errorClass}">${errors}</span>
+                    </div>
+                </div>
+                <div class="results-progress-bar" aria-hidden="true"><span style="width:${pct}%"></span></div>
+            </div>`;
+        }
+
+        function renderResultsScrapeStatus(data, options) {
+            const opts = options || {};
+            const lookback = data.lookbackDays || '?';
+            const jobSource = data.source || opts.source || 'all';
+            const running = !!data.running;
+            const st = data.stats || {};
+            const tiles = [];
+            // Only show tiles for sources included in this run (skip RN=0 when ClubSpot-only, etc.)
+            if (resultsSourceIncluded(jobSource, 'regattanetwork')) {
+                tiles.push(resultsSourceTile('Regatta Network', st.regattanetwork || {}, running));
+            }
+            if (resultsSourceIncluded(jobSource, 'clubspot')) {
+                tiles.push(resultsSourceTile('ClubSpot', st.clubspot || {}, running));
+            }
+
+            let title = running ? 'Scraping in progress' : 'Last scrape finished';
+            let kind = '';
+            let note = '';
+            if (opts.starting) {
+                title = 'Starting scrape…';
+            } else if (data.error) {
+                title = 'Finished with errors';
+                kind = 'error';
+                note = `<div class="results-progress-note">${escapeHtml(data.error)}</div>`;
+            } else if (!running && data.finishedAt) {
+                kind = 'success';
+                note = '<div class="results-progress-note">Duplicates are updated, not re-inserted.</div>';
+            } else if (opts.errorText) {
+                title = 'Error';
+                kind = 'error';
+                note = `<div class="results-progress-note">${escapeHtml(opts.errorText)}</div>`;
+            }
+
+            const sourceLabel = jobSource === 'regattanetwork'
+                ? 'Regatta Network only'
+                : jobSource === 'clubspot'
+                    ? 'ClubSpot only'
+                    : 'Both sources';
+
+            showResultsStatus(
+                `<div class="results-progress-header">
+                    <span class="progress-title">${title}</span>
+                    <span class="progress-meta">Last ${escapeHtml(String(lookback))} days · ${sourceLabel}</span>
+                </div>
+                <div class="results-progress-tiles">${tiles.join('')}</div>
+                ${note}`,
+                kind
+            );
         }
 
         async function pollResultsScrape(once) {
@@ -1498,14 +1702,8 @@
                 const data = await res.json();
                 const logEl = document.getElementById('resultsScrapeLog');
                 if (logEl && data.log) logEl.textContent = (data.log || []).join('\n');
-                const st = data.stats || {};
-                const rn = st.regattanetwork || {};
-                const cs = st.clubspot || {};
                 if (data.running) {
-                    showResultsStatus(
-                        `Scraping last ${data.lookbackDays || '?'} days… RN ${rn.eventsScraped || 0}/${rn.eventsFound || 0} events (${rn.rowsInserted || 0} new, ${rn.rowsUpdated || 0} updated). ClubSpot ${cs.eventsScraped || 0}/${cs.eventsFound || 0} (${cs.rowsInserted || 0} new, ${cs.rowsUpdated || 0} updated).`,
-                        ''
-                    );
+                    renderResultsScrapeStatus(data);
                     document.getElementById('resultsScrapeButton').disabled = true;
                     document.getElementById('resultsScrapeButton').textContent = 'Scraping…';
                     if (!resultsPollTimer) resultsPollTimer = setInterval(() => pollResultsScrape(false), 2500);
@@ -1517,13 +1715,7 @@
                         resultsPollTimer = null;
                     }
                     if (data.finishedAt) {
-                        const kind = data.error ? 'error' : 'success';
-                        showResultsStatus(
-                            `${data.error ? 'Finished with errors: ' + escapeHtml(data.error) : 'Last scrape finished (duplicates are updated, not re-inserted).'}<br>` +
-                            `Regatta Network: ${rn.eventsScraped || 0} events, ${rn.rowsInserted || 0} new, ${rn.rowsUpdated || 0} updated, ${rn.errors || 0} errors.<br>` +
-                            `ClubSpot: ${cs.eventsScraped || 0} events, ${cs.rowsInserted || 0} new, ${cs.rowsUpdated || 0} updated, ${cs.errors || 0} errors.`,
-                            kind
-                        );
+                        renderResultsScrapeStatus(data);
                         if (!once) loadRaceResultsStats();
                     }
                 }
@@ -1536,7 +1728,10 @@
             const source = document.getElementById('resultsSourceSelect').value;
             const lookbackDays = parseInt(document.getElementById('resultsLookbackSelect').value, 10) || 60;
             document.getElementById('resultsScrapeButton').disabled = true;
-            showResultsStatus(`Starting results scrape (last ${lookbackDays} days)…`, '');
+            renderResultsScrapeStatus(
+                { running: true, lookbackDays, source, stats: {} },
+                { starting: true, source }
+            );
             try {
                 const res = await fetch('/api/race-results/scrape', {
                     method: 'POST',
@@ -1548,7 +1743,10 @@
                 pollResultsScrape(false);
                 if (!resultsPollTimer) resultsPollTimer = setInterval(() => pollResultsScrape(false), 2500);
             } catch (err) {
-                showResultsStatus('Error: ' + escapeHtml(err.message), 'error');
+                renderResultsScrapeStatus(
+                    { running: false, lookbackDays, source, stats: {} },
+                    { errorText: err.message, source }
+                );
                 document.getElementById('resultsScrapeButton').disabled = false;
             }
         }
