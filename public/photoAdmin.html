@@ -277,8 +277,12 @@
         (function () {
             try {
                 const params = new URLSearchParams(window.location.search);
-                if (params.get('embed') === '1' || window.self !== window.top) {
+                const embed = params.get('embed') === '1' || window.self !== window.top;
+                if (embed) {
                     document.documentElement.classList.add('embed');
+                } else {
+                    // Standalone visits go to the unified admin Photo tab
+                    location.replace('/admin#photos');
                 }
             } catch (e) {
                 /* ignore */
