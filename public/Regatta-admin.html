@@ -742,6 +742,116 @@
             margin-bottom: 12px;
         }
 
+        .chatbot-panel {
+            display: flex;
+            flex-direction: column;
+            min-height: calc(100vh - 220px);
+            text-align: left;
+            background: rgba(0, 0, 0, 0.22);
+            border: 1px solid rgba(126, 207, 255, 0.18);
+            border-radius: 12px;
+            padding: 18px;
+            margin-top: 12px;
+        }
+
+        .chatbot-panel h2 {
+            margin: 0 0 6px;
+            color: #7ecfff;
+        }
+
+        .chatbot-panel .chatbot-sub {
+            color: #9aa7b8;
+            margin: 0 0 14px;
+            font-size: 0.95em;
+        }
+
+        .chatbot-panel .results-chat-log {
+            flex: 1;
+            min-height: 420px;
+            max-height: none;
+            background: rgba(0, 0, 0, 0.18);
+            border-radius: 10px;
+            padding: 14px;
+            margin-bottom: 14px;
+        }
+
+        .scrape-mode-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px 20px;
+            align-items: flex-end;
+            margin-top: 14px;
+        }
+
+        .scrape-mode-row .scrape-source-select {
+            margin-top: 0;
+        }
+
+        .scrape-history-panel {
+            margin-top: 18px;
+            text-align: left;
+        }
+
+        .scrape-history-source {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(126, 207, 255, 0.18);
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 12px;
+        }
+
+        .scrape-history-source h4 {
+            margin: 0 0 10px;
+            color: #7ecfff;
+            font-size: 1em;
+        }
+
+        .year-chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .year-chip {
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            background: rgba(255, 255, 255, 0.06);
+            color: #e8f4ff;
+            border-radius: 999px;
+            padding: 7px 12px;
+            font-size: 0.9em;
+            cursor: pointer;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .year-chip.done {
+            border-color: rgba(0, 255, 136, 0.55);
+            background: rgba(0, 255, 136, 0.12);
+            color: #00ff88;
+        }
+
+        .year-chip.has-data:not(.done) {
+            border-color: rgba(126, 207, 255, 0.45);
+            color: #9ec9ff;
+        }
+
+        .year-chip.selected {
+            box-shadow: 0 0 0 2px rgba(0, 136, 255, 0.55);
+        }
+
+        .year-chip:hover {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .year-chip .chip-mark {
+            margin-right: 4px;
+            font-weight: 700;
+        }
+
+        .scrape-history-empty {
+            color: #9aa7b8;
+            font-size: 0.9em;
+        }
+
         .results-chat-msg {
             padding: 10px 12px;
             border-radius: 8px;
@@ -823,7 +933,7 @@
             gap: 0;
             margin: 24px auto 8px;
             width: 100%;
-            max-width: 560px;
+            max-width: 720px;
             border: 1px solid rgba(255, 255, 255, 0.25);
             border-radius: 10px;
             overflow: hidden;
@@ -872,6 +982,7 @@
         <div class="admin-tabs" role="tablist">
             <button type="button" class="admin-tab active" id="tabBtnDates" onclick="showAdminTab('dates')">Regatta Dates</button>
             <button type="button" class="admin-tab" id="tabBtnResults" onclick="showAdminTab('results')">Regatta Results</button>
+            <button type="button" class="admin-tab" id="tabBtnChat" onclick="showAdminTab('chat')">ChatBot</button>
         </div>
 
         <div id="tab-dates" class="tab-panel active">
@@ -999,46 +1110,65 @@
 
             <div id="raceResultsStats" class="stats-container" style="margin-top: 16px;"></div>
 
-            <div class="scrape-source-select">
-                <label for="resultsLookbackSelect">How far back to collect:</label>
-                <select id="resultsLookbackSelect" onchange="localStorage.setItem('raceResultsLookbackDays', this.value)">
-                    <option value="7">Last 7 days</option>
-                    <option value="14">Last 14 days</option>
-                    <option value="30">Last 1 month</option>
-                    <option value="60" selected>Last 2 months</option>
-                    <option value="90">Last 3 months</option>
-                    <option value="180">Last 6 months</option>
-                    <option value="365">Last 1 year</option>
-                </select>
-            </div>
-
-            <div class="scrape-source-select">
-                <label for="resultsSourceSelect">Select Source:</label>
-                <select id="resultsSourceSelect">
-                    <option value="all">Both sources</option>
-                    <option value="regattanetwork">Regatta Network only</option>
-                    <option value="clubspot">ClubSpot only</option>
-                </select>
+            <div class="scrape-mode-row">
+                <div class="scrape-source-select">
+                    <label for="resultsModeSelect">Collect by:</label>
+                    <select id="resultsModeSelect" onchange="onResultsModeChange()">
+                        <option value="lookback">Rolling window</option>
+                        <option value="year">Calendar year</option>
+                    </select>
+                </div>
+                <div class="scrape-source-select" id="resultsLookbackWrap">
+                    <label for="resultsLookbackSelect">How far back:</label>
+                    <select id="resultsLookbackSelect" onchange="localStorage.setItem('raceResultsLookbackDays', this.value)">
+                        <option value="7">Last 7 days</option>
+                        <option value="14">Last 14 days</option>
+                        <option value="30">Last 1 month</option>
+                        <option value="60" selected>Last 2 months</option>
+                        <option value="90">Last 3 months</option>
+                        <option value="180">Last 6 months</option>
+                        <option value="365">Last 1 year</option>
+                    </select>
+                </div>
+                <div class="scrape-source-select" id="resultsYearWrap" style="display: none;">
+                    <label for="resultsYearSelect">Year:</label>
+                    <select id="resultsYearSelect" onchange="localStorage.setItem('raceResultsYear', this.value)"></select>
+                </div>
+                <div class="scrape-source-select">
+                    <label for="resultsSourceSelect">Select Source:</label>
+                    <select id="resultsSourceSelect">
+                        <option value="all">Both sources</option>
+                        <option value="regattanetwork">Regatta Network only</option>
+                        <option value="clubspot">ClubSpot only</option>
+                    </select>
+                </div>
             </div>
 
             <div class="action-buttons">
                 <button class="action-button scrape" id="resultsScrapeButton" onclick="startResultsScrape()">Start Results Scrape</button>
-                <button class="action-button" onclick="loadRaceResultsStats()">Refresh Stats</button>
+                <button class="action-button" onclick="loadRaceResultsStats(); loadResultsScrapeHistory();">Refresh Stats</button>
                 <button class="action-button danger" onclick="clearScrapedResults()">Clear Scraped Results</button>
+            </div>
+
+            <div id="resultsScrapeHistory" class="scrape-history-panel">
+                <div class="loading">Loading scrape history…</div>
             </div>
 
             <div class="scrape-status" id="resultsScrapeStatus"></div>
             <div class="results-log" id="resultsScrapeLog"></div>
+        </div>
+        </div>
 
-            <div class="results-chat">
-                <h3 style="margin-top: 0; color: #7ecfff;">Ask the scraped data</h3>
+        <div id="tab-chat" class="tab-panel">
+            <div class="chatbot-panel">
+                <h2>Results ChatBot</h2>
+                <p class="chatbot-sub">Ask about scraped ClubSpot and Regatta Network result rows (sailors, classes, clubs, years).</p>
                 <div class="results-chat-log" id="resultsChatLog"></div>
                 <div class="results-chat-row">
-                    <input id="resultsChatInput" type="text" placeholder="e.g. top 5 sailors in C420, best club, sail 5462, who won Sunfish">
+                    <input id="resultsChatInput" type="text" placeholder="e.g. top 5 sailors in C420 in 2025, best club, sail 5462, who won Sunfish">
                     <button type="button" id="resultsChatSend" onclick="sendResultsChat()">Send</button>
                 </div>
             </div>
-        </div>
         </div>
 
         <a href="index.html" class="back-link">← Back to Home</a>
@@ -1064,13 +1194,124 @@
 
     <script>
         function showAdminTab(name) {
-            const dates = name === 'dates';
-            document.getElementById('tab-dates').classList.toggle('active', dates);
-            document.getElementById('tab-results').classList.toggle('active', !dates);
-            document.getElementById('tabBtnDates').classList.toggle('active', dates);
-            document.getElementById('tabBtnResults').classList.toggle('active', !dates);
-            if (location.hash !== '#' + name) {
-                history.replaceState(null, '', '#' + name);
+            const tab = ['dates', 'results', 'chat'].includes(name) ? name : 'dates';
+            document.getElementById('tab-dates').classList.toggle('active', tab === 'dates');
+            document.getElementById('tab-results').classList.toggle('active', tab === 'results');
+            document.getElementById('tab-chat').classList.toggle('active', tab === 'chat');
+            document.getElementById('tabBtnDates').classList.toggle('active', tab === 'dates');
+            document.getElementById('tabBtnResults').classList.toggle('active', tab === 'results');
+            document.getElementById('tabBtnChat').classList.toggle('active', tab === 'chat');
+            if (location.hash !== '#' + tab) {
+                history.replaceState(null, '', '#' + tab);
+            }
+            if (tab === 'chat') {
+                ensureChatWelcome();
+                const input = document.getElementById('resultsChatInput');
+                if (input) setTimeout(() => input.focus(), 50);
+            }
+        }
+
+        function onResultsModeChange() {
+            const mode = document.getElementById('resultsModeSelect').value;
+            localStorage.setItem('raceResultsMode', mode);
+            document.getElementById('resultsLookbackWrap').style.display = mode === 'lookback' ? '' : 'none';
+            document.getElementById('resultsYearWrap').style.display = mode === 'year' ? '' : 'none';
+            refreshYearChipSelection();
+        }
+
+        function populateResultsYearSelect(years) {
+            const sel = document.getElementById('resultsYearSelect');
+            if (!sel) return;
+            const opts = (years && years.length) ? years : Array.from({ length: 8 }, (_, i) => new Date().getFullYear() - i);
+            const saved = localStorage.getItem('raceResultsYear');
+            sel.innerHTML = opts.map(y => `<option value="${y}">${y}</option>`).join('');
+            if (saved && opts.map(String).includes(String(saved))) sel.value = saved;
+            else if (opts.length) sel.value = String(opts[0]);
+        }
+
+        function selectResultsYear(year, source) {
+            const modeSel = document.getElementById('resultsModeSelect');
+            modeSel.value = 'year';
+            onResultsModeChange();
+            const yearSel = document.getElementById('resultsYearSelect');
+            if (yearSel) {
+                if (![...yearSel.options].some(o => o.value === String(year))) {
+                    yearSel.insertAdjacentHTML('afterbegin', `<option value="${year}">${year}</option>`);
+                }
+                yearSel.value = String(year);
+                localStorage.setItem('raceResultsYear', String(year));
+            }
+            if (source === 'clubspot' || source === 'regattanetwork') {
+                document.getElementById('resultsSourceSelect').value = source;
+            }
+            refreshYearChipSelection();
+        }
+
+        function refreshYearChipSelection() {
+            const mode = document.getElementById('resultsModeSelect')?.value;
+            const year = document.getElementById('resultsYearSelect')?.value;
+            document.querySelectorAll('.year-chip').forEach(chip => {
+                const selected = mode === 'year' && String(chip.dataset.year) === String(year);
+                chip.classList.toggle('selected', selected);
+            });
+        }
+
+        async function loadResultsScrapeHistory() {
+            const box = document.getElementById('resultsScrapeHistory');
+            if (!box) return;
+            try {
+                const res = await fetch('/api/race-results/scrape-history');
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Failed');
+                populateResultsYearSelect(data.yearOptions || []);
+
+                const sources = [
+                    { id: 'clubspot', label: 'ClubSpot Scrape History' },
+                    { id: 'regattanetwork', label: 'Regatta Network Scrape History' }
+                ];
+                let html = '';
+                sources.forEach(src => {
+                    const info = (data.bySource && data.bySource[src.id]) || { yearsDone: [], dataYears: [] };
+                    const doneMap = {};
+                    (info.yearsDone || []).forEach(y => { doneMap[y.year] = y; });
+                    const dataMap = {};
+                    (info.dataYears || []).forEach(y => { dataMap[y.year] = y; });
+                    const yearSet = new Set([
+                        ...(info.yearsDone || []).map(y => y.year),
+                        ...(info.dataYears || []).map(y => y.year)
+                    ]);
+                    // Always show recent year options so empty history still has clickable years
+                    (data.yearOptions || []).slice(0, 6).forEach(y => yearSet.add(y));
+                    const years = Array.from(yearSet).filter(Boolean).sort((a, b) => b - a);
+
+                    html += `<div class="scrape-history-source"><h4>${src.label}</h4>`;
+                    if (!years.length) {
+                        html += '<div class="scrape-history-empty">No year scrapes yet.</div>';
+                    } else {
+                        html += '<div class="year-chip-row">';
+                        years.forEach(year => {
+                            const done = !!doneMap[year];
+                            const hasData = !!dataMap[year];
+                            const classes = ['year-chip'];
+                            if (done) classes.push('done');
+                            else if (hasData) classes.push('has-data');
+                            const mark = done ? '<span class="chip-mark">✓</span>' : '';
+                            const title = done
+                                ? `${year} year scrape completed`
+                                : hasData
+                                    ? `${year} has ${dataMap[year].events} events / ${dataMap[year].rows} rows in DB (year scrape not logged yet)`
+                                    : `Select ${year} to scrape`;
+                            html += `<button type="button" class="${classes.join(' ')}" data-year="${year}" title="${escapeHtml(title)}" onclick="selectResultsYear(${year}, '${src.id}')">${mark}${year}</button>`;
+                        });
+                        html += '</div>';
+                    }
+                    html += '</div>';
+                });
+                box.innerHTML = html;
+                refreshYearChipSelection();
+            } catch (err) {
+                box.innerHTML = `<div class="scrape-history-empty" style="color:#ff8080;">Could not load scrape history: ${escapeHtml(err.message)}</div>`;
+                populateResultsYearSelect();
             }
         }
 
@@ -1684,11 +1925,13 @@
                 : jobSource === 'clubspot'
                     ? 'ClubSpot only'
                     : 'Both sources';
+            const windowLabel = data.windowLabel
+                || (data.year ? `Year ${data.year}` : `Last ${escapeHtml(String(lookback))} days`);
 
             showResultsStatus(
                 `<div class="results-progress-header">
                     <span class="progress-title">${title}</span>
-                    <span class="progress-meta">Last ${escapeHtml(String(lookback))} days · ${sourceLabel}</span>
+                    <span class="progress-meta">${escapeHtml(String(windowLabel))} · ${sourceLabel}</span>
                 </div>
                 <div class="results-progress-tiles">${tiles.join('')}</div>
                 ${note}`,
@@ -1716,7 +1959,10 @@
                     }
                     if (data.finishedAt) {
                         renderResultsScrapeStatus(data);
-                        if (!once) loadRaceResultsStats();
+                        if (!once) {
+                            loadRaceResultsStats();
+                            loadResultsScrapeHistory();
+                        }
                     }
                 }
             } catch (err) {
@@ -1726,17 +1972,34 @@
 
         async function startResultsScrape() {
             const source = document.getElementById('resultsSourceSelect').value;
+            const mode = document.getElementById('resultsModeSelect').value;
             const lookbackDays = parseInt(document.getElementById('resultsLookbackSelect').value, 10) || 60;
+            const year = parseInt(document.getElementById('resultsYearSelect').value, 10);
+            const body = { source };
+            let windowLabel = `Last ${lookbackDays} days`;
+            if (mode === 'year' && year) {
+                body.year = year;
+                windowLabel = `Year ${year}`;
+            } else {
+                body.lookbackDays = lookbackDays;
+            }
             document.getElementById('resultsScrapeButton').disabled = true;
             renderResultsScrapeStatus(
-                { running: true, lookbackDays, source, stats: {} },
+                {
+                    running: true,
+                    lookbackDays: body.lookbackDays || null,
+                    year: body.year || null,
+                    windowLabel,
+                    source,
+                    stats: {}
+                },
                 { starting: true, source }
             );
             try {
                 const res = await fetch('/api/race-results/scrape', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ source, lookbackDays })
+                    body: JSON.stringify(body)
                 });
                 const data = await res.json();
                 if (!data.success && res.status !== 409) throw new Error(data.error || 'Failed to start');
@@ -1744,7 +2007,14 @@
                 if (!resultsPollTimer) resultsPollTimer = setInterval(() => pollResultsScrape(false), 2500);
             } catch (err) {
                 renderResultsScrapeStatus(
-                    { running: false, lookbackDays, source, stats: {} },
+                    {
+                        running: false,
+                        lookbackDays: body.lookbackDays || null,
+                        year: body.year || null,
+                        windowLabel,
+                        source,
+                        stats: {}
+                    },
                     { errorText: err.message, source }
                 );
                 document.getElementById('resultsScrapeButton').disabled = false;
@@ -1759,6 +2029,7 @@
                 if (!data.success) throw new Error(data.error || 'Clear failed');
                 showResultsStatus(`Cleared ${data.deleted} scraped result row(s).`, 'success');
                 loadRaceResultsStats();
+                loadResultsScrapeHistory();
             } catch (err) {
                 showResultsStatus('Error: ' + escapeHtml(err.message), 'error');
             }
@@ -1771,6 +2042,13 @@
             div.innerHTML = html;
             log.appendChild(div);
             log.scrollTop = log.scrollHeight;
+        }
+
+        function ensureChatWelcome() {
+            const log = document.getElementById('resultsChatLog');
+            if (!log || log.dataset.welcomed === '1') return;
+            log.dataset.welcomed = '1';
+            addResultsChat('bot', 'Ask about scraped race results — sailors, classes, clubs, sail numbers, or years (e.g. <strong>top 5 in C420 in 2025</strong>).');
         }
 
         async function sendResultsChat() {
@@ -1810,15 +2088,23 @@
             if (lookSel && savedLookback && [...lookSel.options].some(o => o.value === savedLookback)) {
                 lookSel.value = savedLookback;
             }
+            populateResultsYearSelect();
+            const savedMode = localStorage.getItem('raceResultsMode');
+            const modeSel = document.getElementById('resultsModeSelect');
+            if (modeSel && (savedMode === 'year' || savedMode === 'lookback')) {
+                modeSel.value = savedMode;
+            }
+            onResultsModeChange();
 
             const hash = (location.hash || '').replace('#', '');
-            showAdminTab(hash === 'results' ? 'results' : 'dates');
+            showAdminTab(['dates', 'results', 'chat'].includes(hash) ? hash : 'dates');
             window.addEventListener('hashchange', () => {
                 const h = (location.hash || '').replace('#', '');
-                showAdminTab(h === 'results' ? 'results' : 'dates');
+                showAdminTab(['dates', 'results', 'chat'].includes(h) ? h : 'dates');
             });
 
             loadAll();
+            loadResultsScrapeHistory();
             
             // Allow Enter key to apply filters
             ['dateFilter', 'nameFilter', 'locationFilter'].forEach(id => {

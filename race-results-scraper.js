@@ -20,12 +20,19 @@ const HTTP_HEADERS = {
     'User-Agent': 'LoveSailing/1.0 (race-results indexer; https://lovesailing.ai)'
 };
 
+const SCRAPE_LOG_TABLE = 'race_results_scrape_log';
+
 const job = {
     running: false,
     startedAt: null,
     finishedAt: null,
     source: null,
+    mode: 'lookback',
+    year: null,
     lookbackDays: LOOKBACK_DAYS,
+    fromDate: null,
+    toDate: null,
+    windowLabel: null,
     log: [],
     stats: emptyStats(),
     error: null
@@ -87,10 +94,65 @@ function snapshotJob() {
         startedAt: job.startedAt,
         finishedAt: job.finishedAt,
         source: job.source,
+        mode: job.mode,
+        year: job.year,
         lookbackDays: job.lookbackDays,
+        fromDate: job.fromDate,
+        toDate: job.toDate,
+        windowLabel: job.windowLabel,
         stats: job.stats,
         error: job.error,
         log: job.log.slice(-40)
+    };
+}
+
+/** Resolve a rolling lookback or a full calendar year into an inclusive UTC date window. */
+function resolveScrapeWindow({ lookbackDays, year } = {}) {
+    const now = new Date();
+    now.setUTCHours(0, 0, 0, 0);
+    const today = now.toISOString().slice(0, 10);
+    const y = year != null && String(year).trim() !== '' ? parseInt(year, 10) : NaN;
+    if (Number.isFinite(y) && y >= 2000 && y <= now.getUTCFullYear() + 1) {
+        const fromDate = `${y}-01-01`;
+        let toDate = `${y}-12-31`;
+        if (toDate > today) toDate = today;
+        return {
+            mode: 'year',
+            year: y,
+            lookbackDays: null,
+            fromDate,
+            toDate,
+            label: `Year ${y}`
+        };
+    }
+    const days = Math.min(
+        LOOKBACK_MAX_DAYS,
+        Math.max(1, parseInt(lookbackDays || LOOKBACK_DAYS, 10) || LOOKBACK_DAYS)
+    );
+    const from = lookbackCutoff(days);
+    return {
+        mode: 'lookback',
+        year: null,
+        lookbackDays: days,
+        fromDate: from.toISOString().slice(0, 10),
+        toDate: today,
+        label: `Last ${days} days`
+    };
+}
+
+function normalizeListingWindow(lookbackOrWindow) {
+    if (lookbackOrWindow && typeof lookbackOrWindow === 'object') {
+        return {
+            fromDate: lookbackOrWindow.fromDate,
+            toDate: lookbackOrWindow.toDate,
+            label: lookbackOrWindow.label || null
+        };
+    }
+    const days = lookbackOrWindow || LOOKBACK_DAYS;
+    return {
+        fromDate: lookbackCutoff(days).toISOString().slice(0, 10),
+        toDate: new Date().toISOString().slice(0, 10),
+        label: `Last ${days} days`
     };
 }
 
@@ -135,7 +197,64 @@ function cellText($, el) {
     return $(el).text().replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+async function ensureResultsScrapeLogTable(pool) {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS ${SCRAPE_LOG_TABLE} (
+            id SERIAL PRIMARY KEY,
+            source TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            lookback_days INTEGER,
+            year INTEGER,
+            from_date DATE,
+            to_date DATE,
+            events_found INTEGER DEFAULT 0,
+            events_scraped INTEGER DEFAULT 0,
+            rows_inserted INTEGER DEFAULT 0,
+            rows_updated INTEGER DEFAULT 0,
+            errors INTEGER DEFAULT 0,
+            started_at TIMESTAMPTZ,
+            finished_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            status TEXT NOT NULL DEFAULT 'success'
+        )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_rrsl_source_year ON ${SCRAPE_LOG_TABLE}(source, year)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_rrsl_finished ON ${SCRAPE_LOG_TABLE}(finished_at DESC)`);
+}
+
+async function logResultsScrape(pool, { source, window, stats, startedAt, status }) {
+    try {
+        await ensureResultsScrapeLogTable(pool);
+        await pool.query(
+            `
+            INSERT INTO ${SCRAPE_LOG_TABLE} (
+                source, mode, lookback_days, year, from_date, to_date,
+                events_found, events_scraped, rows_inserted, rows_updated, errors,
+                started_at, finished_at, status
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,CURRENT_TIMESTAMP,$13)
+            `,
+            [
+                source,
+                window.mode,
+                window.lookbackDays,
+                window.year,
+                window.fromDate,
+                window.toDate,
+                stats.eventsFound || 0,
+                stats.eventsScraped || 0,
+                stats.rowsInserted || 0,
+                stats.rowsUpdated || 0,
+                stats.errors || 0,
+                startedAt || null,
+                status || 'success'
+            ]
+        );
+    } catch (err) {
+        console.error('[race-results] scrape log write failed:', err.message);
+    }
+}
+
 async function ensureScrapedResultsTable(pool) {
+    await ensureResultsScrapeLogTable(pool);
     await pool.query(`
         CREATE TABLE IF NOT EXISTS ${TABLE} (
             id SERIAL PRIMARY KEY,
@@ -277,9 +396,8 @@ async function upsertRows(pool, rows) {
     return { inserted, updated, total: inserted + updated };
 }
 
-function parseRnListing($, lookbackDays) {
-    const cutoff = lookbackCutoff(lookbackDays).toISOString().slice(0, 10);
-    const today = new Date().toISOString().slice(0, 10);
+function parseRnListing($, lookbackOrWindow) {
+    const { fromDate, toDate } = normalizeListingWindow(lookbackOrWindow);
     const events = [];
     const seen = new Set();
 
@@ -289,7 +407,7 @@ function parseRnListing($, lookbackDays) {
         if ($cells.length < 3) return;
 
         const dateStr = parseRnDate(cellText($, $cells.eq(0)));
-        if (!dateStr || dateStr < cutoff || dateStr > today) return;
+        if (!dateStr || dateStr < fromDate || dateStr > toDate) return;
 
         const resultsHref = $cells.eq(2).find('a[href*="applet_regatta_results.php"]').attr('href')
             || $cells.eq(2).find('a[href*="regatta_id="]').attr('href');
@@ -658,26 +776,27 @@ function rowsFromClubspotPayload(payload, event, classId) {
     return rows.filter(r => r.skipper || r.sail_number);
 }
 
-async function scrapeRegattaNetwork(axios, cheerio, pool, lookbackDays) {
-    logLine('Regatta Network: loading results archive');
-    const from = lookbackCutoff(lookbackDays);
-    const fromYear = from.getUTCFullYear();
-    const thisYear = new Date().getUTCFullYear();
-    const urls = [RN_ARCHIVE_URL];
-    for (let y = fromYear; y <= thisYear; y++) {
+async function scrapeRegattaNetwork(axios, cheerio, pool, window) {
+    logLine(`Regatta Network: loading results archive (${window.label})`);
+    const fromYear = parseInt(window.fromDate.slice(0, 4), 10);
+    const toYear = parseInt(window.toDate.slice(0, 4), 10);
+    const urls = [];
+    // Year scrapes only need that year's past-results page; rolling windows may span years.
+    if (window.mode !== 'year') urls.push(RN_ARCHIVE_URL);
+    for (let y = fromYear; y <= toYear; y++) {
         urls.push(`https://www.regattanetwork.com/clubmgmt/applet_past_results.php?year=${y}`);
     }
 
     const byId = new Map();
     for (const url of urls) {
         const response = await axios.get(url, { headers: HTTP_HEADERS, timeout: 45000 });
-        const events = parseRnListing(cheerio.load(response.data), lookbackDays);
+        const events = parseRnListing(cheerio.load(response.data), window);
         events.forEach(e => byId.set(e.source_event_id, e));
         await sleep(150);
     }
     const events = Array.from(byId.values());
     job.stats.regattanetwork.eventsFound = events.length;
-    logLine(`Regatta Network: ${events.length} events in last ${lookbackDays} days`);
+    logLine(`Regatta Network: ${events.length} events for ${window.label}`);
 
     for (const event of events) {
         if (!job.running) break;
@@ -719,15 +838,15 @@ async function fetchClubspotClassIds(axios, regattaId) {
     return [];
 }
 
-async function listClubspotEvents(axios, lookbackDays) {
-    const now = new Date();
-    const from = lookbackCutoff(lookbackDays);
+async function listClubspotEvents(axios, window) {
+    const fromIso = `${window.fromDate}T00:00:00.000Z`;
+    const toIso = `${window.toDate}T23:59:59.999Z`;
     const where = {
         archived: { $ne: true },
         public: { $ne: false },
         endDate: {
-            $gte: { __type: 'Date', iso: from.toISOString() },
-            $lte: { __type: 'Date', iso: now.toISOString() }
+            $gte: { __type: 'Date', iso: fromIso },
+            $lte: { __type: 'Date', iso: toIso }
         }
     };
     const base = {
@@ -804,11 +923,11 @@ async function listClubspotEvents(axios, lookbackDays) {
     return events;
 }
 
-async function scrapeClubspot(axios, pool, lookbackDays) {
-    logLine('ClubSpot: listing events via Parse API');
-    const events = await listClubspotEvents(axios, lookbackDays);
+async function scrapeClubspot(axios, pool, window) {
+    logLine(`ClubSpot: listing events via Parse API (${window.label})`);
+    const events = await listClubspotEvents(axios, window);
     job.stats.clubspot.eventsFound = events.length;
-    logLine(`ClubSpot: ${events.length} events in last ${lookbackDays} days`);
+    logLine(`ClubSpot: ${events.length} events for ${window.label}`);
 
     for (const event of events) {
         if (!job.running) break;
@@ -836,21 +955,51 @@ async function scrapeClubspot(axios, pool, lookbackDays) {
     }
 }
 
-async function runScrape({ axios, cheerio, pool, source, lookbackDays }) {
-    logLine(`Starting scrape source=${source} lookbackDays=${lookbackDays}`);
+async function runScrape({ axios, cheerio, pool, source, window }) {
+    logLine(`Starting scrape source=${source} window=${window.label} (${window.fromDate} → ${window.toDate})`);
+    const startedAt = job.startedAt;
 
     try {
         await ensureScrapedResultsTable(pool);
         if (source === 'all' || source === 'regattanetwork') {
-            await scrapeRegattaNetwork(axios, cheerio, pool, lookbackDays);
+            await scrapeRegattaNetwork(axios, cheerio, pool, window);
         }
         if (source === 'all' || source === 'clubspot') {
-            await scrapeClubspot(axios, pool, lookbackDays);
+            await scrapeClubspot(axios, pool, window);
         }
         logLine('Scrape complete');
+        const status = job.error ? 'error' : 'success';
+        if (source === 'all' || source === 'regattanetwork') {
+            await logResultsScrape(pool, {
+                source: 'regattanetwork',
+                window,
+                stats: job.stats.regattanetwork,
+                startedAt,
+                status
+            });
+        }
+        if (source === 'all' || source === 'clubspot') {
+            await logResultsScrape(pool, {
+                source: 'clubspot',
+                window,
+                stats: job.stats.clubspot,
+                startedAt,
+                status
+            });
+        }
     } catch (err) {
         job.error = err.message;
         logLine(`Scrape failed: ${err.message}`);
+        const sources = source === 'all' ? ['regattanetwork', 'clubspot'] : [source];
+        for (const src of sources) {
+            await logResultsScrape(pool, {
+                source: src,
+                window,
+                stats: job.stats[src] || emptyStats()[src],
+                startedAt,
+                status: 'error'
+            });
+        }
     } finally {
         job.running = false;
         job.finishedAt = new Date().toISOString();
@@ -994,6 +1143,69 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
         }
     });
 
+    app.get('/api/race-results/scrape-history', async (req, res) => {
+        try {
+            await ensureScrapedResultsTable(pool);
+            const yearsDone = await pool.query(`
+                SELECT source, year,
+                    MAX(finished_at) AS last_finished,
+                    SUM(events_scraped)::int AS events_scraped,
+                    SUM(rows_inserted)::int AS rows_inserted,
+                    SUM(rows_updated)::int AS rows_updated
+                FROM ${SCRAPE_LOG_TABLE}
+                WHERE mode = 'year' AND year IS NOT NULL AND status = 'success'
+                GROUP BY source, year
+                ORDER BY source, year DESC
+            `);
+            const recent = await pool.query(`
+                SELECT source, mode, year, lookback_days, from_date::text, to_date::text,
+                    events_found, events_scraped, rows_inserted, rows_updated, errors,
+                    started_at, finished_at, status
+                FROM ${SCRAPE_LOG_TABLE}
+                ORDER BY finished_at DESC
+                LIMIT 40
+            `);
+            const dataYears = await pool.query(`
+                SELECT source, EXTRACT(YEAR FROM regatta_date)::int AS year,
+                    COUNT(*)::int AS rows,
+                    COUNT(DISTINCT source_event_id)::int AS events
+                FROM ${TABLE}
+                WHERE regatta_date IS NOT NULL
+                GROUP BY source, EXTRACT(YEAR FROM regatta_date)
+                ORDER BY source, year DESC
+            `);
+            const bySource = { clubspot: { yearsDone: [], dataYears: [] }, regattanetwork: { yearsDone: [], dataYears: [] } };
+            for (const row of yearsDone.rows) {
+                if (!bySource[row.source]) bySource[row.source] = { yearsDone: [], dataYears: [] };
+                bySource[row.source].yearsDone.push({
+                    year: row.year,
+                    lastFinished: row.last_finished,
+                    eventsScraped: row.events_scraped,
+                    rowsInserted: row.rows_inserted,
+                    rowsUpdated: row.rows_updated
+                });
+            }
+            for (const row of dataYears.rows) {
+                if (!bySource[row.source]) bySource[row.source] = { yearsDone: [], dataYears: [] };
+                bySource[row.source].dataYears.push({
+                    year: row.year,
+                    rows: row.rows,
+                    events: row.events
+                });
+            }
+            const currentYear = new Date().getUTCFullYear();
+            res.json({
+                success: true,
+                yearOptions: Array.from({ length: 8 }, (_, i) => currentYear - i),
+                bySource,
+                recent: recent.rows
+            });
+        } catch (e) {
+            console.error('race-results scrape-history error:', e);
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
     app.post('/api/race-results/scrape', async (req, res) => {
         if (job.running) {
             return res.status(409).json({ success: false, error: 'A results scrape is already running', status: snapshotJob() });
@@ -1002,23 +1214,37 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
         if (!['all', 'regattanetwork', 'clubspot'].includes(source)) {
             return res.status(400).json({ success: false, error: 'source must be all, regattanetwork, or clubspot' });
         }
-        const lookbackDays = Math.min(LOOKBACK_MAX_DAYS, Math.max(1, parseInt((req.body && req.body.lookbackDays) || LOOKBACK_DAYS, 10) || LOOKBACK_DAYS));
+        const yearRaw = req.body && (req.body.year != null && req.body.year !== '' ? req.body.year : null);
+        const window = resolveScrapeWindow({
+            lookbackDays: req.body && req.body.lookbackDays,
+            year: yearRaw
+        });
         job.running = true;
         job.startedAt = new Date().toISOString();
         job.finishedAt = null;
         job.source = source;
-        job.lookbackDays = lookbackDays;
+        job.mode = window.mode;
+        job.year = window.year;
+        job.lookbackDays = window.lookbackDays;
+        job.fromDate = window.fromDate;
+        job.toDate = window.toDate;
+        job.windowLabel = window.label;
         job.error = null;
         job.stats = emptyStats();
         job.log = [];
-        logLine(`Queued scrape source=${source} lookbackDays=${lookbackDays}`);
+        logLine(`Queued scrape source=${source} ${window.label} (${window.fromDate} → ${window.toDate})`);
         res.json({
             success: true,
             status: 'started',
-            message: `Race-results scrape started (${source}, last ${lookbackDays} days). Poll /api/race-results/status.`,
-            lookbackDays
+            message: `Race-results scrape started (${source}, ${window.label}). Poll /api/race-results/status.`,
+            lookbackDays: window.lookbackDays,
+            year: window.year,
+            mode: window.mode,
+            fromDate: window.fromDate,
+            toDate: window.toDate,
+            windowLabel: window.label
         });
-        runScrape({ axios, cheerio, pool, source, lookbackDays }).catch(err => {
+        runScrape({ axios, cheerio, pool, source, window }).catch(err => {
             job.running = false;
             job.finishedAt = new Date().toISOString();
             job.error = err.message;
@@ -1308,6 +1534,8 @@ module.exports = {
     LOOKBACK_DAYS,
     LOOKBACK_MAX_DAYS,
     TABLE,
+    SCRAPE_LOG_TABLE,
+    resolveScrapeWindow,
     ensureScrapedResultsTable,
     attachRaceResultsScraper,
     parseRnListing,
