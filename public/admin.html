@@ -2078,12 +2078,12 @@
                     <div class="stat-card clickable" onclick="exportRaceResultsCsv('sailors')" title="Download distinct sailors as CSV">
                         <h3>Sailors</h3>
                         <div class="value">${data.total_sailors || 0}</div>
-                        <div class="label">Distinct skippers</div>
+                        <div class="label">New scrape table only</div>
                     </div>
                     <div class="stat-card clickable" onclick="exportRaceResultsCsv('regattas')" title="Download distinct regattas as CSV">
                         <h3>Regattas</h3>
                         <div class="value">${data.total_regattas || 0}</div>
-                        <div class="label">${data.earliest_date || '—'} to ${data.latest_date || '—'}</div>
+                        <div class="label">${data.earliest_date || '—'} to ${data.latest_date || '—'} · scraped table</div>
                     </div>
                 `;
             } catch (err) {
@@ -2277,7 +2277,7 @@
         }
 
         async function clearScrapedResults() {
-            if (!confirm('Delete ALL rows in scraped_race_results? Existing chatbot data is not touched.')) return;
+            if (!confirm('Delete ALL rows in the NEW scraped_race_results table?\n\nThis does NOT touch historic SailBot / CSV uploads (regattanetworkdata).\nUse this to start clean, then scrape only the months/years you want.')) return;
             try {
                 const res = await fetch('/api/race-results/clear', { method: 'POST' });
                 const data = await res.json();
