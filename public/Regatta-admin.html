@@ -90,12 +90,6 @@
             font-size: 0.9em;
         }
 
-        .stat-card .export-hint {
-            margin-top: 8px;
-            color: #7ecfff;
-            font-size: 0.75em;
-        }
-
         .scrape-history {
             margin-top: 40px;
             background-color: rgba(255, 255, 255, 0.1);
@@ -752,12 +746,6 @@
         .tab-panel.active {
             display: block;
         }
-
-        .lookback-hint {
-            color: #aaa;
-            font-size: 0.9em;
-            margin-top: 8px;
-        }
     </style>
 </head>
 
@@ -773,7 +761,6 @@
         </div>
 
         <div id="tab-dates" class="tab-panel active">
-        <p>Upcoming / calendar events from Regatta Network, Clubspot, and High School Sailing</p>
 
         <div class="action-buttons">
             <button class="refresh-button" id="refreshButton" onclick="loadAll()">Refresh All</button>
@@ -793,7 +780,6 @@
 
         <div class="scrape-section">
             <h2>Scrape Regatta Dates</h2>
-            <p>Pull upcoming event listings (name, date, location, links) — not race results</p>
             
             <div class="scrape-source-select">
                 <label for="scrapeSourceSelect">Select Source:</label>
@@ -893,17 +879,15 @@
         </div>
 
         <div id="tab-results" class="tab-panel">
-        <p>Past race standings (skipper, sail, class, points) stored in a separate table for chatbot testing</p>
 
         <div class="scrape-section" id="raceResultsSection">
             <h2>Scrape Race Results</h2>
-            <p>Collect results from Regatta Network and ClubSpot into <code>scraped_race_results</code>. Each sailor row stores the race class (for example ISCA/Sunfish), overall place, and every race score in order — including throwouts in brackets and DNC/DNF. Existing chatbot data is not changed. Re-running a scrape <strong>updates</strong> matching rows instead of inserting duplicates.</p>
 
             <div id="raceResultsStats" class="stats-container" style="margin-top: 16px;"></div>
 
             <div class="scrape-source-select">
                 <label for="resultsLookbackSelect">How far back to collect:</label>
-                <select id="resultsLookbackSelect" onchange="updateLookbackHint()">
+                <select id="resultsLookbackSelect" onchange="localStorage.setItem('raceResultsLookbackDays', this.value)">
                     <option value="7">Last 7 days</option>
                     <option value="14">Last 14 days</option>
                     <option value="30">Last 1 month</option>
@@ -912,7 +896,6 @@
                     <option value="180">Last 6 months</option>
                     <option value="365">Last 1 year</option>
                 </select>
-                <p class="lookback-hint" id="lookbackHint"></p>
             </div>
 
             <div class="scrape-source-select">
@@ -935,7 +918,6 @@
 
             <div class="results-chat">
                 <h3 style="margin-top: 0; color: #7ecfff;">Ask the scraped data</h3>
-                <p style="color: #aaa; font-size: 0.9em;">Understands sailor/person, boat, race/regatta, place, date, sail number, and club. Common questions are answered locally (no OpenAI cost); unclear ones use gpt-4o-mini, then fall back to rules if the API is down.</p>
                 <div class="results-chat-log" id="resultsChatLog"></div>
                 <div class="results-chat-row">
                     <input id="resultsChatInput" type="text" placeholder="e.g. top 5 sailors in C420, best club, sail 5462, who won Sunfish">
@@ -976,22 +958,6 @@
             if (location.hash !== '#' + name) {
                 history.replaceState(null, '', '#' + name);
             }
-        }
-
-        function lookbackLabel(days) {
-            const n = parseInt(days, 10);
-            const d = new Date();
-            d.setDate(d.getDate() - n);
-            const from = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-            return `Will collect results from ${from} through today (${n} days). Longer windows take more time.`;
-        }
-
-        function updateLookbackHint() {
-            const sel = document.getElementById('resultsLookbackSelect');
-            if (!sel) return;
-            localStorage.setItem('raceResultsLookbackDays', sel.value);
-            const hint = document.getElementById('lookbackHint');
-            if (hint) hint.textContent = lookbackLabel(sel.value);
         }
 
         function toggleMenu() {
@@ -1496,19 +1462,16 @@
                         <h3>Scraped Rows</h3>
                         <div class="value">${data.total_records || 0}</div>
                         <div class="label">${src}</div>
-                        <div class="export-hint">Click to export CSV</div>
                     </div>
                     <div class="stat-card clickable" onclick="exportRaceResultsCsv('sailors')" title="Download distinct sailors as CSV">
                         <h3>Sailors</h3>
                         <div class="value">${data.total_sailors || 0}</div>
                         <div class="label">Distinct skippers</div>
-                        <div class="export-hint">Click to export CSV</div>
                     </div>
                     <div class="stat-card clickable" onclick="exportRaceResultsCsv('regattas')" title="Download distinct regattas as CSV">
                         <h3>Regattas</h3>
                         <div class="value">${data.total_regattas || 0}</div>
                         <div class="label">${data.earliest_date || '—'} to ${data.latest_date || '—'}</div>
-                        <div class="export-hint">Click to export CSV</div>
                     </div>
                 `;
             } catch (err) {
@@ -1647,7 +1610,6 @@
             if (lookSel && savedLookback && [...lookSel.options].some(o => o.value === savedLookback)) {
                 lookSel.value = savedLookback;
             }
-            updateLookbackHint();
 
             const hash = (location.hash || '').replace('#', '');
             showAdminTab(hash === 'results' ? 'results' : 'dates');
