@@ -747,8 +747,8 @@
             flex-direction: column;
             min-height: calc(100vh - 220px);
             text-align: left;
-            background: rgba(0, 0, 0, 0.22);
-            border: 1px solid rgba(126, 207, 255, 0.18);
+            background: rgba(200, 220, 255, 0.12);
+            border: 1px solid rgba(126, 207, 255, 0.22);
             border-radius: 12px;
             padding: 18px;
             margin-top: 12px;
@@ -769,10 +769,186 @@
             flex: 1;
             min-height: 420px;
             max-height: none;
-            background: rgba(0, 0, 0, 0.18);
-            border-radius: 10px;
-            padding: 14px;
+            background: rgba(200, 220, 255, 0.18);
+            border-radius: 12px;
+            padding: 16px;
             margin-bottom: 14px;
+        }
+
+        .chatbot-panel .results-chat-msg.user {
+            background: #ffffff;
+            color: #1a1a2e;
+            border-radius: 12px;
+            border-bottom-right-radius: 4px;
+            max-width: 80%;
+        }
+
+        .chatbot-panel .results-chat-msg.bot {
+            background: #a8d8f0;
+            color: #1a1a2e;
+            border-radius: 12px;
+            border-bottom-left-radius: 4px;
+            width: auto;
+            max-width: 95%;
+        }
+
+        .chatbot-panel .results-chat-row input {
+            background: rgba(255, 255, 255, 0.12);
+            border: 2px solid rgba(168, 216, 240, 0.55);
+            color: #fff;
+        }
+
+        .chatbot-panel .results-chat-row input::placeholder {
+            color: rgba(255, 255, 255, 0.55);
+        }
+
+        .sailor-results-card {
+            margin-top: 14px;
+            background: #fff;
+            border-radius: 10px;
+            padding: 18px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            color: #1a1a2e;
+            text-align: left;
+        }
+
+        .sailor-results-card h3 {
+            margin: 0 0 12px;
+            color: #0066cc;
+            font-size: 1em;
+            text-decoration: underline;
+            text-decoration-color: #0066cc;
+        }
+
+        .sailor-results-card .section {
+            margin-bottom: 18px;
+        }
+
+        .sailor-results-card .section:last-child {
+            margin-bottom: 0;
+        }
+
+        .sailor-results-card .info-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 4px;
+        }
+
+        .sailor-results-card .info-table td {
+            padding: 6px 10px 6px 0;
+            vertical-align: top;
+        }
+
+        .sailor-results-card .info-table td:first-child {
+            font-weight: 600;
+            color: #333;
+            width: 1%;
+            white-space: nowrap;
+        }
+
+        .sailor-results-card table.data {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+        }
+
+        .sailor-results-card table.data th,
+        .sailor-results-card table.data td {
+            padding: 8px 10px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .sailor-results-card table.data th {
+            background: #f0f4ff;
+            color: #0066cc;
+            font-weight: 600;
+        }
+
+        .sailor-results-card table.data tbody tr:nth-child(even) {
+            background: #f7fbff;
+        }
+
+        .sailor-results-card .pos-link {
+            background: none;
+            border: none;
+            color: #0066cc;
+            font-weight: 700;
+            cursor: pointer;
+            text-decoration: underline;
+            padding: 0;
+            font-size: inherit;
+        }
+
+        .sailor-results-card .pos-link:hover {
+            color: #0088ff;
+        }
+
+        .sailor-results-card .detail-panel {
+            display: none;
+            margin: 8px 0 12px;
+            padding: 12px;
+            background: #f4f8ff;
+            border: 1px solid #d5e4ff;
+            border-radius: 8px;
+            font-size: 0.88em;
+        }
+
+        .sailor-results-card .detail-panel.open {
+            display: block;
+        }
+
+        .sailor-results-card .detail-panel a {
+            color: #0066cc;
+        }
+
+        .sailor-results-card .race-cells {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .sailor-results-card .race-cell {
+            background: #e8f1ff;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .sailor-results-card .race-cell.best {
+            background: #d8ffe8;
+            font-weight: 700;
+        }
+
+        .btn-download {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 14px;
+            padding: 10px 18px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95em;
+            cursor: pointer;
+        }
+
+        .btn-download:hover {
+            background: #0088ff;
+        }
+
+        .chat-name-chip {
+            display: inline-block;
+            margin: 4px 6px 0 0;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(0, 102, 204, 0.12);
+            color: #0066cc;
+            border: 1px solid rgba(0, 102, 204, 0.25);
+            cursor: pointer;
+            font-size: 0.9em;
         }
 
         .scrape-mode-row {
@@ -2082,23 +2258,190 @@
             div.innerHTML = html;
             log.appendChild(div);
             log.scrollTop = log.scrollHeight;
+            return div;
         }
 
-        function ensureChatWelcome() {
+        async function ensureChatWelcome() {
             const log = document.getElementById('resultsChatLog');
             if (!log || log.dataset.welcomed === '1') return;
             log.dataset.welcomed = '1';
-            addResultsChat('bot', 'Ask about scraped race results — sailors, classes, clubs, sail numbers, or years (e.g. <strong>top 5 in C420 in 2025</strong>).');
+            let msg = 'Ask about scraped race results — sailors, classes, clubs, sail numbers, or years.';
+            try {
+                const res = await fetch('/api/race-results/stats');
+                const data = await res.json();
+                if (data.success) {
+                    const sailors = Number(data.total_sailors || 0).toLocaleString();
+                    const regattas = Number(data.total_regattas || 0).toLocaleString();
+                    const rows = Number(data.total_records || 0).toLocaleString();
+                    msg = `I have knowledge of <strong>${sailors}</strong> sailors across <strong>${regattas}</strong> regattas (<strong>${rows}</strong> result rows). How can I help?`;
+                }
+            } catch (_) { /* ignore */ }
+            addResultsChat('bot', msg);
         }
 
-        async function sendResultsChat() {
+        function formatReplyMarkdown(text) {
+            return escapeHtml(text || '')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\n/g, '<br>');
+        }
+
+        function renderSailorCard(data) {
+            if (!data || data.resultType !== 'sailor_card') return '';
+            const sailor = data.sailor || {};
+            const summary = data.summary || {};
+            const details = data.details || {};
+            let html = '';
+
+            html += `<div class="section"><h3>Sailor Info</h3><table class="info-table">
+                <tr><td>Name</td><td>${escapeHtml(sailor.name || '—')}</td></tr>
+                <tr><td>Club</td><td>${escapeHtml(sailor.club || 'Unknown')}</td></tr>
+                <tr><td>Regattas</td><td>${escapeHtml(String(summary.totalRegattas ?? '—'))}</td></tr>
+                <tr><td>Best regatta place</td><td>${escapeHtml(summary.bestRegattaPlace != null ? String(summary.bestRegattaPlace) : '—')}</td></tr>
+                <tr><td>Best race place</td><td>${escapeHtml(summary.bestRacePlace != null ? String(summary.bestRacePlace) : '—')}</td></tr>
+            </table></div>`;
+
+            html += '<div class="section"><h3>Regatta Achievements</h3><table class="data"><thead><tr><th>Position</th><th>Regatta Name</th><th>Date</th><th>Class</th></tr></thead><tbody>';
+            const regattaRows = data.regattaAchievements || [];
+            if (regattaRows.length) {
+                regattaRows.forEach(r => {
+                    html += `<tr>
+                        <td><button type="button" class="pos-link" data-detail="${escapeHtml(r.detailId)}">${escapeHtml(String(r.position))}</button></td>
+                        <td>${escapeHtml(r.regatta_name || '')}</td>
+                        <td>${escapeHtml(r.regatta_date || '')}</td>
+                        <td>${escapeHtml(r.category || '')}</td>
+                    </tr>
+                    <tr class="detail-row"><td colspan="4"><div class="detail-panel" data-detail-panel="${escapeHtml(r.detailId)}"></div></td></tr>`;
+                });
+            } else {
+                html += '<tr><td colspan="4">—</td></tr>';
+            }
+            html += '</tbody></table></div>';
+
+            html += '<div class="section"><h3>Race Achievements</h3><table class="data"><thead><tr><th>Race place</th><th>Race #</th><th>Regatta Name</th><th>Date</th></tr></thead><tbody>';
+            const raceRows = data.raceAchievements || [];
+            if (raceRows.length) {
+                raceRows.forEach(r => {
+                    html += `<tr>
+                        <td><button type="button" class="pos-link" data-detail="${escapeHtml(r.detailId)}">${escapeHtml(String(r.racePlace))}</button></td>
+                        <td>${escapeHtml(String(r.raceIndex))}${r.throwout ? ' (TO)' : ''}</td>
+                        <td>${escapeHtml(r.regatta_name || '')}</td>
+                        <td>${escapeHtml(r.regatta_date || '')}</td>
+                    </tr>
+                    <tr class="detail-row"><td colspan="4"><div class="detail-panel" data-detail-panel="${escapeHtml(r.detailId)}"></div></td></tr>`;
+                });
+            } else {
+                html += '<tr><td colspan="4">No per-race scores available yet.</td></tr>';
+            }
+            html += '</tbody></table></div>';
+
+            html += '<div class="section"><h3>Race History</h3><table class="data"><thead><tr><th>Position</th><th>Regatta Name</th><th>Date</th><th>Class</th></tr></thead><tbody>';
+            (data.history || []).forEach(r => {
+                html += `<tr>
+                    <td><button type="button" class="pos-link" data-detail="${escapeHtml(r.detailId)}">${escapeHtml(String(r.position ?? '—'))}</button></td>
+                    <td>${escapeHtml(r.regatta_name || '')}</td>
+                    <td>${escapeHtml(r.regatta_date || '')}</td>
+                    <td>${escapeHtml(r.category || '')}</td>
+                </tr>
+                <tr class="detail-row"><td colspan="4"><div class="detail-panel" data-detail-panel="${escapeHtml(r.detailId)}"></div></td></tr>`;
+            });
+            html += '</tbody></table></div>';
+
+            html += '<button type="button" class="btn-download js-download-sailor">Download Results</button>';
+            return { html, details };
+        }
+
+        function renderDetailHtml(detail) {
+            if (!detail) return '<em>No detail available.</em>';
+            const cells = detail.resultsCells || [];
+            const best = cells.reduce((min, c) => (c.place != null && (min == null || c.place < min) ? c.place : min), null);
+            let html = `<div><strong>${escapeHtml(detail.regatta_name || 'Regatta')}</strong> · ${escapeHtml(formatChatDateLocal(detail.regatta_date))}</div>`;
+            html += `<div style="margin-top:6px;">Class: ${escapeHtml(detail.category || '—')} · Overall place: ${escapeHtml(String(detail.position ?? '—'))} · Points: ${escapeHtml(String(detail.total_points ?? '—'))}</div>`;
+            html += `<div style="margin-top:6px;">Sail: ${escapeHtml(detail.sail_number || '—')} · Boat: ${escapeHtml(detail.boat_name || '—')} · Club: ${escapeHtml(detail.yacht_club || '—')}</div>`;
+            if (cells.length) {
+                html += '<div class="race-cells">';
+                cells.forEach(c => {
+                    const cls = c.place != null && c.place === best ? 'race-cell best' : 'race-cell';
+                    html += `<span class="${cls}">R${c.index}: ${escapeHtml(c.raw)}</span>`;
+                });
+                html += '</div>';
+            } else if (detail.results) {
+                html += `<div style="margin-top:8px;">Race scores: ${escapeHtml(detail.results)}</div>`;
+            }
+            if (detail.source_url) {
+                html += `<div style="margin-top:8px;"><a href="${escapeHtml(detail.source_url)}" target="_blank" rel="noopener">Open source results</a></div>`;
+            }
+            return html;
+        }
+
+        function formatChatDateLocal(isoOrText) {
+            if (!isoOrText) return '—';
+            const s = String(isoOrText).slice(0, 10);
+            const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (!m) return String(isoOrText);
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            return `${parseInt(m[3], 10)} ${months[parseInt(m[2], 10) - 1]} ${m[1]}`;
+        }
+
+        function wireSailorCard(cardEl, data) {
+            const details = data.details || {};
+            cardEl.querySelectorAll('.pos-link').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const id = btn.getAttribute('data-detail');
+                    // Prefer the nearest detail panel under this button's section row
+                    let panel = btn.closest('tr')?.nextElementSibling?.querySelector(`.detail-panel[data-detail-panel="${id}"]`);
+                    if (!panel) panel = cardEl.querySelector(`.detail-panel[data-detail-panel="${id}"]`);
+                    if (!panel) return;
+                    const opening = !panel.classList.contains('open');
+                    cardEl.querySelectorAll('.detail-panel.open').forEach(p => {
+                        if (p !== panel) p.classList.remove('open');
+                    });
+                    if (opening) {
+                        panel.innerHTML = renderDetailHtml(details[id]);
+                        panel.classList.add('open');
+                    } else {
+                        panel.classList.remove('open');
+                    }
+                });
+            });
+            const dl = cardEl.querySelector('.js-download-sailor');
+            if (dl) {
+                dl.addEventListener('click', () => downloadSailorCard(data));
+            }
+        }
+
+        function downloadSailorCard(data) {
+            const rows = data.history || [];
+            const cols = ['position', 'regatta_name', 'regatta_date', 'category'];
+            const lines = [cols.join(',')];
+            rows.forEach(r => {
+                lines.push(cols.map(c => '"' + String(r[c] ?? '').replace(/"/g, '""') + '"').join(','));
+            });
+            const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'sailor-results-' + Date.now() + '.csv';
+            a.click();
+            URL.revokeObjectURL(a.href);
+        }
+
+        function renderSailorsList(data) {
+            const list = data.list || [];
+            let html = `<div class="sailor-results-card"><div class="section"><h3>${escapeHtml(data.subtitle || 'Matching sailors')}</h3>`;
+            list.forEach(item => {
+                html += `<button type="button" class="chat-name-chip" data-name="${escapeHtml(item.name)}">${escapeHtml(item.name)} (${escapeHtml(String(item.count || 0))})</button>`;
+            });
+            html += '</div></div>';
+            return html;
+        }
+
+        async function sendResultsChat(presetText) {
             const input = document.getElementById('resultsChatInput');
-            const text = (input.value || '').trim();
+            const text = (presetText || (input && input.value) || '').trim();
             if (!text) return;
-            input.value = '';
+            if (input) input.value = '';
             addResultsChat('user', escapeHtml(text));
             const btn = document.getElementById('resultsChatSend');
-            btn.disabled = true;
+            if (btn) btn.disabled = true;
             try {
                 const res = await fetch('/api/race-results/chat', {
                     method: 'POST',
@@ -2107,17 +2450,42 @@
                 });
                 const data = await res.json();
                 if (!data.success) throw new Error(data.error || 'Chat failed');
-                let html = escapeHtml(data.reply || '').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                if (data.data && data.data.rows && data.data.rows.length) {
-                    html += renderResultsMiniTable(data.data.rows);
+
+                let html = formatReplyMarkdown(data.reply || '');
+                const payload = data.data || null;
+                const bot = addResultsChat('bot', html);
+
+                if (payload && payload.resultType === 'sailor_card') {
+                    const rendered = renderSailorCard(payload);
+                    if (rendered && rendered.html) {
+                        const card = document.createElement('div');
+                        card.className = 'sailor-results-card';
+                        card.innerHTML = rendered.html;
+                        bot.appendChild(card);
+                        wireSailorCard(card, payload);
+                    }
+                } else if (payload && payload.resultType === 'sailors_list') {
+                    bot.insertAdjacentHTML('beforeend', renderSailorsList(payload));
+                    bot.querySelectorAll('.chat-name-chip').forEach(chip => {
+                        chip.addEventListener('click', () => sendResultsChat(chip.getAttribute('data-name')));
+                    });
+                } else if (payload && payload.resultType === 'list' && payload.rows && payload.rows.length) {
+                    bot.insertAdjacentHTML('beforeend', renderResultsMiniTable(payload.rows));
+                } else if (payload && payload.rows && payload.rows.length) {
+                    bot.insertAdjacentHTML('beforeend', renderResultsMiniTable(payload.rows));
                 }
+
                 const via = { rules: 'local rules', openai: 'OpenAI', cache: 'cached', fallback: 'rules fallback' }[data.parser] || data.parser;
-                if (via) html += `<div style="margin-top:8px;color:#888;font-size:0.75em;">Interpreted via ${escapeHtml(via)}</div>`;
-                addResultsChat('bot', html);
+                if (via) {
+                    const note = document.createElement('div');
+                    note.style.cssText = 'margin-top:8px;color:#335;font-size:0.75em;opacity:0.75;';
+                    note.textContent = 'Interpreted via ' + via;
+                    bot.appendChild(note);
+                }
             } catch (err) {
                 addResultsChat('bot', 'Error: ' + escapeHtml(err.message));
             } finally {
-                btn.disabled = false;
+                if (btn) btn.disabled = false;
             }
         }
 

@@ -1006,6 +1006,194 @@ async function runScrape({ axios, cheerio, pool, source, window }) {
     }
 }
 
+function formatChatDate(isoOrText) {
+    if (!isoOrText) return '—';
+    const s = String(isoOrText).slice(0, 10);
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return String(isoOrText);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[parseInt(m[2], 10) - 1] || m[2];
+    return `${parseInt(m[3], 10)} ${month} ${m[1]}`;
+}
+
+function parseNumericPlace(value) {
+    if (value == null) return null;
+    const m = String(value).trim().match(/^(\d+)/);
+    if (!m) return null;
+    const n = parseInt(m[1], 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Parse per-race score cells from scraped `results` text into numeric places when possible. */
+function parseRaceCells(resultsText) {
+    if (!resultsText) return [];
+    return String(resultsText)
+        .split(',')
+        .map((raw, index) => {
+            const cell = String(raw || '').trim();
+            if (!cell) return null;
+            const throwout = cell.includes('[') && cell.includes(']');
+            const cleaned = cell.replace(/[\[\]]/g, '').trim();
+            // ClubSpot style: "2/DNF" or plain "3"
+            const leading = cleaned.match(/^(\d+)(?:\s*\/.*)?$/);
+            const place = leading ? parseInt(leading[1], 10) : null;
+            return {
+                index: index + 1,
+                raw: cell,
+                place: Number.isFinite(place) && place > 0 ? place : null,
+                throwout
+            };
+        })
+        .filter(Boolean);
+}
+
+function pickBestKnownClub(rows) {
+    const counts = new Map();
+    for (const row of rows) {
+        const club = normalizeSpace(row.yacht_club);
+        if (!club) continue;
+        const key = club.toLowerCase();
+        const prev = counts.get(key) || { club, count: 0, latest: null };
+        prev.count += 1;
+        const d = row.regatta_date || '';
+        if (!prev.latest || d > prev.latest) prev.latest = d;
+        counts.set(key, prev);
+    }
+    const ranked = Array.from(counts.values()).sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        return String(b.latest || '').localeCompare(String(a.latest || ''));
+    });
+    return ranked.length ? ranked[0].club : 'Unknown';
+}
+
+function buildSailorCard(rows, preferredName) {
+    if (!rows || !rows.length) return null;
+    const bySkipper = new Map();
+    for (const row of rows) {
+        const name = normalizeSpace(row.skipper);
+        if (!name) continue;
+        const key = name.toLowerCase();
+        if (!bySkipper.has(key)) bySkipper.set(key, { name, rows: [] });
+        bySkipper.get(key).rows.push(row);
+    }
+    if (!bySkipper.size) return null;
+
+    let chosen = null;
+    const preferred = preferredName ? normalizeSpace(preferredName).toLowerCase() : '';
+    if (preferred && bySkipper.has(preferred)) {
+        chosen = bySkipper.get(preferred);
+    } else if (bySkipper.size === 1) {
+        chosen = Array.from(bySkipper.values())[0];
+    } else if (preferred) {
+        const partial = Array.from(bySkipper.values()).filter(s =>
+            s.name.toLowerCase().includes(preferred) || preferred.includes(s.name.toLowerCase())
+        );
+        if (partial.length === 1) chosen = partial[0];
+        else {
+            return {
+                resultType: 'sailors_list',
+                subtitle: 'Multiple sailors matched — pick one:',
+                list: Array.from(bySkipper.values())
+                    .sort((a, b) => b.rows.length - a.rows.length)
+                    .map(s => ({ name: s.name, count: s.rows.length }))
+            };
+        }
+    } else {
+        return {
+            resultType: 'sailors_list',
+            subtitle: 'Multiple sailors matched — pick one:',
+            list: Array.from(bySkipper.values())
+                .sort((a, b) => b.rows.length - a.rows.length)
+                .map(s => ({ name: s.name, count: s.rows.length }))
+        };
+    }
+    if (!chosen) {
+        chosen = Array.from(bySkipper.values()).sort((a, b) => b.rows.length - a.rows.length)[0];
+    }
+
+    const sailorRows = chosen.rows.slice().sort((a, b) => String(b.regatta_date || '').localeCompare(String(a.regatta_date || '')));
+    const club = pickBestKnownClub(sailorRows);
+    const details = {};
+    const history = [];
+    const racePlaces = [];
+
+    sailorRows.forEach((row, idx) => {
+        const detailId = `r${idx}`;
+        const cells = parseRaceCells(row.results);
+        details[detailId] = {
+            source: row.source || null,
+            source_url: row.source_url || null,
+            regatta_name: row.regatta_name || null,
+            regatta_date: row.regatta_date || null,
+            category: row.category || null,
+            position: row.position || null,
+            sail_number: row.sail_number || null,
+            boat_name: row.boat_name || null,
+            yacht_club: row.yacht_club || null,
+            results: row.results || null,
+            resultsCells: cells,
+            total_points: row.total_points || null
+        };
+        history.push({
+            detailId,
+            position: row.position || null,
+            regatta_name: row.regatta_name || null,
+            regatta_date: formatChatDate(row.regatta_date),
+            regatta_date_raw: row.regatta_date || null,
+            category: row.category || null
+        });
+        cells.forEach((cell) => {
+            if (cell.place == null) return;
+            racePlaces.push({
+                detailId,
+                racePlace: cell.place,
+                raceIndex: cell.index,
+                throwout: cell.throwout,
+                regatta_name: row.regatta_name || null,
+                regatta_date: formatChatDate(row.regatta_date),
+                category: row.category || null
+            });
+        });
+    });
+
+    const regattaAchievements = history
+        .filter(r => parseNumericPlace(r.position) != null)
+        .slice()
+        .sort((a, b) => parseNumericPlace(a.position) - parseNumericPlace(b.position))
+        .slice(0, 8);
+
+    const raceAchievements = racePlaces
+        .slice()
+        .sort((a, b) => a.racePlace - b.racePlace || String(b.regatta_date || '').localeCompare(String(a.regatta_date || '')))
+        .slice(0, 8);
+
+    const bestRegattaPlace = regattaAchievements.length ? parseNumericPlace(regattaAchievements[0].position) : null;
+    const bestRacePlace = raceAchievements.length ? raceAchievements[0].racePlace : null;
+    const uniqueRegattas = new Set(
+        sailorRows.map(r => `${normalizeSpace(r.regatta_name).toLowerCase()}|${r.regatta_date || ''}`)
+    ).size;
+    const dates = sailorRows.map(r => r.regatta_date).filter(Boolean).sort();
+    const sources = Array.from(new Set(sailorRows.map(r => r.source).filter(Boolean)));
+
+    return {
+        resultType: 'sailor_card',
+        sailor: { name: chosen.name, club },
+        summary: {
+            totalRegattas: uniqueRegattas,
+            bestRegattaPlace,
+            bestRacePlace,
+            resultRows: sailorRows.length,
+            firstDate: dates.length ? formatChatDate(dates[0]) : null,
+            lastDate: dates.length ? formatChatDate(dates[dates.length - 1]) : null,
+            sources
+        },
+        regattaAchievements,
+        raceAchievements,
+        history,
+        details
+    };
+}
+
 function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
     app.get('/api/race-results/status', (req, res) => {
         res.json({
@@ -1507,7 +1695,37 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                         ? `No rows matched ${bits.join(', ')}. The table has **${count}** scraped rows — try a different spelling, a sail number, or ask "sample" / "what's in the data".`
                         : `No rows matched "${String(message).trim()}". The table has **${count}** scraped rows — try "sample", a sailor name from the data, or a regatta name.`;
                 }
-            } else if (intent === 'regatta_search') {
+                return ok({ success: true, reply, data: null });
+            }
+
+            const sailorIntent = intent === 'sailor_search'
+                || (criteria.skipper && !criteria.regatta_name && !criteria.boat_name && !criteria.yacht_club && !criteria.sail_number && !criteria.position);
+            if (sailorIntent) {
+                const card = buildSailorCard(result.rows, criteria.skipper || String(message).trim());
+                if (card && card.resultType === 'sailors_list') {
+                    return ok({
+                        success: true,
+                        reply: 'I found several sailors with that name. Pick one:',
+                        data: card
+                    });
+                }
+                if (card && card.resultType === 'sailor_card') {
+                    const s = card.summary || {};
+                    const bits = [
+                        s.totalRegattas != null && `**Total number of regattas:** ${s.totalRegattas}`,
+                        s.bestRegattaPlace != null && `**Best regatta place:** ${s.bestRegattaPlace}`,
+                        s.bestRacePlace != null && `**Best race place:** ${s.bestRacePlace}`
+                    ].filter(Boolean);
+                    reply = `I found the following information:\n\n${bits.join('\n')}\n\nSee the tables below for achievements and race history.`;
+                    return ok({
+                        success: true,
+                        reply,
+                        data: card
+                    });
+                }
+            }
+
+            if (intent === 'regatta_search') {
                 const winners = result.rows.filter(r => String(r.position) === '1');
                 reply = `Found **${result.rows.length}** result rows for that regatta. ${winners.length ? 'First-place boats are included where position = 1.' : ''}`;
             } else if (intent === 'sail_search') {
@@ -1540,5 +1758,7 @@ module.exports = {
     attachRaceResultsScraper,
     parseRnListing,
     parseRnResultsPage,
-    rowsFromClubspotPayload
+    rowsFromClubspotPayload,
+    buildSailorCard,
+    parseRaceCells
 };
