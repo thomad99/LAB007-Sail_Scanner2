@@ -1335,6 +1335,11 @@
 
         <div class="scrape-section" id="raceResultsSection">
             <h2>Scrape Race Results</h2>
+            <p style="color:#9ec9ff; text-align:left; margin: 0 0 12px; line-height:1.45;">
+                This tab uses the <strong>new scraper table</strong> (<code>scraped_race_results</code>) only.
+                It is separate from historic SailBot / CSV uploads (<code>regattanetworkdata</code>), which the public ChatBot still uses.
+                If you see older years here, they came from earlier year scrapes into this new table — use <strong>Clear Scraped Results</strong> for a clean restart, then scrape only the window you want.
+            </p>
 
             <div id="raceResultsStats" class="stats-container" style="margin-top: 16px;"></div>
 
@@ -1390,7 +1395,7 @@
         <div id="tab-chat" class="tab-panel">
             <div class="chatbot-panel">
                 <h2>Results ChatBot</h2>
-                <p class="chatbot-sub">Ask about scraped ClubSpot and Regatta Network result rows (sailors, classes, clubs, years).</p>
+                <p class="chatbot-sub">Answers from the <strong>new scraped results</strong> table only (not historic SailBot CSV uploads).</p>
                 <div class="results-chat-log" id="resultsChatLog"></div>
                 <div class="results-chat-row">
                     <input id="resultsChatInput" type="text" placeholder="e.g. top 5 sailors in C420 in 2025, best club, sail 5462, who won Sunfish">
@@ -1525,17 +1530,17 @@
                     (info.yearsDone || []).forEach(y => { doneMap[y.year] = y; });
                     const dataMap = {};
                     (info.dataYears || []).forEach(y => { dataMap[y.year] = y; });
+                    // Only show years that were actually scraped or already have rows —
+                    // do not pad with empty yearOptions (that made unused years look like history).
                     const yearSet = new Set([
                         ...(info.yearsDone || []).map(y => y.year),
                         ...(info.dataYears || []).map(y => y.year)
                     ]);
-                    // Always show recent year options so empty history still has clickable years
-                    (data.yearOptions || []).slice(0, 6).forEach(y => yearSet.add(y));
                     const years = Array.from(yearSet).filter(Boolean).sort((a, b) => b - a);
 
                     html += `<div class="scrape-history-source"><h4>${src.label}</h4>`;
                     if (!years.length) {
-                        html += '<div class="scrape-history-empty">No year scrapes yet.</div>';
+                        html += '<div class="scrape-history-empty">No year scrapes or stored years yet. Use Calendar year above to scrape a year.</div>';
                     } else {
                         html += '<div class="year-chip-row">';
                         years.forEach(year => {
@@ -1548,11 +1553,12 @@
                             const title = done
                                 ? `${year} year scrape completed`
                                 : hasData
-                                    ? `${year} has ${dataMap[year].events} events / ${dataMap[year].rows} rows in DB (year scrape not logged yet)`
+                                    ? `${year} has ${dataMap[year].events} events / ${dataMap[year].rows} rows in scraped table`
                                     : `Select ${year} to scrape`;
                             html += `<button type="button" class="${classes.join(' ')}" data-year="${year}" title="${escapeHtml(title)}" onclick="selectResultsYear(${year}, '${src.id}')">${mark}${year}</button>`;
                         });
                         html += '</div>';
+                        html += '<div class="scrape-history-empty" style="margin-top:8px;">✓ = year scrape finished · blue = rows present in scraped table</div>';
                     }
                     html += '</div>';
                 });
