@@ -13,6 +13,7 @@ const LOOKBACK_MAX_DAYS = 365;
 const TABLE = 'scraped_race_results';
 const PARSE_APP_ID = 'myclubspot2017';
 const PARSE_REGATTAS_URL = 'https://theclubspot.com/parse/classes/regattas';
+const PARSE_BOAT_CLASSES_URL = 'https://theclubspot.com/parse/classes/boatClasses';
 const CLUBSPOT_RESULTS_API = 'https://results.theclubspot.com/clubspot-results-v4';
 const RN_ARCHIVE_URL = 'https://www.regattanetwork.com/html/results.php';
 const HTTP_HEADERS = {
@@ -645,6 +646,24 @@ async function scrapeRegattaNetwork(axios, cheerio, pool, lookbackDays) {
     }
 }
 
+async function fetchClubspotClassIds(axios, regattaId) {
+    const where = JSON.stringify({
+        regattaObject: { __type: 'Pointer', className: 'regattas', objectId: regattaId }
+    });
+    try {
+        const res = await axios.get(PARSE_BOAT_CLASSES_URL, {
+            params: { where, limit: '100', keys: 'objectId,name' },
+            headers: { ...HTTP_HEADERS, 'X-Parse-Application-Id': PARSE_APP_ID },
+            timeout: 30000
+        });
+        const ids = (res.data.results || []).map(c => c.objectId).filter(Boolean);
+        if (ids.length) return [...new Set(ids)];
+    } catch (err) {
+        logLine(`ClubSpot class lookup failed for ${regattaId}: ${err.message}`);
+    }
+    return [];
+}
+
 async function listClubspotEvents(axios, lookbackDays) {
     const now = new Date();
     const from = lookbackCutoff(lookbackDays);
@@ -687,11 +706,23 @@ async function listClubspotEvents(axios, lookbackDays) {
         if (page < pages - 1) await sleep(150);
     }
 
-    return all.map(r => {
+    const events = [];
+    let classLookups = 0;
+    for (const r of all) {
+        if (!r.objectId || !r.name) continue;
         const club = r.clubObject || {};
-        const classes = (r.boatClassesArray || [])
+        let classes = (r.boatClassesArray || [])
             .map(c => (c && c.objectId) || null)
             .filter(Boolean);
+        // Some ClubSpot events leave boatClassesArray empty but still have
+        // classes under parse/classes/boatClasses (e.g. Sarasota Labor Day).
+        if (!classes.length) {
+            classLookups += 1;
+            classes = await fetchClubspotClassIds(axios, r.objectId);
+            await sleep(80);
+        }
+        if (!classes.length) continue;
+
         const start = isoDate(r.startDate);
         const end = isoDate(r.endDate);
         let location = null;
@@ -702,7 +733,7 @@ async function listClubspotEvents(axios, lookbackDays) {
         const resultsUrl = subdomain
             ? `https://${subdomain}.theclubspot.com/regatta/${r.objectId}/results`
             : `https://www.theclubspot.com/regatta/${r.objectId}/results`;
-        return {
+        events.push({
             source_event_id: r.objectId,
             regatta_name: r.name,
             regatta_date: start || end,
@@ -710,8 +741,12 @@ async function listClubspotEvents(axios, lookbackDays) {
             location,
             class_ids: classes,
             results_url: resultsUrl
-        };
-    }).filter(e => e.source_event_id && e.regatta_name && e.class_ids.length);
+        });
+    }
+    if (classLookups) {
+        logLine(`ClubSpot: resolved classes via boatClasses lookup for ${classLookups} event(s)`);
+    }
+    return events;
 }
 
 async function scrapeClubspot(axios, pool, lookbackDays) {
@@ -816,6 +851,94 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
         }
     });
 
+    app.get('/api/race-results/export', async (req, res) => {
+        try {
+            await ensureScrapedResultsTable(pool);
+            const type = String((req.query && req.query.type) || 'rows').toLowerCase();
+            const source = String((req.query && req.query.source) || '').toLowerCase();
+            const params = [];
+            const sourceClause = ['regattanetwork', 'clubspot'].includes(source)
+                ? (() => { params.push(source); return `source = $${params.length}`; })()
+                : '';
+
+            let rows;
+            let filename;
+            if (type === 'sailors') {
+                const where = [sourceClause, `skipper IS NOT NULL AND TRIM(skipper) <> ''`].filter(Boolean).join(' AND ');
+                const r = await pool.query(`
+                    SELECT TRIM(skipper) AS skipper,
+                        COUNT(*)::int AS result_rows,
+                        COUNT(DISTINCT TRIM(regatta_name))::int AS regattas,
+                        COUNT(DISTINCT TRIM(yacht_club)) FILTER (WHERE yacht_club IS NOT NULL AND TRIM(yacht_club) <> '')::int AS clubs,
+                        MIN(regatta_date)::text AS first_date,
+                        MAX(regatta_date)::text AS last_date,
+                        STRING_AGG(DISTINCT source, ',') AS sources
+                    FROM ${TABLE}
+                    WHERE ${where}
+                    GROUP BY TRIM(skipper)
+                    ORDER BY result_rows DESC, skipper ASC
+                `, params);
+                rows = r.rows;
+                filename = `scraped-sailors-${Date.now()}.csv`;
+            } else if (type === 'regattas') {
+                const where = [sourceClause, `regatta_name IS NOT NULL AND TRIM(regatta_name) <> ''`].filter(Boolean).join(' AND ');
+                const r = await pool.query(`
+                    SELECT source,
+                        source_event_id,
+                        TRIM(regatta_name) AS regatta_name,
+                        MIN(regatta_date)::text AS regatta_date,
+                        COUNT(*)::int AS result_rows,
+                        COUNT(DISTINCT TRIM(skipper)) FILTER (WHERE skipper IS NOT NULL AND TRIM(skipper) <> '')::int AS sailors,
+                        COUNT(DISTINCT TRIM(category)) FILTER (WHERE category IS NOT NULL AND TRIM(category) <> '')::int AS classes,
+                        MIN(source_url) AS source_url
+                    FROM ${TABLE}
+                    WHERE ${where}
+                    GROUP BY source, source_event_id, TRIM(regatta_name)
+                    ORDER BY regatta_date DESC NULLS LAST, regatta_name ASC
+                `, params);
+                rows = r.rows;
+                filename = `scraped-regattas-${Date.now()}.csv`;
+            } else {
+                const where = sourceClause ? `WHERE ${sourceClause}` : '';
+                const r = await pool.query(`
+                    SELECT source, source_event_id, regatta_name, regatta_date::text AS regatta_date,
+                        category, position, sail_number, boat_name, skipper, yacht_club,
+                        results, total_points, source_url, scraped_at::text AS scraped_at
+                    FROM ${TABLE}
+                    ${where}
+                    ORDER BY regatta_date DESC NULLS LAST, category ASC, position ASC NULLS LAST, skipper ASC
+                `, params);
+                rows = r.rows;
+                filename = `scraped-rows-${Date.now()}.csv`;
+            }
+
+            const cols = rows.length
+                ? Object.keys(rows[0])
+                : (type === 'sailors'
+                    ? ['skipper', 'result_rows', 'regattas', 'clubs', 'first_date', 'last_date', 'sources']
+                    : type === 'regattas'
+                        ? ['source', 'source_event_id', 'regatta_name', 'regatta_date', 'result_rows', 'sailors', 'classes', 'source_url']
+                        : ['source', 'source_event_id', 'regatta_name', 'regatta_date', 'category', 'position', 'sail_number', 'boat_name', 'skipper', 'yacht_club', 'results', 'total_points', 'source_url', 'scraped_at']);
+
+            const escapeCsv = (v) => {
+                if (v == null) return '';
+                const s = String(v);
+                return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+            };
+            const lines = [cols.join(',')];
+            for (const row of rows) {
+                lines.push(cols.map(c => escapeCsv(row[c])).join(','));
+            }
+
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+            res.send(lines.join('\n'));
+        } catch (e) {
+            console.error('race-results export error:', e);
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
     app.post('/api/race-results/scrape', async (req, res) => {
         if (job.running) {
             return res.status(409).json({ success: false, error: 'A results scrape is already running', status: snapshotJob() });
@@ -875,6 +998,10 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 boat_name: parsed.boat_name,
                 yacht_club: parsed.yacht_club,
                 regatta_name: parsed.regatta_name,
+                sail_number: parsed.sail_number,
+                position: parsed.position,
+                category: parsed.category,
+                limit: parsed.limit,
                 year: parsed.year,
                 source: parsed.source
             };
@@ -925,6 +1052,16 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
             add('boat_name', criteria.boat_name);
             add('yacht_club', criteria.yacht_club);
             add('regatta_name', criteria.regatta_name);
+            if (criteria.sail_number) {
+                n++;
+                where += ` AND REPLACE(UPPER(COALESCE(sail_number,'')), ' ', '') ILIKE $${n}`;
+                params.push('%' + String(criteria.sail_number).replace(/\s+/g, '').toUpperCase() + '%');
+            }
+            if (criteria.position) {
+                n++;
+                where += ` AND TRIM(COALESCE(position,'')) = $${n}`;
+                params.push(String(criteria.position).trim());
+            }
             if (criteria.source) add('source', criteria.source);
             if (criteria.year) {
                 n++;
@@ -933,28 +1070,60 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
             }
 
             if (intent === 'top_sailors') {
+                const limit = Math.min(50, Math.max(1, parseInt(String(criteria.limit || 10), 10) || 10));
+                const paramsTop = [];
+                let whereTop = `skipper IS NOT NULL AND TRIM(skipper) <> ''`;
+                if (criteria.category) {
+                    paramsTop.push('%' + String(criteria.category).trim() + '%');
+                    whereTop += ` AND category ILIKE $${paramsTop.length}`;
+                }
+                if (criteria.year) {
+                    paramsTop.push(parseInt(String(criteria.year), 10));
+                    whereTop += ` AND EXTRACT(YEAR FROM regatta_date) = $${paramsTop.length}`;
+                }
+                paramsTop.push(limit);
                 const r = await pool.query(`
                     SELECT skipper AS name, COUNT(*)::int AS count
                     FROM ${TABLE}
-                    WHERE skipper IS NOT NULL AND TRIM(skipper) <> ''
-                    GROUP BY skipper ORDER BY count DESC, skipper ASC LIMIT 15
-                `);
+                    WHERE ${whereTop}
+                    GROUP BY skipper ORDER BY count DESC, skipper ASC
+                    LIMIT $${paramsTop.length}
+                `, paramsTop);
+                const scope = criteria.category ? ` in **${criteria.category}**` : '';
                 return ok({
                     success: true,
-                    reply: r.rows.length ? 'Top sailors in the scraped table (by result rows):' : 'No sailor data yet.',
+                    reply: r.rows.length
+                        ? `Top ${r.rows.length} sailor${r.rows.length === 1 ? '' : 's'}${scope} (by result rows):`
+                        : `No sailor data yet${scope}.`,
                     data: { resultType: 'list', rows: r.rows }
                 });
             }
             if (intent === 'top_clubs') {
+                const limit = Math.min(50, Math.max(1, parseInt(String(criteria.limit || 10), 10) || 10));
+                const paramsTop = [];
+                let whereTop = `yacht_club IS NOT NULL AND TRIM(yacht_club) <> ''`;
+                if (criteria.category) {
+                    paramsTop.push('%' + String(criteria.category).trim() + '%');
+                    whereTop += ` AND category ILIKE $${paramsTop.length}`;
+                }
+                if (criteria.year) {
+                    paramsTop.push(parseInt(String(criteria.year), 10));
+                    whereTop += ` AND EXTRACT(YEAR FROM regatta_date) = $${paramsTop.length}`;
+                }
+                paramsTop.push(limit);
                 const r = await pool.query(`
                     SELECT yacht_club AS name, COUNT(*)::int AS count
                     FROM ${TABLE}
-                    WHERE yacht_club IS NOT NULL AND TRIM(yacht_club) <> ''
-                    GROUP BY yacht_club ORDER BY count DESC, yacht_club ASC LIMIT 15
-                `);
+                    WHERE ${whereTop}
+                    GROUP BY yacht_club ORDER BY count DESC, yacht_club ASC
+                    LIMIT $${paramsTop.length}
+                `, paramsTop);
+                const scope = criteria.category ? ` in **${criteria.category}**` : '';
                 return ok({
                     success: true,
-                    reply: r.rows.length ? 'Top clubs in the scraped table:' : 'No club data yet.',
+                    reply: r.rows.length
+                        ? `Top ${r.rows.length} club${r.rows.length === 1 ? '' : 's'}${scope}:`
+                        : `No club data yet${scope}.`,
                     data: { resultType: 'list', rows: r.rows }
                 });
             }
@@ -972,30 +1141,98 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 });
             }
 
-            if (n === 0 && !['regatta_search', 'sailor_search', 'boat_search', 'club_search'].includes(intent)) {
+            if (n === 0 && !['regatta_search', 'sailor_search', 'boat_search', 'club_search', 'sail_search'].includes(intent)) {
                 return ok({
                     success: true,
-                    reply: 'Try a sailor name, boat, club, regatta, "who won [event]", "top sailors", or "what\'s in the data".',
+                    reply: 'Try a sailor/person name, boat, club, regatta/race, sail number, "who won [event]", "top sailors", or "what\'s in the data".',
                     data: null
                 });
             }
 
-            n++;
-            params.push(80);
-            const result = await pool.query(`
+            const selectSql = `
                 SELECT source, regatta_name, regatta_date::text, category, position, sail_number, boat_name, skipper, yacht_club, results, total_points, source_url
                 FROM ${TABLE}
+            `;
+            n++;
+            params.push(80);
+            let result = await pool.query(`
+                ${selectSql}
                 WHERE ${where}
                 ORDER BY regatta_date DESC NULLS LAST, position ASC NULLS LAST
                 LIMIT $${n}
             `, params);
 
+            // If the narrow intent missed (e.g. "Labor Day" parsed as a sailor),
+            // broaden across sailor / boat / club / regatta / sail / class.
+            if (!result.rows.length) {
+                const needle = String(message).trim();
+                const broad = await pool.query(`
+                    ${selectSql}
+                    WHERE skipper ILIKE $1
+                       OR boat_name ILIKE $1
+                       OR yacht_club ILIKE $1
+                       OR regatta_name ILIKE $1
+                       OR sail_number ILIKE $1
+                       OR category ILIKE $1
+                    ORDER BY regatta_date DESC NULLS LAST, position ASC NULLS LAST
+                    LIMIT 80
+                `, ['%' + needle + '%']);
+                if (broad.rows.length) {
+                    result = broad;
+                } else {
+                    // try significant tokens (drop tiny filler words)
+                    const tokens = needle.split(/\s+/).filter(t =>
+                        t.length > 2
+                        && !/^(the|and|for|from|with|who|what|when|where|show|find|get|top|best|sail|sailor|sailors|person|boat|club|race|regatta|place|date|number|named|called|results?)$/i.test(t)
+                    );
+                    if (tokens.length) {
+                        const ors = [];
+                        const bparams = [];
+                        tokens.forEach((t) => {
+                            bparams.push('%' + t + '%');
+                            const i = bparams.length;
+                            ors.push(`(skipper ILIKE $${i} OR boat_name ILIKE $${i} OR yacht_club ILIKE $${i} OR regatta_name ILIKE $${i} OR sail_number ILIKE $${i} OR category ILIKE $${i})`);
+                        });
+                        bparams.push(80);
+                        const tokened = await pool.query(`
+                            ${selectSql}
+                            WHERE ${ors.join(' AND ')}
+                            ORDER BY regatta_date DESC NULLS LAST, position ASC NULLS LAST
+                            LIMIT $${bparams.length}
+                        `, bparams);
+                        if (tokened.rows.length) result = tokened;
+                    }
+                }
+            }
+
             let reply;
             if (!result.rows.length) {
-                reply = 'No matching rows in the scraped results table yet. If you just started a scrape, wait for it to finish.';
+                const total = await pool.query(`SELECT COUNT(*)::int AS c FROM ${TABLE}`);
+                const count = total.rows[0].c;
+                if (!count) {
+                    reply = 'The scraped results table is empty. Run a results scrape first.';
+                } else {
+                    const bits = [
+                        criteria.skipper && `sailor "${criteria.skipper}"`,
+                        criteria.boat_name && `boat "${criteria.boat_name}"`,
+                        criteria.yacht_club && `club "${criteria.yacht_club}"`,
+                        criteria.regatta_name && `regatta "${criteria.regatta_name}"`,
+                        criteria.sail_number && `sail "${criteria.sail_number}"`,
+                        criteria.category && `class "${criteria.category}"`,
+                        criteria.position && `place ${criteria.position}`,
+                        criteria.year && `year ${criteria.year}`
+                    ].filter(Boolean);
+                    reply = bits.length
+                        ? `No rows matched ${bits.join(', ')}. The table has **${count}** scraped rows — try a different spelling, a sail number, or ask "sample" / "what's in the data".`
+                        : `No rows matched "${String(message).trim()}". The table has **${count}** scraped rows — try "sample", a sailor name from the data, or a regatta name.`;
+                }
             } else if (intent === 'regatta_search') {
                 const winners = result.rows.filter(r => String(r.position) === '1');
-                reply = `Found **${result.rows.length}** result rows for that regatta. ${winners.length ? 'First-place boats are listed first where position = 1.' : ''}`;
+                reply = `Found **${result.rows.length}** result rows for that regatta. ${winners.length ? 'First-place boats are included where position = 1.' : ''}`;
+            } else if (intent === 'sail_search') {
+                reply = `Found **${result.rows.length}** row(s) for that sail number.`;
+            } else if (criteria.position) {
+                reply = `Found **${result.rows.length}** row(s) at place **${criteria.position}**.`;
             } else {
                 reply = `Found **${result.rows.length}** matching result row(s) in the scraped table.`;
             }
