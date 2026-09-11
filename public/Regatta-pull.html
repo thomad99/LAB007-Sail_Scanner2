@@ -338,19 +338,19 @@
                     
                     if (data.results.regattanetwork) {
                         html += `<div class="results-item">`;
-                        html += `<strong>Regatta Network:</strong> Found ${data.results.regattanetwork.found}, Added ${data.results.regattanetwork.added}`;
+                        html += `<strong>Regatta Network:</strong> Found ${data.results.regattanetwork.found}, Newly added ${data.results.regattanetwork.added}${data.results.regattanetwork.updated != null ? `, Updated ${data.results.regattanetwork.updated}` : ''}`;
                         html += `</div>`;
                     }
                     
                     if (data.results.clubspot) {
                         html += `<div class="results-item">`;
-                        html += `<strong>Clubspot:</strong> Found ${data.results.clubspot.found}, Added ${data.results.clubspot.added}`;
+                        html += `<strong>Clubspot:</strong> Found ${data.results.clubspot.found}, Newly added ${data.results.clubspot.added}${data.results.clubspot.updated != null ? `, Updated ${data.results.clubspot.updated}` : ''}`;
                         html += `</div>`;
                     }
 
                     if (data.results.hssailing) {
                         html += `<div class="results-item">`;
-                        html += `<strong>High School Sailing:</strong> Found ${data.results.hssailing.found}, Added ${data.results.hssailing.added}`;
+                        html += `<strong>High School Sailing:</strong> Found ${data.results.hssailing.found}, Newly added ${data.results.hssailing.added}${data.results.hssailing.updated != null ? `, Updated ${data.results.hssailing.updated}` : ''}`;
                         html += `</div>`;
                     }
 

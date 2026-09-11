@@ -20,12 +20,19 @@ const HTTP_HEADERS = {
     'User-Agent': 'LoveSailing/1.0 (race-results indexer; https://lovesailing.ai)'
 };
 
+const SCRAPE_LOG_TABLE = 'race_results_scrape_log';
+
 const job = {
     running: false,
     startedAt: null,
     finishedAt: null,
     source: null,
+    mode: 'lookback',
+    year: null,
     lookbackDays: LOOKBACK_DAYS,
+    fromDate: null,
+    toDate: null,
+    windowLabel: null,
     log: [],
     stats: emptyStats(),
     error: null
@@ -87,10 +94,65 @@ function snapshotJob() {
         startedAt: job.startedAt,
         finishedAt: job.finishedAt,
         source: job.source,
+        mode: job.mode,
+        year: job.year,
         lookbackDays: job.lookbackDays,
+        fromDate: job.fromDate,
+        toDate: job.toDate,
+        windowLabel: job.windowLabel,
         stats: job.stats,
         error: job.error,
         log: job.log.slice(-40)
+    };
+}
+
+/** Resolve a rolling lookback or a full calendar year into an inclusive UTC date window. */
+function resolveScrapeWindow({ lookbackDays, year } = {}) {
+    const now = new Date();
+    now.setUTCHours(0, 0, 0, 0);
+    const today = now.toISOString().slice(0, 10);
+    const y = year != null && String(year).trim() !== '' ? parseInt(year, 10) : NaN;
+    if (Number.isFinite(y) && y >= 2000 && y <= now.getUTCFullYear() + 1) {
+        const fromDate = `${y}-01-01`;
+        let toDate = `${y}-12-31`;
+        if (toDate > today) toDate = today;
+        return {
+            mode: 'year',
+            year: y,
+            lookbackDays: null,
+            fromDate,
+            toDate,
+            label: `Year ${y}`
+        };
+    }
+    const days = Math.min(
+        LOOKBACK_MAX_DAYS,
+        Math.max(1, parseInt(lookbackDays || LOOKBACK_DAYS, 10) || LOOKBACK_DAYS)
+    );
+    const from = lookbackCutoff(days);
+    return {
+        mode: 'lookback',
+        year: null,
+        lookbackDays: days,
+        fromDate: from.toISOString().slice(0, 10),
+        toDate: today,
+        label: `Last ${days} days`
+    };
+}
+
+function normalizeListingWindow(lookbackOrWindow) {
+    if (lookbackOrWindow && typeof lookbackOrWindow === 'object') {
+        return {
+            fromDate: lookbackOrWindow.fromDate,
+            toDate: lookbackOrWindow.toDate,
+            label: lookbackOrWindow.label || null
+        };
+    }
+    const days = lookbackOrWindow || LOOKBACK_DAYS;
+    return {
+        fromDate: lookbackCutoff(days).toISOString().slice(0, 10),
+        toDate: new Date().toISOString().slice(0, 10),
+        label: `Last ${days} days`
     };
 }
 
@@ -135,7 +197,64 @@ function cellText($, el) {
     return $(el).text().replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+async function ensureResultsScrapeLogTable(pool) {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS ${SCRAPE_LOG_TABLE} (
+            id SERIAL PRIMARY KEY,
+            source TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            lookback_days INTEGER,
+            year INTEGER,
+            from_date DATE,
+            to_date DATE,
+            events_found INTEGER DEFAULT 0,
+            events_scraped INTEGER DEFAULT 0,
+            rows_inserted INTEGER DEFAULT 0,
+            rows_updated INTEGER DEFAULT 0,
+            errors INTEGER DEFAULT 0,
+            started_at TIMESTAMPTZ,
+            finished_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            status TEXT NOT NULL DEFAULT 'success'
+        )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_rrsl_source_year ON ${SCRAPE_LOG_TABLE}(source, year)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_rrsl_finished ON ${SCRAPE_LOG_TABLE}(finished_at DESC)`);
+}
+
+async function logResultsScrape(pool, { source, window, stats, startedAt, status }) {
+    try {
+        await ensureResultsScrapeLogTable(pool);
+        await pool.query(
+            `
+            INSERT INTO ${SCRAPE_LOG_TABLE} (
+                source, mode, lookback_days, year, from_date, to_date,
+                events_found, events_scraped, rows_inserted, rows_updated, errors,
+                started_at, finished_at, status
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,CURRENT_TIMESTAMP,$13)
+            `,
+            [
+                source,
+                window.mode,
+                window.lookbackDays,
+                window.year,
+                window.fromDate,
+                window.toDate,
+                stats.eventsFound || 0,
+                stats.eventsScraped || 0,
+                stats.rowsInserted || 0,
+                stats.rowsUpdated || 0,
+                stats.errors || 0,
+                startedAt || null,
+                status || 'success'
+            ]
+        );
+    } catch (err) {
+        console.error('[race-results] scrape log write failed:', err.message);
+    }
+}
+
 async function ensureScrapedResultsTable(pool) {
+    await ensureResultsScrapeLogTable(pool);
     await pool.query(`
         CREATE TABLE IF NOT EXISTS ${TABLE} (
             id SERIAL PRIMARY KEY,
@@ -277,9 +396,8 @@ async function upsertRows(pool, rows) {
     return { inserted, updated, total: inserted + updated };
 }
 
-function parseRnListing($, lookbackDays) {
-    const cutoff = lookbackCutoff(lookbackDays).toISOString().slice(0, 10);
-    const today = new Date().toISOString().slice(0, 10);
+function parseRnListing($, lookbackOrWindow) {
+    const { fromDate, toDate } = normalizeListingWindow(lookbackOrWindow);
     const events = [];
     const seen = new Set();
 
@@ -289,7 +407,7 @@ function parseRnListing($, lookbackDays) {
         if ($cells.length < 3) return;
 
         const dateStr = parseRnDate(cellText($, $cells.eq(0)));
-        if (!dateStr || dateStr < cutoff || dateStr > today) return;
+        if (!dateStr || dateStr < fromDate || dateStr > toDate) return;
 
         const resultsHref = $cells.eq(2).find('a[href*="applet_regatta_results.php"]').attr('href')
             || $cells.eq(2).find('a[href*="regatta_id="]').attr('href');
@@ -658,26 +776,27 @@ function rowsFromClubspotPayload(payload, event, classId) {
     return rows.filter(r => r.skipper || r.sail_number);
 }
 
-async function scrapeRegattaNetwork(axios, cheerio, pool, lookbackDays) {
-    logLine('Regatta Network: loading results archive');
-    const from = lookbackCutoff(lookbackDays);
-    const fromYear = from.getUTCFullYear();
-    const thisYear = new Date().getUTCFullYear();
-    const urls = [RN_ARCHIVE_URL];
-    for (let y = fromYear; y <= thisYear; y++) {
+async function scrapeRegattaNetwork(axios, cheerio, pool, window) {
+    logLine(`Regatta Network: loading results archive (${window.label})`);
+    const fromYear = parseInt(window.fromDate.slice(0, 4), 10);
+    const toYear = parseInt(window.toDate.slice(0, 4), 10);
+    const urls = [];
+    // Year scrapes only need that year's past-results page; rolling windows may span years.
+    if (window.mode !== 'year') urls.push(RN_ARCHIVE_URL);
+    for (let y = fromYear; y <= toYear; y++) {
         urls.push(`https://www.regattanetwork.com/clubmgmt/applet_past_results.php?year=${y}`);
     }
 
     const byId = new Map();
     for (const url of urls) {
         const response = await axios.get(url, { headers: HTTP_HEADERS, timeout: 45000 });
-        const events = parseRnListing(cheerio.load(response.data), lookbackDays);
+        const events = parseRnListing(cheerio.load(response.data), window);
         events.forEach(e => byId.set(e.source_event_id, e));
         await sleep(150);
     }
     const events = Array.from(byId.values());
     job.stats.regattanetwork.eventsFound = events.length;
-    logLine(`Regatta Network: ${events.length} events in last ${lookbackDays} days`);
+    logLine(`Regatta Network: ${events.length} events for ${window.label}`);
 
     for (const event of events) {
         if (!job.running) break;
@@ -719,15 +838,15 @@ async function fetchClubspotClassIds(axios, regattaId) {
     return [];
 }
 
-async function listClubspotEvents(axios, lookbackDays) {
-    const now = new Date();
-    const from = lookbackCutoff(lookbackDays);
+async function listClubspotEvents(axios, window) {
+    const fromIso = `${window.fromDate}T00:00:00.000Z`;
+    const toIso = `${window.toDate}T23:59:59.999Z`;
     const where = {
         archived: { $ne: true },
         public: { $ne: false },
         endDate: {
-            $gte: { __type: 'Date', iso: from.toISOString() },
-            $lte: { __type: 'Date', iso: now.toISOString() }
+            $gte: { __type: 'Date', iso: fromIso },
+            $lte: { __type: 'Date', iso: toIso }
         }
     };
     const base = {
@@ -804,11 +923,11 @@ async function listClubspotEvents(axios, lookbackDays) {
     return events;
 }
 
-async function scrapeClubspot(axios, pool, lookbackDays) {
-    logLine('ClubSpot: listing events via Parse API');
-    const events = await listClubspotEvents(axios, lookbackDays);
+async function scrapeClubspot(axios, pool, window) {
+    logLine(`ClubSpot: listing events via Parse API (${window.label})`);
+    const events = await listClubspotEvents(axios, window);
     job.stats.clubspot.eventsFound = events.length;
-    logLine(`ClubSpot: ${events.length} events in last ${lookbackDays} days`);
+    logLine(`ClubSpot: ${events.length} events for ${window.label}`);
 
     for (const event of events) {
         if (!job.running) break;
@@ -836,25 +955,243 @@ async function scrapeClubspot(axios, pool, lookbackDays) {
     }
 }
 
-async function runScrape({ axios, cheerio, pool, source, lookbackDays }) {
-    logLine(`Starting scrape source=${source} lookbackDays=${lookbackDays}`);
+async function runScrape({ axios, cheerio, pool, source, window }) {
+    logLine(`Starting scrape source=${source} window=${window.label} (${window.fromDate} → ${window.toDate})`);
+    const startedAt = job.startedAt;
 
     try {
         await ensureScrapedResultsTable(pool);
         if (source === 'all' || source === 'regattanetwork') {
-            await scrapeRegattaNetwork(axios, cheerio, pool, lookbackDays);
+            await scrapeRegattaNetwork(axios, cheerio, pool, window);
         }
         if (source === 'all' || source === 'clubspot') {
-            await scrapeClubspot(axios, pool, lookbackDays);
+            await scrapeClubspot(axios, pool, window);
         }
         logLine('Scrape complete');
+        const status = job.error ? 'error' : 'success';
+        if (source === 'all' || source === 'regattanetwork') {
+            await logResultsScrape(pool, {
+                source: 'regattanetwork',
+                window,
+                stats: job.stats.regattanetwork,
+                startedAt,
+                status
+            });
+        }
+        if (source === 'all' || source === 'clubspot') {
+            await logResultsScrape(pool, {
+                source: 'clubspot',
+                window,
+                stats: job.stats.clubspot,
+                startedAt,
+                status
+            });
+        }
     } catch (err) {
         job.error = err.message;
         logLine(`Scrape failed: ${err.message}`);
+        const sources = source === 'all' ? ['regattanetwork', 'clubspot'] : [source];
+        for (const src of sources) {
+            await logResultsScrape(pool, {
+                source: src,
+                window,
+                stats: job.stats[src] || emptyStats()[src],
+                startedAt,
+                status: 'error'
+            });
+        }
     } finally {
         job.running = false;
         job.finishedAt = new Date().toISOString();
     }
+}
+
+function formatChatDate(isoOrText) {
+    if (!isoOrText) return '—';
+    const s = String(isoOrText).slice(0, 10);
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return String(isoOrText);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[parseInt(m[2], 10) - 1] || m[2];
+    return `${parseInt(m[3], 10)} ${month} ${m[1]}`;
+}
+
+function parseNumericPlace(value) {
+    if (value == null) return null;
+    const m = String(value).trim().match(/^(\d+)/);
+    if (!m) return null;
+    const n = parseInt(m[1], 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Parse per-race score cells from scraped `results` text into numeric places when possible. */
+function parseRaceCells(resultsText) {
+    if (!resultsText) return [];
+    return String(resultsText)
+        .split(',')
+        .map((raw, index) => {
+            const cell = String(raw || '').trim();
+            if (!cell) return null;
+            const throwout = cell.includes('[') && cell.includes(']');
+            const cleaned = cell.replace(/[\[\]]/g, '').trim();
+            // ClubSpot style: "2/DNF" or plain "3"
+            const leading = cleaned.match(/^(\d+)(?:\s*\/.*)?$/);
+            const place = leading ? parseInt(leading[1], 10) : null;
+            return {
+                index: index + 1,
+                raw: cell,
+                place: Number.isFinite(place) && place > 0 ? place : null,
+                throwout
+            };
+        })
+        .filter(Boolean);
+}
+
+function pickBestKnownClub(rows) {
+    const counts = new Map();
+    for (const row of rows) {
+        const club = normalizeSpace(row.yacht_club);
+        if (!club) continue;
+        const key = club.toLowerCase();
+        const prev = counts.get(key) || { club, count: 0, latest: null };
+        prev.count += 1;
+        const d = row.regatta_date || '';
+        if (!prev.latest || d > prev.latest) prev.latest = d;
+        counts.set(key, prev);
+    }
+    const ranked = Array.from(counts.values()).sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        return String(b.latest || '').localeCompare(String(a.latest || ''));
+    });
+    return ranked.length ? ranked[0].club : 'Unknown';
+}
+
+function buildSailorCard(rows, preferredName) {
+    if (!rows || !rows.length) return null;
+    const bySkipper = new Map();
+    for (const row of rows) {
+        const name = normalizeSpace(row.skipper);
+        if (!name) continue;
+        const key = name.toLowerCase();
+        if (!bySkipper.has(key)) bySkipper.set(key, { name, rows: [] });
+        bySkipper.get(key).rows.push(row);
+    }
+    if (!bySkipper.size) return null;
+
+    let chosen = null;
+    const preferred = preferredName ? normalizeSpace(preferredName).toLowerCase() : '';
+    if (preferred && bySkipper.has(preferred)) {
+        chosen = bySkipper.get(preferred);
+    } else if (bySkipper.size === 1) {
+        chosen = Array.from(bySkipper.values())[0];
+    } else if (preferred) {
+        const partial = Array.from(bySkipper.values()).filter(s =>
+            s.name.toLowerCase().includes(preferred) || preferred.includes(s.name.toLowerCase())
+        );
+        if (partial.length === 1) chosen = partial[0];
+        else {
+            return {
+                resultType: 'sailors_list',
+                subtitle: 'Multiple sailors matched — pick one:',
+                list: Array.from(bySkipper.values())
+                    .sort((a, b) => b.rows.length - a.rows.length)
+                    .map(s => ({ name: s.name, count: s.rows.length }))
+            };
+        }
+    } else {
+        return {
+            resultType: 'sailors_list',
+            subtitle: 'Multiple sailors matched — pick one:',
+            list: Array.from(bySkipper.values())
+                .sort((a, b) => b.rows.length - a.rows.length)
+                .map(s => ({ name: s.name, count: s.rows.length }))
+        };
+    }
+    if (!chosen) {
+        chosen = Array.from(bySkipper.values()).sort((a, b) => b.rows.length - a.rows.length)[0];
+    }
+
+    const sailorRows = chosen.rows.slice().sort((a, b) => String(b.regatta_date || '').localeCompare(String(a.regatta_date || '')));
+    const club = pickBestKnownClub(sailorRows);
+    const details = {};
+    const history = [];
+    const racePlaces = [];
+
+    sailorRows.forEach((row, idx) => {
+        const detailId = `r${idx}`;
+        const cells = parseRaceCells(row.results);
+        details[detailId] = {
+            source: row.source || null,
+            source_url: row.source_url || null,
+            regatta_name: row.regatta_name || null,
+            regatta_date: row.regatta_date || null,
+            category: row.category || null,
+            position: row.position || null,
+            sail_number: row.sail_number || null,
+            boat_name: row.boat_name || null,
+            yacht_club: row.yacht_club || null,
+            results: row.results || null,
+            resultsCells: cells,
+            total_points: row.total_points || null
+        };
+        history.push({
+            detailId,
+            position: row.position || null,
+            regatta_name: row.regatta_name || null,
+            regatta_date: formatChatDate(row.regatta_date),
+            regatta_date_raw: row.regatta_date || null,
+            category: row.category || null
+        });
+        cells.forEach((cell) => {
+            if (cell.place == null) return;
+            racePlaces.push({
+                detailId,
+                racePlace: cell.place,
+                raceIndex: cell.index,
+                throwout: cell.throwout,
+                regatta_name: row.regatta_name || null,
+                regatta_date: formatChatDate(row.regatta_date),
+                category: row.category || null
+            });
+        });
+    });
+
+    const regattaAchievements = history
+        .filter(r => parseNumericPlace(r.position) != null)
+        .slice()
+        .sort((a, b) => parseNumericPlace(a.position) - parseNumericPlace(b.position))
+        .slice(0, 8);
+
+    const raceAchievements = racePlaces
+        .slice()
+        .sort((a, b) => a.racePlace - b.racePlace || String(b.regatta_date || '').localeCompare(String(a.regatta_date || '')))
+        .slice(0, 8);
+
+    const bestRegattaPlace = regattaAchievements.length ? parseNumericPlace(regattaAchievements[0].position) : null;
+    const bestRacePlace = raceAchievements.length ? raceAchievements[0].racePlace : null;
+    const uniqueRegattas = new Set(
+        sailorRows.map(r => `${normalizeSpace(r.regatta_name).toLowerCase()}|${r.regatta_date || ''}`)
+    ).size;
+    const dates = sailorRows.map(r => r.regatta_date).filter(Boolean).sort();
+    const sources = Array.from(new Set(sailorRows.map(r => r.source).filter(Boolean)));
+
+    return {
+        resultType: 'sailor_card',
+        sailor: { name: chosen.name, club },
+        summary: {
+            totalRegattas: uniqueRegattas,
+            bestRegattaPlace,
+            bestRacePlace,
+            resultRows: sailorRows.length,
+            firstDate: dates.length ? formatChatDate(dates[0]) : null,
+            lastDate: dates.length ? formatChatDate(dates[dates.length - 1]) : null,
+            sources
+        },
+        regattaAchievements,
+        raceAchievements,
+        history,
+        details
+    };
 }
 
 function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
@@ -994,6 +1331,69 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
         }
     });
 
+    app.get('/api/race-results/scrape-history', async (req, res) => {
+        try {
+            await ensureScrapedResultsTable(pool);
+            const yearsDone = await pool.query(`
+                SELECT source, year,
+                    MAX(finished_at) AS last_finished,
+                    SUM(events_scraped)::int AS events_scraped,
+                    SUM(rows_inserted)::int AS rows_inserted,
+                    SUM(rows_updated)::int AS rows_updated
+                FROM ${SCRAPE_LOG_TABLE}
+                WHERE mode = 'year' AND year IS NOT NULL AND status = 'success'
+                GROUP BY source, year
+                ORDER BY source, year DESC
+            `);
+            const recent = await pool.query(`
+                SELECT source, mode, year, lookback_days, from_date::text, to_date::text,
+                    events_found, events_scraped, rows_inserted, rows_updated, errors,
+                    started_at, finished_at, status
+                FROM ${SCRAPE_LOG_TABLE}
+                ORDER BY finished_at DESC
+                LIMIT 40
+            `);
+            const dataYears = await pool.query(`
+                SELECT source, EXTRACT(YEAR FROM regatta_date)::int AS year,
+                    COUNT(*)::int AS rows,
+                    COUNT(DISTINCT source_event_id)::int AS events
+                FROM ${TABLE}
+                WHERE regatta_date IS NOT NULL
+                GROUP BY source, EXTRACT(YEAR FROM regatta_date)
+                ORDER BY source, year DESC
+            `);
+            const bySource = { clubspot: { yearsDone: [], dataYears: [] }, regattanetwork: { yearsDone: [], dataYears: [] } };
+            for (const row of yearsDone.rows) {
+                if (!bySource[row.source]) bySource[row.source] = { yearsDone: [], dataYears: [] };
+                bySource[row.source].yearsDone.push({
+                    year: row.year,
+                    lastFinished: row.last_finished,
+                    eventsScraped: row.events_scraped,
+                    rowsInserted: row.rows_inserted,
+                    rowsUpdated: row.rows_updated
+                });
+            }
+            for (const row of dataYears.rows) {
+                if (!bySource[row.source]) bySource[row.source] = { yearsDone: [], dataYears: [] };
+                bySource[row.source].dataYears.push({
+                    year: row.year,
+                    rows: row.rows,
+                    events: row.events
+                });
+            }
+            const currentYear = new Date().getUTCFullYear();
+            res.json({
+                success: true,
+                yearOptions: Array.from({ length: 8 }, (_, i) => currentYear - i),
+                bySource,
+                recent: recent.rows
+            });
+        } catch (e) {
+            console.error('race-results scrape-history error:', e);
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
     app.post('/api/race-results/scrape', async (req, res) => {
         if (job.running) {
             return res.status(409).json({ success: false, error: 'A results scrape is already running', status: snapshotJob() });
@@ -1002,23 +1402,37 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
         if (!['all', 'regattanetwork', 'clubspot'].includes(source)) {
             return res.status(400).json({ success: false, error: 'source must be all, regattanetwork, or clubspot' });
         }
-        const lookbackDays = Math.min(LOOKBACK_MAX_DAYS, Math.max(1, parseInt((req.body && req.body.lookbackDays) || LOOKBACK_DAYS, 10) || LOOKBACK_DAYS));
+        const yearRaw = req.body && (req.body.year != null && req.body.year !== '' ? req.body.year : null);
+        const window = resolveScrapeWindow({
+            lookbackDays: req.body && req.body.lookbackDays,
+            year: yearRaw
+        });
         job.running = true;
         job.startedAt = new Date().toISOString();
         job.finishedAt = null;
         job.source = source;
-        job.lookbackDays = lookbackDays;
+        job.mode = window.mode;
+        job.year = window.year;
+        job.lookbackDays = window.lookbackDays;
+        job.fromDate = window.fromDate;
+        job.toDate = window.toDate;
+        job.windowLabel = window.label;
         job.error = null;
         job.stats = emptyStats();
         job.log = [];
-        logLine(`Queued scrape source=${source} lookbackDays=${lookbackDays}`);
+        logLine(`Queued scrape source=${source} ${window.label} (${window.fromDate} → ${window.toDate})`);
         res.json({
             success: true,
             status: 'started',
-            message: `Race-results scrape started (${source}, last ${lookbackDays} days). Poll /api/race-results/status.`,
-            lookbackDays
+            message: `Race-results scrape started (${source}, ${window.label}). Poll /api/race-results/status.`,
+            lookbackDays: window.lookbackDays,
+            year: window.year,
+            mode: window.mode,
+            fromDate: window.fromDate,
+            toDate: window.toDate,
+            windowLabel: window.label
         });
-        runScrape({ axios, cheerio, pool, source, lookbackDays }).catch(err => {
+        runScrape({ axios, cheerio, pool, source, window }).catch(err => {
             job.running = false;
             job.finishedAt = new Date().toISOString();
             job.error = err.message;
@@ -1281,7 +1695,37 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                         ? `No rows matched ${bits.join(', ')}. The table has **${count}** scraped rows — try a different spelling, a sail number, or ask "sample" / "what's in the data".`
                         : `No rows matched "${String(message).trim()}". The table has **${count}** scraped rows — try "sample", a sailor name from the data, or a regatta name.`;
                 }
-            } else if (intent === 'regatta_search') {
+                return ok({ success: true, reply, data: null });
+            }
+
+            const sailorIntent = intent === 'sailor_search'
+                || (criteria.skipper && !criteria.regatta_name && !criteria.boat_name && !criteria.yacht_club && !criteria.sail_number && !criteria.position);
+            if (sailorIntent) {
+                const card = buildSailorCard(result.rows, criteria.skipper || String(message).trim());
+                if (card && card.resultType === 'sailors_list') {
+                    return ok({
+                        success: true,
+                        reply: 'I found several sailors with that name. Pick one:',
+                        data: card
+                    });
+                }
+                if (card && card.resultType === 'sailor_card') {
+                    const s = card.summary || {};
+                    const bits = [
+                        s.totalRegattas != null && `**Total number of regattas:** ${s.totalRegattas}`,
+                        s.bestRegattaPlace != null && `**Best regatta place:** ${s.bestRegattaPlace}`,
+                        s.bestRacePlace != null && `**Best race place:** ${s.bestRacePlace}`
+                    ].filter(Boolean);
+                    reply = `I found the following information:\n\n${bits.join('\n')}\n\nSee the tables below for achievements and race history.`;
+                    return ok({
+                        success: true,
+                        reply,
+                        data: card
+                    });
+                }
+            }
+
+            if (intent === 'regatta_search') {
                 const winners = result.rows.filter(r => String(r.position) === '1');
                 reply = `Found **${result.rows.length}** result rows for that regatta. ${winners.length ? 'First-place boats are included where position = 1.' : ''}`;
             } else if (intent === 'sail_search') {
@@ -1308,9 +1752,13 @@ module.exports = {
     LOOKBACK_DAYS,
     LOOKBACK_MAX_DAYS,
     TABLE,
+    SCRAPE_LOG_TABLE,
+    resolveScrapeWindow,
     ensureScrapedResultsTable,
     attachRaceResultsScraper,
     parseRnListing,
     parseRnResultsPage,
-    rowsFromClubspotPayload
+    rowsFromClubspotPayload,
+    buildSailorCard,
+    parseRaceCells
 };

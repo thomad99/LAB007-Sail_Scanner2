@@ -23,6 +23,15 @@ const pool = new Pool({
     idleTimeoutMillis: 30000
 });
 
+/**
+ * Upserts report every touched row. Use RETURNING (xmax = 0) AS was_inserted
+ * so scrape_log.regattas_added counts only true inserts, not updates.
+ */
+function countTrueInserts(upsertResult) {
+    if (!upsertResult?.rows?.length) return 0;
+    return upsertResult.rows.filter((row) => row.was_inserted === true).length;
+}
+
 // Initialize regattas table if needed
 async function ensureRegattasTable() {
     try {
@@ -322,6 +331,7 @@ async function scrapeRegattaNetwork() {
         console.log(`Found ${regattas.length} regattas from Regatta Network`);
 
         let added = 0;
+        let updated = 0;
         for (const regatta of regattas) {
             try {
                 // Try to compute registrant count for Regatta Network events when we have a registrants URL
@@ -371,7 +381,7 @@ async function scrapeRegattaNetwork() {
                     }
                 }
 
-                await pool.query(`
+                const upsert = await pool.query(`
                     INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                     ON CONFLICT (regatta_name, regatta_date, source) 
@@ -382,6 +392,7 @@ async function scrapeRegattaNetwork() {
                         registrant_count = COALESCE(EXCLUDED.registrant_count, regattas.registrant_count),
                         source_id = EXCLUDED.source_id,
                         last_updated = CURRENT_TIMESTAMP
+                    RETURNING (xmax = 0) AS was_inserted
                 `, [
                     regatta.regatta_date,
                     regatta.regatta_name,
@@ -392,7 +403,8 @@ async function scrapeRegattaNetwork() {
                     regatta.source,
                     regatta.source_id
                 ]);
-                added++;
+                if (countTrueInserts(upsert)) added++;
+                else updated++;
             } catch (err) {
                 if (!err.message.includes('duplicate')) {
                     console.error('Error inserting regatta:', err);
@@ -405,7 +417,8 @@ async function scrapeRegattaNetwork() {
             VALUES ('regattanetwork', $1, $2)
         `, [regattas.length, added]);
 
-        return { found: regattas.length, added };
+        console.log(`Regatta Network: ${regattas.length} found, ${added} newly added, ${updated} updated`);
+        return { found: regattas.length, added, updated };
     } catch (error) {
         console.error('Error scraping Regatta Network:', error);
         throw error;
@@ -519,11 +532,12 @@ async function scrapeClubspot() {
 
         console.log(`📋 Valid regattas after filtering: ${extractedRegattas.length}`);
 
-        // Insert into database
+        // Insert into database (count only true inserts, not updates of existing rows)
         let added = 0;
+        let updated = 0;
         for (const regatta of extractedRegattas) {
             try {
-                await pool.query(`
+                const upsert = await pool.query(`
                     INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                     ON CONFLICT (regatta_name, regatta_date, source)
@@ -534,6 +548,7 @@ async function scrapeClubspot() {
                         registrant_count = COALESCE(EXCLUDED.registrant_count, regattas.registrant_count),
                         source_id = EXCLUDED.source_id,
                         last_updated = CURRENT_TIMESTAMP
+                    RETURNING (xmax = 0) AS was_inserted
                 `, [
                     regatta.regatta_date,
                     regatta.regatta_name,
@@ -544,7 +559,8 @@ async function scrapeClubspot() {
                     'clubspot',
                     regatta.source_id
                 ]);
-                added++;
+                if (countTrueInserts(upsert)) added++;
+                else updated++;
             } catch (err) {
                 if (!err.message.includes('duplicate')) {
                     console.error('Error inserting regatta:', err.message);
@@ -557,8 +573,8 @@ async function scrapeClubspot() {
             VALUES ('clubspot', $1, $2)
         `, [extractedRegattas.length, added]);
 
-        console.log(`✅ Clubspot scrape complete: ${extractedRegattas.length} found, ${added} added/updated`);
-        return { found: extractedRegattas.length, added };
+        console.log(`✅ Clubspot scrape complete: ${extractedRegattas.length} found, ${added} newly added, ${updated} updated`);
+        return { found: extractedRegattas.length, added, updated };
 
     } catch (error) {
         console.error('Error scraping Clubspot via API:', error.message);
@@ -632,10 +648,11 @@ async function scrapeHighSchoolSailing() {
         }
 
         let added = 0;
+        let updated = 0;
         for (const regatta of regattas) {
             try {
                 const sourceId = regatta.source_id || `${regatta.regatta_date}-${regatta.regatta_name.replace(/\s+/g, '-').toLowerCase().substring(0, 120)}`;
-                await pool.query(`
+                const upsert = await pool.query(`
                     INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                     ON CONFLICT (regatta_name, regatta_date, source) 
@@ -646,6 +663,7 @@ async function scrapeHighSchoolSailing() {
                         registrant_count = COALESCE(EXCLUDED.registrant_count, regattas.registrant_count),
                         source_id = EXCLUDED.source_id,
                         last_updated = CURRENT_TIMESTAMP
+                    RETURNING (xmax = 0) AS was_inserted
                 `, [
                     regatta.regatta_date,
                     regatta.regatta_name,
@@ -656,7 +674,8 @@ async function scrapeHighSchoolSailing() {
                     'hssailing',
                     sourceId
                 ]);
-                added++;
+                if (countTrueInserts(upsert)) added++;
+                else updated++;
             } catch (err) {
                 if (!err.message.includes('duplicate')) {
                     console.error('Error inserting High School Sailing regatta:', err);
@@ -669,7 +688,8 @@ async function scrapeHighSchoolSailing() {
             VALUES ('hssailing', $1, $2)
         `, [regattas.length, added]);
 
-        return { found: regattas.length, added };
+        console.log(`High School Sailing: ${regattas.length} found, ${added} newly added, ${updated} updated`);
+        return { found: regattas.length, added, updated };
     } catch (error) {
         console.error('Error scraping High School Sailing:', error);
         throw error;
@@ -723,7 +743,7 @@ app.post('/api/scrape-regattas', async (req, res) => {
             }
         }
 
-        console.log(`=== Scraping Complete: ${totalFound} found, ${totalAdded} added ===`);
+        console.log(`=== Scraping Complete: ${totalFound} found, ${totalAdded} newly added ===`);
         res.json({
             success: true,
             totalFound,

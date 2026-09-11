@@ -1830,9 +1830,17 @@ app.get('/results', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'results.html'));
 });
 
-// Add route to serve PhotoAdmin page
+// Unified admin dashboard (dates, results, chat, photos)
 app.get('/admin', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'photoAdmin.html'));
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// Legacy bookmarks → unified admin
+app.get(['/Regatta-admin.html', '/Regatta-admin'], (req, res) => {
+    res.redirect(301, '/admin#dates');
+});
+app.get('/photoAdmin', (req, res) => {
+    res.redirect(301, '/admin#photos');
 });
 
 // Add this helper function to look up skipper info
@@ -5085,6 +5093,15 @@ app.post('/api/scrape-regattas', async (req, res) => {
     });
 });
 
+/**
+ * Upserts report every touched row. Use RETURNING (xmax = 0) AS was_inserted
+ * so scrape_log.regattas_added counts only true inserts, not updates.
+ */
+function countTrueInserts(upsertResult) {
+    if (!upsertResult?.rows?.length) return 0;
+    return upsertResult.rows.filter((row) => row.was_inserted === true).length;
+}
+
 // Scrape Regatta Network
 async function scrapeRegattaNetwork() {
     try {
@@ -5188,11 +5205,12 @@ async function scrapeRegattaNetwork() {
 
         console.log(`Found ${regattas.length} regattas from Regatta Network`);
 
-        // Insert regattas with de-duplication
+        // Insert regattas with de-duplication (count only true inserts)
         let added = 0;
+        let updated = 0;
         for (const regatta of regattas) {
             try {
-                await pool.query(`
+                const upsert = await pool.query(`
           INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           ON CONFLICT (regatta_name, regatta_date, source) 
@@ -5203,6 +5221,7 @@ async function scrapeRegattaNetwork() {
             registrant_count = COALESCE(EXCLUDED.registrant_count, regattas.registrant_count),
             source_id = EXCLUDED.source_id,
             last_updated = CURRENT_TIMESTAMP
+          RETURNING (xmax = 0) AS was_inserted
         `, [
                     regatta.regatta_date,
                     regatta.regatta_name,
@@ -5213,7 +5232,8 @@ async function scrapeRegattaNetwork() {
                     regatta.source,
                     regatta.source_id
                 ]);
-                added++;
+                if (countTrueInserts(upsert)) added++;
+                else updated++;
             } catch (err) {
                 // Skip duplicates silently
                 if (!err.message.includes('duplicate')) {
@@ -5228,7 +5248,8 @@ async function scrapeRegattaNetwork() {
       VALUES ('regattanetwork', $1, $2)
     `, [regattas.length, added]);
 
-        return { found: regattas.length, added };
+        console.log(`Regatta Network: ${regattas.length} found, ${added} newly added, ${updated} updated`);
+        return { found: regattas.length, added, updated };
     } catch (error) {
         console.error('Error scraping Regatta Network:', error);
         throw error;
@@ -5332,11 +5353,12 @@ async function scrapeClubspot() {
 
         console.log(`📋 Valid regattas after filtering: ${extractedRegattas.length}`);
 
-        // Batch inserts: 50 rows per query to avoid per-row overhead with 1000+ regattas
+        // Batch upserts: count only true inserts via xmax = 0
         let added = 0;
+        let updated = 0;
         const INSERT_BATCH = 50;
         const totalBatches = Math.ceil(extractedRegattas.length / INSERT_BATCH);
-        console.log(`💾 Inserting ${extractedRegattas.length} regattas in ${totalBatches} batches...`);
+        console.log(`💾 Upserting ${extractedRegattas.length} regattas in ${totalBatches} batches...`);
 
         for (let i = 0; i < extractedRegattas.length; i += INSERT_BATCH) {
             const batch = extractedRegattas.slice(i, i + INSERT_BATCH);
@@ -5356,21 +5378,24 @@ async function scrapeClubspot() {
                         event_website_url = EXCLUDED.event_website_url,
                         source_id = EXCLUDED.source_id,
                         last_updated = CURRENT_TIMESTAMP
+                    RETURNING (xmax = 0) AS was_inserted
                 `, values);
-                added += result.rowCount || batch.length;
+                const inserted = countTrueInserts(result);
+                added += inserted;
+                updated += (result.rowCount || 0) - inserted;
             } catch (err) {
                 console.error(`Batch insert error (rows ${i}–${i + batch.length}):`, err.message);
             }
         }
-        console.log(`💾 DB write complete: ${added} rows affected`);
+        console.log(`💾 DB write complete: ${added} newly added, ${updated} updated`);
 
         await pool.query(`
             INSERT INTO scrape_log (source, regattas_found, regattas_added)
             VALUES ('clubspot', $1, $2)
         `, [extractedRegattas.length, added]);
 
-        console.log(`✅ Clubspot scrape complete: ${extractedRegattas.length} found, ${added} added/updated`);
-        return { found: extractedRegattas.length, added };
+        console.log(`✅ Clubspot scrape complete: ${extractedRegattas.length} found, ${added} newly added, ${updated} updated`);
+        return { found: extractedRegattas.length, added, updated };
 
     } catch (error) {
         console.error('Error scraping Clubspot via API:', error.message);
