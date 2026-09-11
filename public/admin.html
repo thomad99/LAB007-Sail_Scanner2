@@ -30,16 +30,34 @@
         }
 
         .logo {
-            margin-top: 20px;
-            max-width: 500px;
-            width: 80%;
+            margin-top: 8px;
+            margin-bottom: 0;
+            max-width: 250px;
+            width: 40%;
         }
 
         .content {
-            margin-top: 30px;
+            margin-top: 12px;
             text-align: center;
             width: 90%;
             max-width: 1200px;
+        }
+
+        body.chat-wide .content {
+            width: 98%;
+            max-width: none;
+            margin-top: 8px;
+        }
+
+        body.chat-wide .logo {
+            max-width: 180px;
+            width: 28%;
+            margin-top: 6px;
+        }
+
+        body.chat-wide h1 {
+            font-size: 1.4em;
+            margin: 8px 0 4px;
         }
 
         .stats-container {
@@ -711,13 +729,17 @@
             }
 
             .logo {
-                margin-top: 20px;
-                max-width: 80%;
+                margin-top: 8px;
+                max-width: 40%;
             }
 
             .content {
-                margin-top: 20px;
+                margin-top: 10px;
                 width: 95%;
+            }
+
+            body.chat-wide .content {
+                width: 98%;
             }
 
             .stats-container {
@@ -745,34 +767,38 @@
         .chatbot-panel {
             display: flex;
             flex-direction: column;
-            min-height: calc(100vh - 220px);
+            min-height: calc(100vh - 160px);
             text-align: left;
             background: rgba(200, 220, 255, 0.12);
             border: 1px solid rgba(126, 207, 255, 0.22);
             border-radius: 12px;
-            padding: 18px;
-            margin-top: 12px;
+            padding: 14px 16px;
+            margin-top: 8px;
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .chatbot-panel h2 {
-            margin: 0 0 6px;
+            margin: 0 0 4px;
             color: #7ecfff;
         }
 
         .chatbot-panel .chatbot-sub {
             color: #9aa7b8;
-            margin: 0 0 14px;
+            margin: 0 0 10px;
             font-size: 0.95em;
         }
 
         .chatbot-panel .results-chat-log {
             flex: 1;
-            min-height: 420px;
+            min-height: 480px;
             max-height: none;
             background: rgba(200, 220, 255, 0.18);
             border-radius: 12px;
             padding: 16px;
             margin-bottom: 14px;
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .chatbot-panel .results-chat-msg.user {
@@ -780,7 +806,7 @@
             color: #1a1a2e;
             border-radius: 12px;
             border-bottom-right-radius: 4px;
-            max-width: 80%;
+            max-width: 70%;
         }
 
         .chatbot-panel .results-chat-msg.bot {
@@ -788,8 +814,9 @@
             color: #1a1a2e;
             border-radius: 12px;
             border-bottom-left-radius: 4px;
-            width: auto;
-            max-width: 95%;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
         }
 
         .chatbot-panel .results-chat-row input {
@@ -1416,6 +1443,7 @@
             document.getElementById('tabBtnResults').classList.toggle('active', tab === 'results');
             document.getElementById('tabBtnChat').classList.toggle('active', tab === 'chat');
             document.getElementById('tabBtnPhotos').classList.toggle('active', tab === 'photos');
+            document.body.classList.toggle('chat-wide', tab === 'chat');
             if (location.hash !== '#' + tab) {
                 history.replaceState(null, '', '#' + tab);
             }
@@ -2277,8 +2305,14 @@
                 if (data.success) {
                     const sailors = Number(data.total_sailors || 0).toLocaleString();
                     const regattas = Number(data.total_regattas || 0).toLocaleString();
-                    const rows = Number(data.total_records || 0).toLocaleString();
-                    msg = `I have knowledge of <strong>${sailors}</strong> sailors across <strong>${regattas}</strong> regattas (<strong>${rows}</strong> result rows). How can I help?`;
+                    let latestLabel = '—';
+                    if (data.latest_date) {
+                        const d = new Date(String(data.latest_date).slice(0, 10) + 'T00:00:00Z');
+                        if (!isNaN(d.getTime())) {
+                            latestLabel = d.toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+                        }
+                    }
+                    msg = `I have knowledge of <strong>${sailors}</strong> sailors, <strong>${regattas}</strong> regattas, and my latest data is from <strong>${escapeHtml(latestLabel)}</strong>.`;
                 }
             } catch (_) { /* ignore */ }
             addResultsChat('bot', msg);
@@ -2302,7 +2336,7 @@
                 <tr><td>Club</td><td>${escapeHtml(sailor.club || 'Unknown')}</td></tr>
                 <tr><td>Regattas</td><td>${escapeHtml(String(summary.totalRegattas ?? '—'))}</td></tr>
                 <tr><td>Best regatta place</td><td>${escapeHtml(summary.bestRegattaPlace != null ? String(summary.bestRegattaPlace) : '—')}</td></tr>
-                <tr><td>Best race place</td><td>${escapeHtml(summary.bestRacePlace != null ? String(summary.bestRacePlace) : '—')}</td></tr>
+                <tr><td>Best race position</td><td>${escapeHtml(summary.bestRacePlace != null ? String(summary.bestRacePlace) : '—')}</td></tr>
             </table></div>`;
 
             html += '<div class="section"><h3>Regatta Achievements</h3><table class="data"><thead><tr><th>Position</th><th>Regatta Name</th><th>Date</th><th>Class</th></tr></thead><tbody>';
@@ -2322,7 +2356,7 @@
             }
             html += '</tbody></table></div>';
 
-            html += '<div class="section"><h3>Race Achievements</h3><table class="data"><thead><tr><th>Race place</th><th>Race #</th><th>Regatta Name</th><th>Date</th></tr></thead><tbody>';
+            html += '<div class="section"><h3>Race Achievements</h3><table class="data"><thead><tr><th>Race Position</th><th>Race #</th><th>Regatta Name</th><th>Date</th></tr></thead><tbody>';
             const raceRows = data.raceAchievements || [];
             if (raceRows.length) {
                 raceRows.forEach(r => {

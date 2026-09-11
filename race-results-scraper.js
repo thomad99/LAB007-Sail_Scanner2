@@ -1714,7 +1714,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                     const bits = [
                         s.totalRegattas != null && `**Total number of regattas:** ${s.totalRegattas}`,
                         s.bestRegattaPlace != null && `**Best regatta place:** ${s.bestRegattaPlace}`,
-                        s.bestRacePlace != null && `**Best race place:** ${s.bestRacePlace}`
+                        s.bestRacePlace != null && `**Best race position:** ${s.bestRacePlace}`
                     ].filter(Boolean);
                     reply = `I found the following information:\n\n${bits.join('\n')}\n\nSee the tables below for achievements and race history.`;
                     return ok({
