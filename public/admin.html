@@ -30,16 +30,34 @@
         }
 
         .logo {
-            margin-top: 20px;
-            max-width: 500px;
-            width: 80%;
+            margin-top: 8px;
+            margin-bottom: 0;
+            max-width: 250px;
+            width: 40%;
         }
 
         .content {
-            margin-top: 30px;
+            margin-top: 12px;
             text-align: center;
             width: 90%;
             max-width: 1200px;
+        }
+
+        body.chat-wide .content {
+            width: 98%;
+            max-width: none;
+            margin-top: 8px;
+        }
+
+        body.chat-wide .logo {
+            max-width: 180px;
+            width: 28%;
+            margin-top: 6px;
+        }
+
+        body.chat-wide h1 {
+            font-size: 1.4em;
+            margin: 8px 0 4px;
         }
 
         .stats-container {
@@ -711,13 +729,17 @@
             }
 
             .logo {
-                margin-top: 20px;
-                max-width: 80%;
+                margin-top: 8px;
+                max-width: 40%;
             }
 
             .content {
-                margin-top: 20px;
+                margin-top: 10px;
                 width: 95%;
+            }
+
+            body.chat-wide .content {
+                width: 98%;
             }
 
             .stats-container {
@@ -745,34 +767,38 @@
         .chatbot-panel {
             display: flex;
             flex-direction: column;
-            min-height: calc(100vh - 220px);
+            min-height: calc(100vh - 160px);
             text-align: left;
             background: rgba(200, 220, 255, 0.12);
             border: 1px solid rgba(126, 207, 255, 0.22);
             border-radius: 12px;
-            padding: 18px;
-            margin-top: 12px;
+            padding: 14px 16px;
+            margin-top: 8px;
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .chatbot-panel h2 {
-            margin: 0 0 6px;
+            margin: 0 0 4px;
             color: #7ecfff;
         }
 
         .chatbot-panel .chatbot-sub {
             color: #9aa7b8;
-            margin: 0 0 14px;
+            margin: 0 0 10px;
             font-size: 0.95em;
         }
 
         .chatbot-panel .results-chat-log {
             flex: 1;
-            min-height: 420px;
+            min-height: 480px;
             max-height: none;
             background: rgba(200, 220, 255, 0.18);
             border-radius: 12px;
             padding: 16px;
             margin-bottom: 14px;
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .chatbot-panel .results-chat-msg.user {
@@ -780,7 +806,7 @@
             color: #1a1a2e;
             border-radius: 12px;
             border-bottom-right-radius: 4px;
-            max-width: 80%;
+            max-width: 70%;
         }
 
         .chatbot-panel .results-chat-msg.bot {
@@ -788,8 +814,9 @@
             color: #1a1a2e;
             border-radius: 12px;
             border-bottom-left-radius: 4px;
-            width: auto;
-            max-width: 95%;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
         }
 
         .chatbot-panel .results-chat-row input {
@@ -1308,6 +1335,11 @@
 
         <div class="scrape-section" id="raceResultsSection">
             <h2>Scrape Race Results</h2>
+            <p style="color:#9ec9ff; text-align:left; margin: 0 0 12px; line-height:1.45;">
+                This tab uses the <strong>new scraper table</strong> (<code>scraped_race_results</code>) only.
+                It is separate from historic SailBot / CSV uploads (<code>regattanetworkdata</code>), which the public ChatBot still uses.
+                If you see older years here, they came from earlier year scrapes into this new table — use <strong>Clear Scraped Results</strong> for a clean restart, then scrape only the window you want.
+            </p>
 
             <div id="raceResultsStats" class="stats-container" style="margin-top: 16px;"></div>
 
@@ -1363,7 +1395,7 @@
         <div id="tab-chat" class="tab-panel">
             <div class="chatbot-panel">
                 <h2>Results ChatBot</h2>
-                <p class="chatbot-sub">Ask about scraped ClubSpot and Regatta Network result rows (sailors, classes, clubs, years).</p>
+                <p class="chatbot-sub">Answers from the <strong>new scraped results</strong> table only (not historic SailBot CSV uploads).</p>
                 <div class="results-chat-log" id="resultsChatLog"></div>
                 <div class="results-chat-row">
                     <input id="resultsChatInput" type="text" placeholder="e.g. top 5 sailors in C420 in 2025, best club, sail 5462, who won Sunfish">
@@ -1416,6 +1448,7 @@
             document.getElementById('tabBtnResults').classList.toggle('active', tab === 'results');
             document.getElementById('tabBtnChat').classList.toggle('active', tab === 'chat');
             document.getElementById('tabBtnPhotos').classList.toggle('active', tab === 'photos');
+            document.body.classList.toggle('chat-wide', tab === 'chat');
             if (location.hash !== '#' + tab) {
                 history.replaceState(null, '', '#' + tab);
             }
@@ -1497,17 +1530,17 @@
                     (info.yearsDone || []).forEach(y => { doneMap[y.year] = y; });
                     const dataMap = {};
                     (info.dataYears || []).forEach(y => { dataMap[y.year] = y; });
+                    // Only show years that were actually scraped or already have rows —
+                    // do not pad with empty yearOptions (that made unused years look like history).
                     const yearSet = new Set([
                         ...(info.yearsDone || []).map(y => y.year),
                         ...(info.dataYears || []).map(y => y.year)
                     ]);
-                    // Always show recent year options so empty history still has clickable years
-                    (data.yearOptions || []).slice(0, 6).forEach(y => yearSet.add(y));
                     const years = Array.from(yearSet).filter(Boolean).sort((a, b) => b - a);
 
                     html += `<div class="scrape-history-source"><h4>${src.label}</h4>`;
                     if (!years.length) {
-                        html += '<div class="scrape-history-empty">No year scrapes yet.</div>';
+                        html += '<div class="scrape-history-empty">No year scrapes or stored years yet. Use Calendar year above to scrape a year.</div>';
                     } else {
                         html += '<div class="year-chip-row">';
                         years.forEach(year => {
@@ -1520,11 +1553,12 @@
                             const title = done
                                 ? `${year} year scrape completed`
                                 : hasData
-                                    ? `${year} has ${dataMap[year].events} events / ${dataMap[year].rows} rows in DB (year scrape not logged yet)`
+                                    ? `${year} has ${dataMap[year].events} events / ${dataMap[year].rows} rows in scraped table`
                                     : `Select ${year} to scrape`;
                             html += `<button type="button" class="${classes.join(' ')}" data-year="${year}" title="${escapeHtml(title)}" onclick="selectResultsYear(${year}, '${src.id}')">${mark}${year}</button>`;
                         });
                         html += '</div>';
+                        html += '<div class="scrape-history-empty" style="margin-top:8px;">✓ = year scrape finished · blue = rows present in scraped table</div>';
                     }
                     html += '</div>';
                 });
@@ -2044,12 +2078,12 @@
                     <div class="stat-card clickable" onclick="exportRaceResultsCsv('sailors')" title="Download distinct sailors as CSV">
                         <h3>Sailors</h3>
                         <div class="value">${data.total_sailors || 0}</div>
-                        <div class="label">Distinct skippers</div>
+                        <div class="label">New scrape table only</div>
                     </div>
                     <div class="stat-card clickable" onclick="exportRaceResultsCsv('regattas')" title="Download distinct regattas as CSV">
                         <h3>Regattas</h3>
                         <div class="value">${data.total_regattas || 0}</div>
-                        <div class="label">${data.earliest_date || '—'} to ${data.latest_date || '—'}</div>
+                        <div class="label">${data.earliest_date || '—'} to ${data.latest_date || '—'} · scraped table</div>
                     </div>
                 `;
             } catch (err) {
@@ -2243,7 +2277,7 @@
         }
 
         async function clearScrapedResults() {
-            if (!confirm('Delete ALL rows in scraped_race_results? Existing chatbot data is not touched.')) return;
+            if (!confirm('Delete ALL rows in the NEW scraped_race_results table?\n\nThis does NOT touch historic SailBot / CSV uploads (regattanetworkdata).\nUse this to start clean, then scrape only the months/years you want.')) return;
             try {
                 const res = await fetch('/api/race-results/clear', { method: 'POST' });
                 const data = await res.json();
@@ -2277,8 +2311,14 @@
                 if (data.success) {
                     const sailors = Number(data.total_sailors || 0).toLocaleString();
                     const regattas = Number(data.total_regattas || 0).toLocaleString();
-                    const rows = Number(data.total_records || 0).toLocaleString();
-                    msg = `I have knowledge of <strong>${sailors}</strong> sailors across <strong>${regattas}</strong> regattas (<strong>${rows}</strong> result rows). How can I help?`;
+                    let latestLabel = '—';
+                    if (data.latest_date) {
+                        const d = new Date(String(data.latest_date).slice(0, 10) + 'T00:00:00Z');
+                        if (!isNaN(d.getTime())) {
+                            latestLabel = d.toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+                        }
+                    }
+                    msg = `I have knowledge of <strong>${sailors}</strong> sailors, <strong>${regattas}</strong> regattas, and my latest data is from <strong>${escapeHtml(latestLabel)}</strong>.`;
                 }
             } catch (_) { /* ignore */ }
             addResultsChat('bot', msg);
@@ -2302,7 +2342,7 @@
                 <tr><td>Club</td><td>${escapeHtml(sailor.club || 'Unknown')}</td></tr>
                 <tr><td>Regattas</td><td>${escapeHtml(String(summary.totalRegattas ?? '—'))}</td></tr>
                 <tr><td>Best regatta place</td><td>${escapeHtml(summary.bestRegattaPlace != null ? String(summary.bestRegattaPlace) : '—')}</td></tr>
-                <tr><td>Best race place</td><td>${escapeHtml(summary.bestRacePlace != null ? String(summary.bestRacePlace) : '—')}</td></tr>
+                <tr><td>Best race position</td><td>${escapeHtml(summary.bestRacePlace != null ? String(summary.bestRacePlace) : '—')}</td></tr>
             </table></div>`;
 
             html += '<div class="section"><h3>Regatta Achievements</h3><table class="data"><thead><tr><th>Position</th><th>Regatta Name</th><th>Date</th><th>Class</th></tr></thead><tbody>';
@@ -2322,7 +2362,7 @@
             }
             html += '</tbody></table></div>';
 
-            html += '<div class="section"><h3>Race Achievements</h3><table class="data"><thead><tr><th>Race place</th><th>Race #</th><th>Regatta Name</th><th>Date</th></tr></thead><tbody>';
+            html += '<div class="section"><h3>Race Achievements</h3><table class="data"><thead><tr><th>Race Position</th><th>Race #</th><th>Regatta Name</th><th>Date</th></tr></thead><tbody>';
             const raceRows = data.raceAchievements || [];
             if (raceRows.length) {
                 raceRows.forEach(r => {
