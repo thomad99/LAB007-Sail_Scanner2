@@ -1830,9 +1830,17 @@ app.get('/results', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'results.html'));
 });
 
-// Add route to serve PhotoAdmin page
+// Unified admin dashboard (dates, results, chat, photos)
 app.get('/admin', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'photoAdmin.html'));
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// Legacy bookmarks → unified admin
+app.get(['/Regatta-admin.html', '/Regatta-admin'], (req, res) => {
+    res.redirect(301, '/admin#dates');
+});
+app.get('/photoAdmin', (req, res) => {
+    res.redirect(301, '/admin#photos');
 });
 
 // Add this helper function to look up skipper info

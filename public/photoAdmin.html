@@ -227,6 +227,24 @@
             color: #666;
         }
 
+        /* Embedded inside /admin Photo Admin tab */
+        html.embed .header {
+            display: none !important;
+        }
+
+        html.embed body {
+            background: #f5f7fb;
+        }
+
+        html.embed .main-container {
+            margin-top: 0;
+            padding-top: 12px;
+        }
+
+        html.embed .admin-section > h2 {
+            font-size: 1.35em;
+        }
+
         .loading {
             color: #0066cc;
             animation: pulse 1.5s ease-in-out infinite;
@@ -255,6 +273,18 @@
 </head>
 
 <body>
+    <script>
+        (function () {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                if (params.get('embed') === '1' || window.self !== window.top) {
+                    document.documentElement.classList.add('embed');
+                }
+            } catch (e) {
+                /* ignore */
+            }
+        })();
+    </script>
     <div class="header">
         <img src="lovesailing-header.jpg" alt="LoveSailing Header" class="logo">
     </div>
