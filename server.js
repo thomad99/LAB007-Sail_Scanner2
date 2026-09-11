@@ -4158,7 +4158,7 @@ app.post('/api/sailbot/upload', csvUpload.single('file'), async (req, res) => {
 
 // ---------- Chatbot (OpenAI + SailBot search) ----------
 async function runSailbotSearch(criteria) {
-    const { skipper, boat_name, yacht_club, regatta_name, year } = criteria || {};
+    const { skipper, boat_name, yacht_club, regatta_name, sail_number, position, year } = criteria || {};
     const params = [];
     let n = 0;
     let where = '1=1';
@@ -4172,6 +4172,16 @@ async function runSailbotSearch(criteria) {
     add('boat_name', boat_name);
     add('yacht_club', yacht_club);
     add('regatta_name', regatta_name);
+    if (sail_number) {
+        n++;
+        where += ` AND REPLACE(UPPER(COALESCE(sail_number,'')), ' ', '') ILIKE $${n}`;
+        params.push('%' + String(sail_number).replace(/\s+/g, '').toUpperCase() + '%');
+    }
+    if (position) {
+        n++;
+        where += ` AND TRIM(COALESCE(position,'')) = $${n}`;
+        params.push(String(position).trim());
+    }
     if (year != null && year !== '') {
         n++;
         where += ` AND EXTRACT(YEAR FROM regatta_date) = $${n}`;
@@ -4198,25 +4208,39 @@ async function runClubSailors(yachtClub) {
     return r.rows;
 }
 
-async function runTopSailors(limit = 10) {
+async function runTopSailors(limit = 10, category = null) {
+    const params = [];
+    let where = `skipper IS NOT NULL AND TRIM(skipper) <> ''${SOZNODATA_EXCLUDE}`;
+    if (category && String(category).trim()) {
+        params.push('%' + String(category).trim() + '%');
+        where += ` AND category ILIKE $${params.length}`;
+    }
+    params.push(Math.min(50, Math.max(1, parseInt(String(limit), 10) || 10)));
     const q = `SELECT skipper, COUNT(*)::int AS regattas
         FROM ${RND}
-        WHERE skipper IS NOT NULL AND TRIM(skipper) <> ''${SOZNODATA_EXCLUDE}
+        WHERE ${where}
         GROUP BY skipper
         ORDER BY regattas DESC, skipper ASC
-        LIMIT $1`;
-    const r = await pool.query(q, [limit]);
+        LIMIT $${params.length}`;
+    const r = await pool.query(q, params);
     return r.rows;
 }
 
-async function runTopClubs(limit = 10) {
+async function runTopClubs(limit = 10, category = null) {
+    const params = [];
+    let where = `yacht_club IS NOT NULL AND TRIM(yacht_club) <> ''${SOZNODATA_EXCLUDE}`;
+    if (category && String(category).trim()) {
+        params.push('%' + String(category).trim() + '%');
+        where += ` AND category ILIKE $${params.length}`;
+    }
+    params.push(Math.min(50, Math.max(1, parseInt(String(limit), 10) || 10)));
     const q = `SELECT yacht_club AS club, COUNT(*)::int AS count
         FROM ${RND}
-        WHERE yacht_club IS NOT NULL AND TRIM(yacht_club) <> ''${SOZNODATA_EXCLUDE}
+        WHERE ${where}
         GROUP BY yacht_club
         ORDER BY count DESC, yacht_club ASC
-        LIMIT $1`;
-    const r = await pool.query(q, [limit]);
+        LIMIT $${params.length}`;
+    const r = await pool.query(q, params);
     return r.rows;
 }
 
@@ -4302,11 +4326,16 @@ app.post('/api/chat', async (req, res) => {
             boat_name: parsed.boat_name,
             yacht_club: parsed.yacht_club,
             regatta_name: parsed.regatta_name,
+            sail_number: parsed.sail_number,
+            position: parsed.position,
+            category: parsed.category,
+            limit: parsed.limit,
             year: parsed.year,
             region: parsed.region
         };
 
-        const hasSearchCriteria = [criteria.skipper, criteria.boat_name, criteria.yacht_club, criteria.regatta_name].some(Boolean);
+        const hasSearchCriteria = [criteria.skipper, criteria.boat_name, criteria.yacht_club, criteria.regatta_name, criteria.sail_number].some(Boolean)
+            || !!criteria.position;
         const hasAggregateIntent = ['top_sailors', 'top_clubs'].includes(intent);
         const hasClubSailors = intent === 'club_sailors' && criteria.yacht_club;
         const hasClubsInRegion = intent === 'clubs_in_region' && criteria.region;
@@ -4321,7 +4350,7 @@ app.post('/api/chat', async (req, res) => {
         if (!hasSearchCriteria && !hasAggregateIntent && !hasClubSailors && !hasClubsInRegion) {
             return res.json({
                 success: true,
-                reply: "I couldn't determine what to look up. Try a sailor name, boat, club, a regatta name (e.g. \"Optimist regatta\"), \"sailors at [club]\", \"top 10 sailors\", \"top 10 clubs\", or \"clubs in Florida\".",
+                reply: "I couldn't determine what to look up. Try a sailor/person name, boat, club, regatta/race, sail number, \"sailors at [club]\", \"top 10 sailors\", \"top 10 clubs\", or \"clubs in Florida\".",
                 data: null,
                 parser: parsed.parser || 'rules'
             });
@@ -4340,21 +4369,25 @@ app.post('/api/chat', async (req, res) => {
                 : `I didn't find any sailors for that club. Try a different club name.`;
             data = list.length ? { resultType, list, subtitle: 'Sailors at ' + String(criteria.yacht_club).trim() } : null;
         } else if (intent === 'top_sailors') {
-            const rows = await runTopSailors(10);
+            const limit = Math.min(50, Math.max(1, parseInt(String(criteria.limit || 10), 10) || 10));
+            const rows = await runTopSailors(limit, criteria.category);
             const list = rows.map(r => ({ name: r.skipper, count: r.regattas }));
             resultType = 'sailors_list';
+            const scope = criteria.category ? ` in **${String(criteria.category).trim()}**` : '';
             reply = list.length
-                ? `**Top 10 sailors** by number of regattas:\n\nSee the table below.`
-                : "I don't have any data to rank sailors.";
-            data = list.length ? { resultType, list, subtitle: 'Top 10 sailors by regattas' } : null;
+                ? `**Top ${list.length} sailor${list.length === 1 ? '' : 's'}**${scope} by number of regattas:\n\nSee the table below.`
+                : `I don't have any data to rank sailors${criteria.category ? ' in that class' : ''}.`;
+            data = list.length ? { resultType, list, subtitle: `Top ${list.length} sailors${criteria.category ? ' in ' + String(criteria.category).trim() : ''} by regattas` } : null;
         } else if (intent === 'top_clubs') {
-            const rows = await runTopClubs(10);
+            const limit = Math.min(50, Math.max(1, parseInt(String(criteria.limit || 10), 10) || 10));
+            const rows = await runTopClubs(limit, criteria.category);
             const list = rows.map(r => ({ name: r.club, count: r.count }));
             resultType = 'clubs_list';
+            const scope = criteria.category ? ` in **${String(criteria.category).trim()}**` : '';
             reply = list.length
-                ? `**Top 10 clubs** by activity (race results):\n\nSee the table below.`
-                : "I don't have any data to rank clubs.";
-            data = list.length ? { resultType, list, subtitle: 'Top 10 clubs' } : null;
+                ? `**Top ${list.length} club${list.length === 1 ? '' : 's'}**${scope} by activity (race results):\n\nSee the table below.`
+                : `I don't have any data to rank clubs${criteria.category ? ' in that class' : ''}.`;
+            data = list.length ? { resultType, list, subtitle: `Top ${list.length} clubs${criteria.category ? ' in ' + String(criteria.category).trim() : ''}` } : null;
         } else if (intent === 'clubs_in_region') {
             const rows = await runClubsInRegion(criteria.region);
             const list = rows.map(r => ({ name: r.club }));

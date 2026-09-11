@@ -57,6 +57,16 @@
             transition: all 0.3s ease;
         }
 
+        .stat-card.clickable {
+            cursor: pointer;
+        }
+
+        .stat-card.clickable:hover {
+            background-color: rgba(255, 255, 255, 0.18);
+            transform: translateY(-5px);
+            box-shadow: 0 0 0 1px rgba(0, 255, 136, 0.35);
+        }
+
         .stat-card:hover {
             background-color: rgba(255, 255, 255, 0.15);
             transform: translateY(-5px);
@@ -78,6 +88,12 @@
         .stat-card .label {
             color: #cccccc;
             font-size: 0.9em;
+        }
+
+        .stat-card .export-hint {
+            margin-top: 8px;
+            color: #7ecfff;
+            font-size: 0.75em;
         }
 
         .scrape-history {
@@ -919,10 +935,10 @@
 
             <div class="results-chat">
                 <h3 style="margin-top: 0; color: #7ecfff;">Ask the scraped data</h3>
-                <p style="color: #aaa; font-size: 0.9em;">Sailor names, “who won …”, and “what’s in the data” are answered locally (no OpenAI cost). Unclear questions use gpt-4o-mini, then fall back to rules if the API is down.</p>
+                <p style="color: #aaa; font-size: 0.9em;">Understands sailor/person, boat, race/regatta, place, date, sail number, and club. Common questions are answered locally (no OpenAI cost); unclear ones use gpt-4o-mini, then fall back to rules if the API is down.</p>
                 <div class="results-chat-log" id="resultsChatLog"></div>
                 <div class="results-chat-row">
-                    <input id="resultsChatInput" type="text" placeholder="Ask about sailors, winners, clubs...">
+                    <input id="resultsChatInput" type="text" placeholder="e.g. top 5 sailors in C420, best club, sail 5462, who won Sunfish">
                     <button type="button" id="resultsChatSend" onclick="sendResultsChat()">Send</button>
                 </div>
             </div>
@@ -1476,13 +1492,33 @@
                 if (!data.success) throw new Error(data.error || 'Failed');
                 const src = (data.bySource || []).map(s => `${s.source}: ${s.count} rows / ${s.events} events`).join(' · ') || 'No rows yet';
                 box.innerHTML = `
-                    <div class="stat-card"><h3>Scraped Rows</h3><div class="value">${data.total_records || 0}</div><div class="label">${src}</div></div>
-                    <div class="stat-card"><h3>Sailors</h3><div class="value">${data.total_sailors || 0}</div><div class="label">Distinct skippers</div></div>
-                    <div class="stat-card"><h3>Regattas</h3><div class="value">${data.total_regattas || 0}</div><div class="label">${data.earliest_date || '—'} to ${data.latest_date || '—'}</div></div>
+                    <div class="stat-card clickable" onclick="exportRaceResultsCsv('rows')" title="Download all scraped result rows as CSV">
+                        <h3>Scraped Rows</h3>
+                        <div class="value">${data.total_records || 0}</div>
+                        <div class="label">${src}</div>
+                        <div class="export-hint">Click to export CSV</div>
+                    </div>
+                    <div class="stat-card clickable" onclick="exportRaceResultsCsv('sailors')" title="Download distinct sailors as CSV">
+                        <h3>Sailors</h3>
+                        <div class="value">${data.total_sailors || 0}</div>
+                        <div class="label">Distinct skippers</div>
+                        <div class="export-hint">Click to export CSV</div>
+                    </div>
+                    <div class="stat-card clickable" onclick="exportRaceResultsCsv('regattas')" title="Download distinct regattas as CSV">
+                        <h3>Regattas</h3>
+                        <div class="value">${data.total_regattas || 0}</div>
+                        <div class="label">${data.earliest_date || '—'} to ${data.latest_date || '—'}</div>
+                        <div class="export-hint">Click to export CSV</div>
+                    </div>
                 `;
             } catch (err) {
                 box.innerHTML = `<div class="loading" style="color:#ff6666;">Could not load scraped-results stats: ${escapeHtml(err.message)}</div>`;
             }
+        }
+
+        function exportRaceResultsCsv(type) {
+            const url = '/api/race-results/export?type=' + encodeURIComponent(type || 'rows');
+            window.location.href = url;
         }
 
         function showResultsStatus(text, kind) {
