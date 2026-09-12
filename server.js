@@ -30,6 +30,7 @@ const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
 const { attachRaceResultsScraper, ensureScrapedResultsTable } = require('./race-results-scraper');
+const { attachRaceResultsScheduler } = require('./race-results-scheduler');
 const { PARSE_APP_ID, clubspotGet, clubspotConfigSummary } = require('./clubspot-http');
 
 // Load Puppeteer only if ENABLE_PUPPETEER environment variable is set to 'true'
@@ -4466,6 +4467,7 @@ app.post('/api/chat', async (req, res) => {
 });
 
 attachRaceResultsScraper(app, { pool, openai, axios, cheerio });
+attachRaceResultsScheduler(app, { pool, axios, cheerio });
 
 // Static file serving (AFTER all API routes)
 app.use(express.static(path.join(__dirname, 'public')));
