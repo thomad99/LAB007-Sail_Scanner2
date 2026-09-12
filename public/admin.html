@@ -144,7 +144,7 @@
         }
         .scheduler-status-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 12px;
             margin-bottom: 16px;
         }
@@ -160,12 +160,26 @@
         .scheduler-stat .label {
             color: #999;
             font-size: 0.85em;
-            margin-bottom: 4px;
+            margin-bottom: 6px;
         }
         .scheduler-stat .value {
             color: #eee;
             font-size: 1.05em;
             word-break: break-word;
+            line-height: 1.35;
+        }
+        .scheduler-stat .sched-date,
+        .scheduler-stat .sched-time,
+        .scheduler-stat .sched-line {
+            display: block;
+        }
+        .scheduler-stat .sched-time,
+        .scheduler-stat .sched-line + .sched-line {
+            margin-top: 2px;
+        }
+        .scheduler-stat .sched-muted {
+            color: #aaa;
+            font-size: 0.95em;
         }
         .scheduler-report {
             background: rgba(0,0,0,0.25);
@@ -178,10 +192,11 @@
         }
         .scheduler-controls {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 12px;
             margin-bottom: 14px;
             align-items: end;
+            max-width: 560px;
         }
         .scheduler-controls label {
             display: block;
@@ -197,6 +212,11 @@
             border: 1px solid #444;
             background: #1a1a1a;
             color: #eee;
+            color-scheme: dark;
+        }
+        .scheduler-controls input[type="datetime-local"] {
+            min-height: 40px;
+            cursor: pointer;
         }
         .scheduler-actions {
             display: flex;
@@ -1451,61 +1471,21 @@
                         <div class="results-scheduler" id="resultsSchedulerSection">
                 <h3>Automated Weekly Results Scrape</h3>
                 <p class="scheduler-sub">
-                    Runs on a schedule (default Monday 9:00 AM Eastern) and collects the past week of ClubSpot + Regatta Network results.
+                    Runs weekly and collects ClubSpot + Regatta Network results for the selected lookback period.
                 </p>
                 <div id="resultsSchedulerStatus" class="loading">Loading scheduler…</div>
                 <div class="scheduler-controls" id="resultsSchedulerControls">
                     <div>
-                        <label for="schedDaySelect">Day of week</label>
-                        <select id="schedDaySelect">
-                            <option value="0">Sunday</option>
-                            <option value="1" selected>Monday</option>
-                            <option value="2">Tuesday</option>
-                            <option value="3">Wednesday</option>
-                            <option value="4">Thursday</option>
-                            <option value="5">Friday</option>
-                            <option value="6">Saturday</option>
-                        </select>
+                        <label for="schedDateTimeInput">Day &amp; time</label>
+                        <input type="datetime-local" id="schedDateTimeInput" step="60">
                     </div>
                     <div>
-                        <label for="schedHourSelect">Hour</label>
-                        <select id="schedHourSelect"></select>
-                    </div>
-                    <div>
-                        <label for="schedMinuteSelect">Minute</label>
-                        <select id="schedMinuteSelect">
-                            <option value="0">00</option>
-                            <option value="15">15</option>
-                            <option value="30">30</option>
-                            <option value="45">45</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="schedTimezoneSelect">Timezone</label>
-                        <select id="schedTimezoneSelect">
-                            <option value="America/New_York">America/New_York (ET)</option>
-                            <option value="America/Chicago">America/Chicago (CT)</option>
-                            <option value="America/Denver">America/Denver (MT)</option>
-                            <option value="America/Los_Angeles">America/Los_Angeles (PT)</option>
-                            <option value="UTC">UTC</option>
-                            <option value="Europe/London">Europe/London</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="schedLookbackSelect">Period (lookback)</label>
+                        <label for="schedLookbackSelect">Frequency (lookback)</label>
                         <select id="schedLookbackSelect">
-                            <option value="7" selected>Past 7 days</option>
-                            <option value="14">Past 14 days</option>
-                            <option value="30">Past 30 days</option>
-                            <option value="60">Past 60 days</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="schedSourceSelect">Source</label>
-                        <select id="schedSourceSelect">
-                            <option value="all" selected>Both sources</option>
-                            <option value="regattanetwork">Regatta Network only</option>
-                            <option value="clubspot">ClubSpot only</option>
+                            <option value="7" selected>Weekly · past 7 days</option>
+                            <option value="14">Weekly · past 14 days</option>
+                            <option value="30">Weekly · past 30 days</option>
+                            <option value="60">Weekly · past 60 days</option>
                         </select>
                     </div>
                 </div>
@@ -2060,30 +2040,93 @@
 
         
         let resultsScheduleState = null;
+        const SCHED_DISPLAY_TZ = 'America/New_York';
 
-        function populateSchedHourSelect() {
-            const sel = document.getElementById('schedHourSelect');
-            if (!sel || sel.options.length) return;
-            for (let h = 0; h < 24; h++) {
-                const opt = document.createElement('option');
-                opt.value = String(h);
-                const ampm = h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`;
-                opt.textContent = `${String(h).padStart(2, '0')}:00 (${ampm})`;
-                if (h === 9) opt.selected = true;
-                sel.appendChild(opt);
+        function pad2(n) {
+            return String(n).padStart(2, '0');
+        }
+
+        function zonedPartsForDisplay(date, timeZone) {
+            const fmt = new Intl.DateTimeFormat('en-US', {
+                timeZone,
+                weekday: 'short',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hourCycle: 'h23'
+            });
+            const parts = Object.fromEntries(
+                fmt.formatToParts(date).filter((p) => p.type !== 'literal').map((p) => [p.type, p.value])
+            );
+            return {
+                weekday: parts.weekday,
+                year: parts.year,
+                month: parts.month,
+                day: parts.day,
+                hour: parseInt(parts.hour, 10),
+                minute: parseInt(parts.minute, 10)
+            };
+        }
+
+        function formatDatetimeLocalFromIso(iso) {
+            if (!iso) return '';
+            try {
+                const z = zonedPartsForDisplay(new Date(iso), SCHED_DISPLAY_TZ);
+                return `${z.year}-${z.month}-${z.day}T${pad2(z.hour)}:${pad2(z.minute)}`;
+            } catch (_) {
+                return '';
             }
         }
 
-        function formatScheduleWhen(iso) {
+        /** Build a datetime-local value for the next matching weekday + clock time. */
+        function datetimeLocalFromSchedule(dayOfWeek, hour, minute) {
+            const now = new Date();
+            for (let i = 0; i < 8; i++) {
+                const t = new Date(now.getTime() + i * 24 * 60 * 60 * 1000);
+                const z = zonedPartsForDisplay(t, SCHED_DISPLAY_TZ);
+                const weekdayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+                if (weekdayMap[z.weekday] === dayOfWeek) {
+                    return `${z.year}-${z.month}-${z.day}T${pad2(hour)}:${pad2(minute)}`;
+                }
+            }
+            return '';
+        }
+
+        function formatScheduleWhenLines(iso) {
             if (!iso) return '—';
             try {
-                return new Date(iso).toLocaleString('en-US', {
-                    weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
-                    hour: '2-digit', minute: '2-digit', timeZoneName: 'short'
+                const d = new Date(iso);
+                const dateLine = d.toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    timeZone: SCHED_DISPLAY_TZ
                 });
+                const timeLine = d.toLocaleTimeString('en-US', {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    timeZone: SCHED_DISPLAY_TZ
+                });
+                return `<span class="sched-date">${escapeHtml(dateLine)}</span>` +
+                    `<span class="sched-time">${escapeHtml(timeLine)}</span>`;
             } catch (_) {
-                return String(iso);
+                return escapeHtml(String(iso));
             }
+        }
+
+        function formatScheduleSummaryHtml(data) {
+            const day = data.dayName || '—';
+            const time = data.timeLabel || (data.hour != null
+                ? `${pad2(data.hour)}:${pad2(data.minute || 0)}`
+                : '—');
+            const freq = data.frequencyLabel ||
+                (data.lookbackDays != null ? `Weekly, past ${data.lookbackDays} days` : 'Weekly');
+            return `<span class="sched-line">${escapeHtml(day)}</span>` +
+                `<span class="sched-line">${escapeHtml(time)}</span>` +
+                `<span class="sched-line sched-muted">${escapeHtml(freq)}</span>`;
         }
 
         function summarizeScheduleReport(report) {
@@ -2104,7 +2147,6 @@
             });
             const header = [
                 report.windowLabel || (report.lookbackDays ? `Last ${report.lookbackDays} days` : 'Scheduled window'),
-                report.source ? `source=${report.source}` : null,
                 report.status || null
             ].filter(Boolean).join(' · ');
             return header + (parts.length ? '\n' + parts.join('\n') : '') +
@@ -2112,26 +2154,13 @@
         }
 
         function applyScheduleForm(data) {
-            populateSchedHourSelect();
-            const set = (id, val) => {
-                const el = document.getElementById(id);
-                if (el && val != null) el.value = String(val);
-            };
-            set('schedDaySelect', data.dayOfWeek);
-            set('schedHourSelect', data.hour);
-            set('schedMinuteSelect', data.minute);
-            set('schedTimezoneSelect', data.timezone);
-            set('schedLookbackSelect', data.lookbackDays);
-            set('schedSourceSelect', data.source);
-            // Ensure timezone option exists if custom
-            const tz = document.getElementById('schedTimezoneSelect');
-            if (tz && data.timezone && ![...tz.options].some(o => o.value === data.timezone)) {
-                const opt = document.createElement('option');
-                opt.value = data.timezone;
-                opt.textContent = data.timezone;
-                tz.appendChild(opt);
-                tz.value = data.timezone;
+            const dt = document.getElementById('schedDateTimeInput');
+            if (dt) {
+                dt.value = formatDatetimeLocalFromIso(data.nextRunAt) ||
+                    datetimeLocalFromSchedule(data.dayOfWeek, data.hour, data.minute);
             }
+            const look = document.getElementById('schedLookbackSelect');
+            if (look && data.lookbackDays != null) look.value = String(data.lookbackDays);
             const pauseBtn = document.getElementById('schedPauseBtn');
             if (pauseBtn) {
                 if (data.enabled) {
@@ -2153,6 +2182,9 @@
             applyScheduleForm(data);
             const pausedClass = data.enabled ? '' : ' paused';
             const stateLabel = data.enabled ? 'Active' : 'Paused';
+            const nextHtml = data.enabled
+                ? formatScheduleWhenLines(data.nextRunAt)
+                : '— (paused)';
             box.className = '';
             box.innerHTML = `
                 <div class="scheduler-status-grid">
@@ -2162,15 +2194,15 @@
                     </div>
                     <div class="scheduler-stat">
                         <div class="label">Last run</div>
-                        <div class="value">${formatScheduleWhen(data.lastRunAt)}</div>
+                        <div class="value">${formatScheduleWhenLines(data.lastRunAt)}</div>
                     </div>
                     <div class="scheduler-stat">
                         <div class="label">Next run</div>
-                        <div class="value">${data.enabled ? formatScheduleWhen(data.nextRunAt) : '— (paused)'}</div>
+                        <div class="value">${nextHtml}</div>
                     </div>
                     <div class="scheduler-stat">
                         <div class="label">Schedule</div>
-                        <div class="value">${escapeHtml(data.scheduleDescription || '')}</div>
+                        <div class="value">${formatScheduleSummaryHtml(data)}</div>
                     </div>
                 </div>
                 <div class="scheduler-report"><strong>Last report</strong>\n${escapeHtml(summarizeScheduleReport(data.lastRunReport))}</div>
@@ -2193,13 +2225,22 @@
         }
 
         function readScheduleForm() {
+            const raw = (document.getElementById('schedDateTimeInput') || {}).value || '';
+            const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(raw);
+            if (!match) throw new Error('Pick a day and time for the weekly schedule.');
+            const year = parseInt(match[1], 10);
+            const month = parseInt(match[2], 10);
+            const day = parseInt(match[3], 10);
+            const hour = parseInt(match[4], 10);
+            const minute = parseInt(match[5], 10);
+            // Weekday of the selected calendar date (not browser-local instant).
+            const dayOfWeek = new Date(Date.UTC(year, month - 1, day, 12, 0, 0)).getUTCDay();
             return {
-                dayOfWeek: parseInt(document.getElementById('schedDaySelect').value, 10),
-                hour: parseInt(document.getElementById('schedHourSelect').value, 10),
-                minute: parseInt(document.getElementById('schedMinuteSelect').value, 10),
-                timezone: document.getElementById('schedTimezoneSelect').value,
+                dayOfWeek,
+                hour,
+                minute,
                 lookbackDays: parseInt(document.getElementById('schedLookbackSelect').value, 10),
-                source: document.getElementById('schedSourceSelect').value,
+                source: 'all',
                 enabled: resultsScheduleState ? !!resultsScheduleState.enabled : true
             };
         }
@@ -2241,7 +2282,7 @@
             try {
                 const body = {
                     lookbackDays: parseInt(document.getElementById('schedLookbackSelect').value, 10),
-                    source: document.getElementById('schedSourceSelect').value
+                    source: 'all'
                 };
                 const res = await fetch('/api/race-results/schedule/run-now', {
                     method: 'POST',
@@ -2923,7 +2964,6 @@
 
         // Load stats and regattas on page load
         window.addEventListener('DOMContentLoaded', () => {
-            populateSchedHourSelect();
             const savedLookback = localStorage.getItem('raceResultsLookbackDays');
             const lookSel = document.getElementById('resultsLookbackSelect');
             if (lookSel && savedLookback && [...lookSel.options].some(o => o.value === savedLookback)) {

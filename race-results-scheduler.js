@@ -39,15 +39,9 @@ function normalizeSettings(input = {}) {
     const hour = clampInt(input.hour, 0, 23, DEFAULTS.hour);
     const minute = clampInt(input.minute, 0, 59, DEFAULTS.minute);
     const lookbackDays = clampInt(input.lookbackDays ?? input.lookback_days, 1, 365, DEFAULTS.lookbackDays);
-    let source = String(input.source || DEFAULTS.source).toLowerCase();
-    if (!['all', 'regattanetwork', 'clubspot'].includes(source)) source = DEFAULTS.source;
-    let timezone = String(input.timezone || DEFAULTS.timezone).trim() || DEFAULTS.timezone;
-    try {
-        // Validate IANA timezone
-        Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(new Date());
-    } catch (_) {
-        timezone = DEFAULTS.timezone;
-    }
+    // Always scrape both sources; timezone stays Eastern (not user-configurable).
+    const source = DEFAULTS.source;
+    const timezone = DEFAULTS.timezone;
     const enabled = input.enabled === undefined && input.paused === undefined
         ? DEFAULTS.enabled
         : input.enabled !== undefined
@@ -60,11 +54,24 @@ function cronExpression({ minute, hour, dayOfWeek }) {
     return `${minute} ${hour} * * ${dayOfWeek}`;
 }
 
+function formatClock(hour, minute) {
+    const hh = String(hour).padStart(2, '0');
+    const mm = String(minute).padStart(2, '0');
+    return `${hh}:${mm}`;
+}
+
 function scheduleDescription(settings) {
     const day = DAY_NAMES[settings.dayOfWeek] || `day ${settings.dayOfWeek}`;
-    const hh = String(settings.hour).padStart(2, '0');
-    const mm = String(settings.minute).padStart(2, '0');
-    return `Every ${day} at ${hh}:${mm} (${settings.timezone}), last ${settings.lookbackDays} day(s), source=${settings.source}`;
+    const time = formatClock(settings.hour, settings.minute);
+    return `${day} · ${time} · Weekly, past ${settings.lookbackDays} days`;
+}
+
+function scheduleSummary(settings) {
+    return {
+        dayName: DAY_NAMES[settings.dayOfWeek] || `day ${settings.dayOfWeek}`,
+        timeLabel: formatClock(settings.hour, settings.minute),
+        frequencyLabel: `Weekly, past ${settings.lookbackDays} days`
+    };
 }
 
 /** Zoned calendar parts for a Date using Intl (no extra deps). */
@@ -290,12 +297,13 @@ async function fireScheduledScrape() {
 async function buildStatus(pool) {
     const settings = await getSettings(pool);
     const nextRunAt = computeNextRun(settings);
+    const summary = scheduleSummary(settings);
     return {
         success: true,
         enabled: settings.enabled,
         paused: !settings.enabled,
         dayOfWeek: settings.dayOfWeek,
-        dayName: DAY_NAMES[settings.dayOfWeek],
+        dayName: summary.dayName,
         hour: settings.hour,
         minute: settings.minute,
         timezone: settings.timezone,
@@ -303,6 +311,8 @@ async function buildStatus(pool) {
         source: settings.source,
         cronExpression: cronExpression(settings),
         scheduleDescription: scheduleDescription(settings),
+        timeLabel: summary.timeLabel,
+        frequencyLabel: summary.frequencyLabel,
         lastRunAt: settings.lastRunAt,
         lastRunStatus: settings.lastRunStatus,
         lastRunReport: settings.lastRunReport,
@@ -344,9 +354,9 @@ function attachRaceResultsScheduler(app, { pool, axios, cheerio }) {
                 dayOfWeek: body.dayOfWeek,
                 hour: body.hour,
                 minute: body.minute,
-                timezone: body.timezone,
                 lookbackDays: body.lookbackDays,
-                source: body.source
+                source: 'all',
+                timezone: DEFAULTS.timezone
             });
             rebuildCron(saved);
             const status = await buildStatus(pool);
@@ -381,7 +391,7 @@ function attachRaceResultsScheduler(app, { pool, axios, cheerio }) {
         try {
             const settings = await getSettings(pool);
             const lookbackDays = clampInt(req.body && req.body.lookbackDays, 1, 365, settings.lookbackDays);
-            const source = (req.body && req.body.source) || settings.source;
+            const source = 'all';
             startResultsScrapeJob({
                 axios,
                 cheerio,
@@ -398,7 +408,7 @@ function attachRaceResultsScheduler(app, { pool, axios, cheerio }) {
             });
             res.json({
                 success: true,
-                message: `Scheduled-style scrape started (last ${lookbackDays} days, ${source})`,
+                message: `Scheduled-style scrape started (last ${lookbackDays} days, both sources)`,
                 ...(await buildStatus(pool))
             });
         } catch (err) {
@@ -419,6 +429,7 @@ module.exports = {
     attachRaceResultsScheduler,
     computeNextRun,
     scheduleDescription,
+    scheduleSummary,
     normalizeSettings,
     // exported for tests
     _zonedParts: zonedParts,
