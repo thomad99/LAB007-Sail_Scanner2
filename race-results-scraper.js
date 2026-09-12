@@ -7,11 +7,11 @@
  */
 
 const { parseChatIntent } = require('./chat-intent');
+const { PARSE_APP_ID, clubspotGet, clubspotConfigSummary } = require('./clubspot-http');
 
 const LOOKBACK_DAYS = 60;
 const LOOKBACK_MAX_DAYS = 365;
 const TABLE = 'scraped_race_results';
-const PARSE_APP_ID = 'myclubspot2017';
 const PARSE_REGATTAS_URL = 'https://theclubspot.com/parse/classes/regattas';
 const PARSE_BOAT_CLASSES_URL = 'https://theclubspot.com/parse/classes/boatClasses';
 const CLUBSPOT_RESULTS_API = 'https://results.theclubspot.com/clubspot-results-v4';
@@ -33,6 +33,7 @@ const job = {
     fromDate: null,
     toDate: null,
     windowLabel: null,
+    trigger: 'manual',
     log: [],
     stats: emptyStats(),
     error: null
@@ -100,6 +101,7 @@ function snapshotJob() {
         fromDate: job.fromDate,
         toDate: job.toDate,
         windowLabel: job.windowLabel,
+        trigger: job.trigger,
         stats: job.stats,
         error: job.error,
         log: job.log.slice(-40)
@@ -214,14 +216,16 @@ async function ensureResultsScrapeLogTable(pool) {
             errors INTEGER DEFAULT 0,
             started_at TIMESTAMPTZ,
             finished_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-            status TEXT NOT NULL DEFAULT 'success'
+            status TEXT NOT NULL DEFAULT 'success',
+            triggered_by TEXT NOT NULL DEFAULT 'manual'
         )
     `);
+    await pool.query(`ALTER TABLE ${SCRAPE_LOG_TABLE} ADD COLUMN IF NOT EXISTS triggered_by TEXT NOT NULL DEFAULT 'manual'`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_rrsl_source_year ON ${SCRAPE_LOG_TABLE}(source, year)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_rrsl_finished ON ${SCRAPE_LOG_TABLE}(finished_at DESC)`);
 }
 
-async function logResultsScrape(pool, { source, window, stats, startedAt, status }) {
+async function logResultsScrape(pool, { source, window, stats, startedAt, status, triggeredBy }) {
     try {
         await ensureResultsScrapeLogTable(pool);
         await pool.query(
@@ -229,8 +233,8 @@ async function logResultsScrape(pool, { source, window, stats, startedAt, status
             INSERT INTO ${SCRAPE_LOG_TABLE} (
                 source, mode, lookback_days, year, from_date, to_date,
                 events_found, events_scraped, rows_inserted, rows_updated, errors,
-                started_at, finished_at, status
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,CURRENT_TIMESTAMP,$13)
+                started_at, finished_at, status, triggered_by
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,CURRENT_TIMESTAMP,$13,$14)
             `,
             [
                 source,
@@ -245,7 +249,8 @@ async function logResultsScrape(pool, { source, window, stats, startedAt, status
                 stats.rowsUpdated || 0,
                 stats.errors || 0,
                 startedAt || null,
-                status || 'success'
+                status || 'success',
+                triggeredBy || job.trigger || 'manual'
             ]
         );
     } catch (err) {
@@ -825,11 +830,10 @@ async function fetchClubspotClassIds(axios, regattaId) {
         regattaObject: { __type: 'Pointer', className: 'regattas', objectId: regattaId }
     });
     try {
-        const res = await axios.get(PARSE_BOAT_CLASSES_URL, {
+        const res = await clubspotGet(axios, PARSE_BOAT_CLASSES_URL, {
             params: { where, limit: '100', keys: 'objectId,name' },
-            headers: { ...HTTP_HEADERS, 'X-Parse-Application-Id': PARSE_APP_ID },
-            timeout: 30000
-        });
+            headers: { 'X-Parse-Application-Id': PARSE_APP_ID }
+        }, { log: logLine });
         const ids = (res.data.results || []).map(c => c.objectId).filter(Boolean);
         if (ids.length) return [...new Set(ids)];
     } catch (err) {
@@ -857,10 +861,9 @@ async function listClubspotEvents(axios, window) {
     };
 
     const countParams = new URLSearchParams({ ...base, count: '1', limit: '0' });
-    const countRes = await axios.get(`${PARSE_REGATTAS_URL}?${countParams}`, {
-        headers: { ...HTTP_HEADERS, 'X-Parse-Application-Id': PARSE_APP_ID },
-        timeout: 30000
-    });
+    const countRes = await clubspotGet(axios, `${PARSE_REGATTAS_URL}?${countParams}`, {
+        headers: { 'X-Parse-Application-Id': PARSE_APP_ID }
+    }, { log: logLine });
     const total = countRes.data.count || 0;
     const BATCH = 100;
     const pages = Math.ceil(total / BATCH);
@@ -872,12 +875,10 @@ async function listClubspotEvents(axios, window) {
             limit: String(BATCH),
             skip: String(page * BATCH)
         });
-        const res = await axios.get(`${PARSE_REGATTAS_URL}?${params}`, {
-            headers: { ...HTTP_HEADERS, 'X-Parse-Application-Id': PARSE_APP_ID },
-            timeout: 30000
-        });
+        const res = await clubspotGet(axios, `${PARSE_REGATTAS_URL}?${params}`, {
+            headers: { 'X-Parse-Application-Id': PARSE_APP_ID }
+        }, { log: logLine });
         all.push(...(res.data.results || []));
-        if (page < pages - 1) await sleep(150);
     }
 
     const events = [];
@@ -893,7 +894,6 @@ async function listClubspotEvents(axios, window) {
         if (!classes.length) {
             classLookups += 1;
             classes = await fetchClubspotClassIds(axios, r.objectId);
-            await sleep(80);
         }
         if (!classes.length) continue;
 
@@ -924,7 +924,11 @@ async function listClubspotEvents(axios, window) {
 }
 
 async function scrapeClubspot(axios, pool, window) {
-    logLine(`ClubSpot: listing events via Parse API (${window.label})`);
+    const pace = clubspotConfigSummary();
+    logLine(
+        `ClubSpot: listing events via Parse API (${window.label}); ` +
+        `pacing ${pace.delayMinMs}-${pace.delayMaxMs}ms, retry on 429/5xx up to ${pace.maxRetries}`
+    );
     const events = await listClubspotEvents(axios, window);
     job.stats.clubspot.eventsFound = events.length;
     logLine(`ClubSpot: ${events.length} events for ${window.label}`);
@@ -935,13 +939,10 @@ async function scrapeClubspot(axios, pool, window) {
             const eventRows = [];
             for (const classId of event.class_ids) {
                 const url = `${CLUBSPOT_RESULTS_API}/${event.source_event_id}`;
-                const res = await axios.get(url, {
-                    params: { boatClassIDs: classId },
-                    headers: HTTP_HEADERS,
-                    timeout: 30000
-                });
+                const res = await clubspotGet(axios, url, {
+                    params: { boatClassIDs: classId }
+                }, { log: logLine });
                 eventRows.push(...rowsFromClubspotPayload(res.data, event, classId));
-                await sleep(80);
             }
             const n = await upsertRows(pool, eventRows);
             job.stats.clubspot.eventsScraped += 1;
@@ -1194,6 +1195,96 @@ function buildSailorCard(rows, preferredName) {
     };
 }
 
+/**
+ * Start a results scrape in the background. Used by the manual API and the weekly scheduler.
+ * @returns {{ success: true, window: object, status: object }}
+ * @throws Error with code SCRAPE_BUSY or VALIDATION
+ */
+function startResultsScrapeJob({ axios, cheerio, pool, source = 'all', lookbackDays, year, trigger = 'manual', onComplete } = {}) {
+    if (job.running) {
+        const err = new Error('A results scrape is already running');
+        err.code = 'SCRAPE_BUSY';
+        err.status = snapshotJob();
+        throw err;
+    }
+    if (!['all', 'regattanetwork', 'clubspot'].includes(source)) {
+        const err = new Error('source must be all, regattanetwork, or clubspot');
+        err.code = 'VALIDATION';
+        throw err;
+    }
+    const window = resolveScrapeWindow({ lookbackDays, year });
+    job.running = true;
+    job.startedAt = new Date().toISOString();
+    job.finishedAt = null;
+    job.source = source;
+    job.mode = window.mode;
+    job.year = window.year;
+    job.lookbackDays = window.lookbackDays;
+    job.fromDate = window.fromDate;
+    job.toDate = window.toDate;
+    job.windowLabel = window.label;
+    job.trigger = trigger || 'manual';
+    job.error = null;
+    job.stats = emptyStats();
+    job.log = [];
+    logLine(`Queued scrape trigger=${job.trigger} source=${source} ${window.label} (${window.fromDate} → ${window.toDate})`);
+
+    const finish = (report) => {
+        if (typeof onComplete === 'function') {
+            Promise.resolve(onComplete(report)).catch((err) => {
+                console.error('[race-results] onComplete failed:', err.message);
+            });
+        }
+    };
+
+    runScrape({ axios, cheerio, pool, source, window }).then(() => {
+        finish({
+            success: !job.error,
+            status: job.error ? 'error' : 'success',
+            error: job.error,
+            trigger: job.trigger,
+            source: job.source,
+            mode: job.mode,
+            lookbackDays: job.lookbackDays,
+            year: job.year,
+            fromDate: job.fromDate,
+            toDate: job.toDate,
+            windowLabel: job.windowLabel,
+            startedAt: job.startedAt,
+            finishedAt: job.finishedAt,
+            stats: job.stats
+        });
+    }).catch(err => {
+        job.running = false;
+        job.finishedAt = new Date().toISOString();
+        job.error = err.message;
+        logLine(`Background scrape crash: ${err.message}`);
+        finish({
+            success: false,
+            status: 'error',
+            error: err.message,
+            trigger: job.trigger,
+            source: job.source,
+            mode: job.mode,
+            lookbackDays: job.lookbackDays,
+            year: job.year,
+            fromDate: job.fromDate,
+            toDate: job.toDate,
+            windowLabel: job.windowLabel,
+            startedAt: job.startedAt,
+            finishedAt: job.finishedAt,
+            stats: job.stats
+        });
+    });
+
+    return {
+        success: true,
+        window,
+        status: snapshotJob()
+    };
+}
+
+
 function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
     app.get('/api/race-results/status', (req, res) => {
         res.json({
@@ -1395,49 +1486,39 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
     });
 
     app.post('/api/race-results/scrape', async (req, res) => {
-        if (job.running) {
-            return res.status(409).json({ success: false, error: 'A results scrape is already running', status: snapshotJob() });
+        try {
+            const source = (req.body && req.body.source) || 'all';
+            const yearRaw = req.body && (req.body.year != null && req.body.year !== '' ? req.body.year : null);
+            const started = startResultsScrapeJob({
+                axios,
+                cheerio,
+                pool,
+                source,
+                lookbackDays: req.body && req.body.lookbackDays,
+                year: yearRaw,
+                trigger: 'manual'
+            });
+            res.json({
+                success: true,
+                status: 'started',
+                message: `Race-results scrape started (${source}, ${started.window.label}). Poll /api/race-results/status.`,
+                lookbackDays: started.window.lookbackDays,
+                year: started.window.year,
+                mode: started.window.mode,
+                fromDate: started.window.fromDate,
+                toDate: started.window.toDate,
+                windowLabel: started.window.label
+            });
+        } catch (err) {
+            if (err.code === 'SCRAPE_BUSY') {
+                return res.status(409).json({ success: false, error: err.message, status: err.status || snapshotJob() });
+            }
+            if (err.code === 'VALIDATION') {
+                return res.status(400).json({ success: false, error: err.message });
+            }
+            console.error('race-results scrape start error:', err);
+            res.status(500).json({ success: false, error: err.message });
         }
-        const source = (req.body && req.body.source) || 'all';
-        if (!['all', 'regattanetwork', 'clubspot'].includes(source)) {
-            return res.status(400).json({ success: false, error: 'source must be all, regattanetwork, or clubspot' });
-        }
-        const yearRaw = req.body && (req.body.year != null && req.body.year !== '' ? req.body.year : null);
-        const window = resolveScrapeWindow({
-            lookbackDays: req.body && req.body.lookbackDays,
-            year: yearRaw
-        });
-        job.running = true;
-        job.startedAt = new Date().toISOString();
-        job.finishedAt = null;
-        job.source = source;
-        job.mode = window.mode;
-        job.year = window.year;
-        job.lookbackDays = window.lookbackDays;
-        job.fromDate = window.fromDate;
-        job.toDate = window.toDate;
-        job.windowLabel = window.label;
-        job.error = null;
-        job.stats = emptyStats();
-        job.log = [];
-        logLine(`Queued scrape source=${source} ${window.label} (${window.fromDate} → ${window.toDate})`);
-        res.json({
-            success: true,
-            status: 'started',
-            message: `Race-results scrape started (${source}, ${window.label}). Poll /api/race-results/status.`,
-            lookbackDays: window.lookbackDays,
-            year: window.year,
-            mode: window.mode,
-            fromDate: window.fromDate,
-            toDate: window.toDate,
-            windowLabel: window.label
-        });
-        runScrape({ axios, cheerio, pool, source, window }).catch(err => {
-            job.running = false;
-            job.finishedAt = new Date().toISOString();
-            job.error = err.message;
-            logLine(`Background scrape crash: ${err.message}`);
-        });
     });
 
     app.post('/api/race-results/clear', async (req, res) => {
@@ -1755,6 +1836,7 @@ module.exports = {
     SCRAPE_LOG_TABLE,
     resolveScrapeWindow,
     ensureScrapedResultsTable,
+    startResultsScrapeJob,
     attachRaceResultsScraper,
     parseRnListing,
     parseRnResultsPage,

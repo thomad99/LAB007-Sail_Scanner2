@@ -30,6 +30,8 @@ const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
 const { attachRaceResultsScraper, ensureScrapedResultsTable } = require('./race-results-scraper');
+const { attachRaceResultsScheduler } = require('./race-results-scheduler');
+const { PARSE_APP_ID, clubspotGet, clubspotConfigSummary } = require('./clubspot-http');
 
 // Load Puppeteer only if ENABLE_PUPPETEER environment variable is set to 'true'
 // Main server should NOT have this set - only the dedicated scraper service should
@@ -4465,6 +4467,7 @@ app.post('/api/chat', async (req, res) => {
 });
 
 attachRaceResultsScraper(app, { pool, openai, axios, cheerio });
+attachRaceResultsScheduler(app, { pool, axios, cheerio });
 
 // Static file serving (AFTER all API routes)
 app.use(express.static(path.join(__dirname, 'public')));
@@ -5258,10 +5261,13 @@ async function scrapeRegattaNetwork() {
 
 // Scrape Clubspot via the Parse Server REST API (no headless browser needed)
 async function scrapeClubspot() {
-    console.log('🌐 Starting Clubspot scrape via Parse Server API...');
+    const pace = clubspotConfigSummary();
+    console.log(
+        `🌐 Starting Clubspot scrape via Parse Server API ` +
+        `(pacing ${pace.delayMinMs}-${pace.delayMaxMs}ms, retry on 429/5xx up to ${pace.maxRetries})...`
+    );
 
     const PARSE_API_URL = 'https://theclubspot.com/parse/classes/regattas';
-    const PARSE_APP_ID = 'myclubspot2017';
     const BATCH_SIZE = 100;
 
     try {
@@ -5286,9 +5292,8 @@ async function scrapeClubspot() {
         countParams.set('count', '1');
         countParams.set('limit', '0');
 
-        const countResponse = await axios.get(`${PARSE_API_URL}?${countParams}`, {
-            headers: { 'X-Parse-Application-Id': PARSE_APP_ID },
-            timeout: 30000
+        const countResponse = await clubspotGet(axios, `${PARSE_API_URL}?${countParams}`, {
+            headers: { 'X-Parse-Application-Id': PARSE_APP_ID }
         });
 
         const totalCount = countResponse.data.count || 0;
@@ -5305,17 +5310,12 @@ async function scrapeClubspot() {
 
             console.log(`📄 Fetching page ${page + 1}/${totalPages}...`);
 
-            const response = await axios.get(`${PARSE_API_URL}?${pageParams}`, {
-                headers: { 'X-Parse-Application-Id': PARSE_APP_ID },
-                timeout: 30000
+            const response = await clubspotGet(axios, `${PARSE_API_URL}?${pageParams}`, {
+                headers: { 'X-Parse-Application-Id': PARSE_APP_ID }
             });
 
             const results = response.data.results || [];
             allRegattas.push(...results);
-
-            if (page < totalPages - 1) {
-                await new Promise(r => setTimeout(r, 200));
-            }
         }
 
         console.log(`✅ Fetched ${allRegattas.length} regattas from Clubspot API`);
