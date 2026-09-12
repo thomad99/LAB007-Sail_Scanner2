@@ -349,16 +349,21 @@ async function parseChatIntent(message, openai) {
     }
 
     try {
-        const completion = await openai.chat.completions.create({
-            model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini',
-            messages: [
-                { role: 'system', content: OPENAI_INTENT_PROMPT },
-                { role: 'user', content: text.slice(0, 400) }
-            ],
-            max_tokens: 120,
-            temperature: 0,
-            response_format: { type: 'json_object' }
-        });
+        const completion = await Promise.race([
+            openai.chat.completions.create({
+                model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini',
+                messages: [
+                    { role: 'system', content: OPENAI_INTENT_PROMPT },
+                    { role: 'user', content: text.slice(0, 400) }
+                ],
+                max_tokens: 120,
+                temperature: 0,
+                response_format: { type: 'json_object' }
+            }),
+            new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('OpenAI intent timeout')), 12000)
+            )
+        ]);
         const raw = completion.choices?.[0]?.message?.content?.trim() || '{}';
         const json = raw.replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
         const parsed = JSON.parse(json);

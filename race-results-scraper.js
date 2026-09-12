@@ -39,6 +39,8 @@ const job = {
     error: null
 };
 
+let schemaReadyPromise = null;
+
 function emptyStats() {
     return {
         regattanetwork: { eventsFound: 0, eventsScraped: 0, rowsInserted: 0, rowsUpdated: 0, errors: 0 },
@@ -259,29 +261,62 @@ async function logResultsScrape(pool, { source, window, stats, startedAt, status
 }
 
 async function ensureScrapedResultsTable(pool) {
-    await ensureResultsScrapeLogTable(pool);
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS ${TABLE} (
-            id SERIAL PRIMARY KEY,
-            source TEXT NOT NULL,
-            source_event_id TEXT NOT NULL,
-            source_url TEXT,
-            regatta_name TEXT,
-            regatta_date DATE,
-            category TEXT NOT NULL DEFAULT '',
-            position TEXT,
-            sail_number TEXT NOT NULL DEFAULT '',
-            boat_name TEXT,
-            skipper TEXT NOT NULL DEFAULT '',
-            yacht_club TEXT,
-            results TEXT,
-            total_points TEXT,
-            scraped_at TIMESTAMP NOT NULL DEFAULT NOW(),
-            dedupe_key TEXT
-        )
-    `);
-    await pool.query(`ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS dedupe_key TEXT`);
+    // Schema only — never rewrite row data on read paths (stats/history/chat).
+    // Full-table normalize/dedupe used to run here and hung the admin APIs.
+    if (schemaReadyPromise) return schemaReadyPromise;
+    schemaReadyPromise = (async () => {
+        await ensureResultsScrapeLogTable(pool);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS ${TABLE} (
+                id SERIAL PRIMARY KEY,
+                source TEXT NOT NULL,
+                source_event_id TEXT NOT NULL,
+                source_url TEXT,
+                regatta_name TEXT,
+                regatta_date DATE,
+                category TEXT NOT NULL DEFAULT '',
+                position TEXT,
+                sail_number TEXT NOT NULL DEFAULT '',
+                boat_name TEXT,
+                skipper TEXT NOT NULL DEFAULT '',
+                yacht_club TEXT,
+                results TEXT,
+                total_points TEXT,
+                scraped_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                dedupe_key TEXT
+            )
+        `);
+        await pool.query(`ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS dedupe_key TEXT`);
+        await pool.query(`
+            DO $$
+            DECLARE r RECORD;
+            BEGIN
+                FOR r IN
+                    SELECT c.conname
+                    FROM pg_constraint c
+                    JOIN pg_class t ON c.conrelid = t.oid
+                    WHERE t.relname = 'scraped_race_results'
+                      AND c.contype = 'u'
+                LOOP
+                    EXECUTE format('ALTER TABLE scraped_race_results DROP CONSTRAINT IF EXISTS %I', r.conname);
+                END LOOP;
+            END $$;
+        `);
+        await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_srr_dedupe_key ON ${TABLE}(dedupe_key)`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_date ON ${TABLE}(regatta_date)`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_skipper ON ${TABLE}(skipper)`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_regatta ON ${TABLE}(regatta_name)`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_source ON ${TABLE}(source)`);
+    })().catch((err) => {
+        schemaReadyPromise = null;
+        throw err;
+    });
+    return schemaReadyPromise;
+}
 
+/** Optional heavy cleanup — only after scrapes, never on dashboard reads. */
+async function cleanupScrapedResultsData(pool) {
+    await ensureScrapedResultsTable(pool);
     await pool.query(`
         UPDATE ${TABLE} SET
             category = TRIM(REGEXP_REPLACE(COALESCE(category, ''), '\\s+', ' ', 'g')),
@@ -289,6 +324,9 @@ async function ensureScrapedResultsTable(pool) {
             sail_number = TRIM(REGEXP_REPLACE(COALESCE(sail_number, ''), '\\s+', ' ', 'g')),
             boat_name = NULLIF(TRIM(REGEXP_REPLACE(COALESCE(boat_name, ''), '\\s+', ' ', 'g')), ''),
             yacht_club = NULLIF(TRIM(REGEXP_REPLACE(COALESCE(yacht_club, ''), '\\s+', ' ', 'g')), '')
+        WHERE category IS DISTINCT FROM TRIM(REGEXP_REPLACE(COALESCE(category, ''), '\\s+', ' ', 'g'))
+           OR skipper IS DISTINCT FROM TRIM(REGEXP_REPLACE(COALESCE(skipper, ''), '\\s+', ' ', 'g'))
+           OR sail_number IS DISTINCT FROM TRIM(REGEXP_REPLACE(COALESCE(sail_number, ''), '\\s+', ' ', 'g'))
     `);
     await pool.query(`
         UPDATE ${TABLE} SET dedupe_key =
@@ -298,15 +336,7 @@ async function ensureScrapedResultsTable(pool) {
             UPPER(REGEXP_REPLACE(TRIM(COALESCE(sail_number, '')), '[\\s-]+', '', 'g')) || '|' ||
             LOWER(TRIM(COALESCE(skipper, '')))
         WHERE dedupe_key IS NULL OR TRIM(dedupe_key) = ''
-           OR dedupe_key IS DISTINCT FROM (
-            LOWER(TRIM(source)) || '|' ||
-            LOWER(TRIM(source_event_id)) || '|' ||
-            LOWER(TRIM(COALESCE(category, ''))) || '|' ||
-            UPPER(REGEXP_REPLACE(TRIM(COALESCE(sail_number, '')), '[\\s-]+', '', 'g')) || '|' ||
-            LOWER(TRIM(COALESCE(skipper, '')))
-           )
     `);
-
     const cleaned = await pool.query(`
         DELETE FROM ${TABLE} a
         USING ${TABLE} b
@@ -317,29 +347,8 @@ async function ensureScrapedResultsTable(pool) {
     if (cleaned.rowCount) {
         console.log(`[race-results] Removed ${cleaned.rowCount} duplicate row(s)`);
     }
-
-    await pool.query(`
-        DO $$
-        DECLARE r RECORD;
-        BEGIN
-            FOR r IN
-                SELECT c.conname
-                FROM pg_constraint c
-                JOIN pg_class t ON c.conrelid = t.oid
-                WHERE t.relname = 'scraped_race_results'
-                  AND c.contype = 'u'
-            LOOP
-                EXECUTE format('ALTER TABLE scraped_race_results DROP CONSTRAINT IF EXISTS %I', r.conname);
-            END LOOP;
-        END $$;
-    `);
-
-    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_srr_dedupe_key ON ${TABLE}(dedupe_key)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_date ON ${TABLE}(regatta_date)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_skipper ON ${TABLE}(skipper)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_regatta ON ${TABLE}(regatta_name)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_source ON ${TABLE}(source)`);
 }
+
 
 async function upsertRows(pool, rows) {
     const uniqueRows = dedupeResultRows(rows);
@@ -969,6 +978,11 @@ async function runScrape({ axios, cheerio, pool, source, window }) {
             await scrapeClubspot(axios, pool, window);
         }
         logLine('Scrape complete');
+        try {
+            await cleanupScrapedResultsData(pool);
+        } catch (cleanupErr) {
+            console.error('[race-results] post-scrape cleanup failed:', cleanupErr.message);
+        }
         const status = job.error ? 'error' : 'success';
         if (source === 'all' || source === 'regattanetwork') {
             await logResultsScrape(pool, {

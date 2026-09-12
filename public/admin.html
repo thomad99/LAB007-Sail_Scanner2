@@ -1406,7 +1406,7 @@
         <div class="scrape-section" id="raceResultsSection">
             <h2>Scrape Race Results</h2>
 
-            <div id="raceResultsStats" class="stats-container" style="margin-top: 16px;"></div>
+            <div id="raceResultsStats" class="stats-container" style="margin-top: 16px;"><div class="loading">Loading scraped-results totals…</div></div>
 
             <div class="scrape-mode-row">
                 <div class="scrape-source-select">
@@ -1448,14 +1448,7 @@
                 <button class="action-button danger" onclick="clearScrapedResults()">Clear Scraped Results</button>
             </div>
 
-            <div id="resultsScrapeHistory" class="scrape-history-panel">
-                <div class="loading">Loading scrape history…</div>
-            </div>
-
-            <div class="scrape-status" id="resultsScrapeStatus"></div>
-            <div class="results-log" id="resultsScrapeLog"></div>
-
-            <div class="results-scheduler" id="resultsSchedulerSection">
+                        <div class="results-scheduler" id="resultsSchedulerSection">
                 <h3>Automated Weekly Results Scrape</h3>
                 <p class="scheduler-sub">
                     Runs on a schedule (default Monday 9:00 AM Eastern) and collects the past week of ClubSpot + Regatta Network results.
@@ -1524,6 +1517,12 @@
                 </div>
             </div>
 
+            <div id="resultsScrapeHistory" class="scrape-history-panel">
+                <div class="loading">Loading scrape history…</div>
+            </div>
+
+            <div class="scrape-status" id="resultsScrapeStatus"></div>
+            <div class="results-log" id="resultsScrapeLog"></div>
         </div>
         </div>
 
@@ -1586,6 +1585,11 @@
             if (location.hash !== '#' + tab) {
                 history.replaceState(null, '', '#' + tab);
             }
+            if (tab === 'results') {
+                loadRaceResultsStats();
+                loadResultsScrapeHistory();
+                loadResultsSchedule();
+            }
             if (tab === 'chat') {
                 ensureChatWelcome();
                 const input = document.getElementById('resultsChatInput');
@@ -1647,9 +1651,9 @@
         async function loadResultsScrapeHistory() {
             const box = document.getElementById('resultsScrapeHistory');
             if (!box) return;
+            box.innerHTML = '<div class="loading">Loading scrape history…</div>';
             try {
-                const res = await fetch('/api/race-results/scrape-history');
-                const data = await res.json();
+                const data = await fetchJsonWithTimeout('/api/race-results/scrape-history', {}, 15000);
                 if (!data.success) throw new Error(data.error || 'Failed');
                 populateResultsYearSelect(data.yearOptions || []);
 
@@ -2176,9 +2180,10 @@
         async function loadResultsSchedule() {
             const box = document.getElementById('resultsSchedulerStatus');
             if (!box) return;
+            box.className = 'loading';
+            box.textContent = 'Loading scheduler…';
             try {
-                const res = await fetch('/api/race-results/schedule');
-                const data = await res.json();
+                const data = await fetchJsonWithTimeout('/api/race-results/schedule', {}, 15000);
                 if (!data.success) throw new Error(data.error || 'Failed to load schedule');
                 renderResultsSchedule(data);
             } catch (err) {
@@ -2400,9 +2405,9 @@
         async function loadRaceResultsStats() {
             const box = document.getElementById('raceResultsStats');
             if (!box) return;
+            box.innerHTML = '<div class="loading">Loading scraped-results totals…</div>';
             try {
-                const res = await fetch('/api/race-results/stats');
-                const data = await res.json();
+                const data = await fetchJsonWithTimeout('/api/race-results/stats', {}, 15000);
                 if (!data.success) throw new Error(data.error || 'Failed');
                 const src = (data.bySource || []).map(s => `${s.source}: ${s.count} rows / ${s.events} events`).join(' · ') || 'No rows yet';
                 box.innerHTML = `
