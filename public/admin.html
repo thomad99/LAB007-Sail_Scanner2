@@ -2861,6 +2861,16 @@
             }
         }
 
+        function formatChatWelcomeHtml(data) {
+            const sailors = Number(data && data.total_sailors || 0).toLocaleString();
+            const regattas = Number(data && data.total_regattas || 0).toLocaleString();
+            const year = (data && (data.earliest_year || (data.earliest_date && String(data.earliest_date).slice(0, 4)))) || null;
+            const yearBit = year
+                ? `, going as far back as <strong>${escapeHtml(String(year))}</strong>`
+                : '';
+            return `Welcome to Love Sailing ChatBot — I have knowledge of <strong>${sailors}</strong> sailors and <strong>${regattas}</strong> regattas${yearBit}.`;
+        }
+
         async function ensureChatWelcome() {
             const log = document.getElementById('resultsChatLog');
             if (!log || log.dataset.welcomed === '1') return;
@@ -2874,10 +2884,7 @@
             try {
                 const data = await fetchJsonWithTimeout('/api/race-results/stats', {}, 20000);
                 if (data && data.success && bubble) {
-                    const sailors = Number(data.total_sailors || 0).toLocaleString();
-                    const regattas = Number(data.total_regattas || 0).toLocaleString();
-                    bubble.innerHTML =
-                        `Welcome to Love Sailing ChatBot — I have knowledge of <strong>${sailors}</strong> sailors and <strong>${regattas}</strong> regattas.`;
+                    bubble.innerHTML = formatChatWelcomeHtml(data);
                 } else if (bubble) {
                     bubble.innerHTML = 'Welcome to Love Sailing ChatBot. How can I help?';
                 }

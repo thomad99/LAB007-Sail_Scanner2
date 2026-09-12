@@ -1359,10 +1359,19 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                     ORDER BY scraped_at DESC NULLS LAST, id DESC
                     LIMIT 12
                 `);
+                const row = r.rows[0] || {};
+                const earliestYear = row.earliest_date
+                    ? parseInt(String(row.earliest_date).slice(0, 4), 10)
+                    : null;
+                const latestYear = row.latest_date
+                    ? parseInt(String(row.latest_date).slice(0, 4), 10)
+                    : null;
                 return {
                     success: true,
                     tableName: TABLE,
-                    ...r.rows[0],
+                    ...row,
+                    earliest_year: Number.isFinite(earliestYear) ? earliestYear : null,
+                    latest_year: Number.isFinite(latestYear) ? latestYear : null,
                     bySource: bySource.rows,
                     recent: recent.rows
                 };
