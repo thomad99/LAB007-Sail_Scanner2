@@ -261,8 +261,7 @@ async function logResultsScrape(pool, { source, window, stats, startedAt, status
 }
 
 async function ensureScrapedResultsTable(pool) {
-    // Schema only — never rewrite row data on read paths (stats/history/chat).
-    // Full-table normalize/dedupe used to run here and hung the admin APIs.
+    // Table/columns only — no index builds on read/startup (those can lock & timeout).
     if (schemaReadyPromise) return schemaReadyPromise;
     schemaReadyPromise = (async () => {
         await ensureResultsScrapeLogTable(pool);
@@ -287,31 +286,27 @@ async function ensureScrapedResultsTable(pool) {
             )
         `);
         await pool.query(`ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS dedupe_key TEXT`);
-        await pool.query(`
-            DO $$
-            DECLARE r RECORD;
-            BEGIN
-                FOR r IN
-                    SELECT c.conname
-                    FROM pg_constraint c
-                    JOIN pg_class t ON c.conrelid = t.oid
-                    WHERE t.relname = 'scraped_race_results'
-                      AND c.contype = 'u'
-                LOOP
-                    EXECUTE format('ALTER TABLE scraped_race_results DROP CONSTRAINT IF EXISTS %I', r.conname);
-                END LOOP;
-            END $$;
-        `);
-        await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_srr_dedupe_key ON ${TABLE}(dedupe_key)`);
-        await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_date ON ${TABLE}(regatta_date)`);
-        await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_skipper ON ${TABLE}(skipper)`);
-        await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_regatta ON ${TABLE}(regatta_name)`);
-        await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_source ON ${TABLE}(source)`);
     })().catch((err) => {
         schemaReadyPromise = null;
         throw err;
     });
     return schemaReadyPromise;
+}
+
+async function withStatementTimeout(pool, timeoutMs, fn) {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        await client.query(`SET LOCAL statement_timeout = ${Math.max(1000, Number(timeoutMs) || 8000)}`);
+        const result = await fn(client);
+        await client.query('COMMIT');
+        return result;
+    } catch (err) {
+        try { await client.query('ROLLBACK'); } catch (_) { /* ignore */ }
+        throw err;
+    } finally {
+        client.release();
+    }
 }
 
 /** Optional heavy cleanup — only after scrapes, never on dashboard reads. */
@@ -346,6 +341,32 @@ async function cleanupScrapedResultsData(pool) {
     `);
     if (cleaned.rowCount) {
         console.log(`[race-results] Removed ${cleaned.rowCount} duplicate row(s)`);
+    }
+    // Indexes after scrape only (never on dashboard reads).
+    try {
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_date ON ${TABLE}(regatta_date)`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_skipper ON ${TABLE}(skipper)`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_regatta ON ${TABLE}(regatta_name)`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_source ON ${TABLE}(source)`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_srr_scraped_at ON ${TABLE}(scraped_at DESC)`);
+        await pool.query(`
+            DO $$
+            DECLARE r RECORD;
+            BEGIN
+                FOR r IN
+                    SELECT c.conname
+                    FROM pg_constraint c
+                    JOIN pg_class t ON c.conrelid = t.oid
+                    WHERE t.relname = '${TABLE}'
+                      AND c.contype = 'u'
+                LOOP
+                    EXECUTE format('ALTER TABLE ${TABLE} DROP CONSTRAINT IF EXISTS %I', r.conname);
+                END LOOP;
+            END $$;
+        `);
+        await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_srr_dedupe_key ON ${TABLE}(dedupe_key)`);
+    } catch (err) {
+        console.error('[race-results] post-scrape index maintenance skipped:', err.message);
     }
 }
 
@@ -1313,35 +1334,40 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
     app.get('/api/race-results/stats', async (req, res) => {
         try {
             await ensureScrapedResultsTable(pool);
-            const r = await pool.query(`
-                SELECT
-                    COUNT(*)::int AS total_records,
-                    COUNT(DISTINCT TRIM(skipper)) FILTER (WHERE skipper IS NOT NULL AND TRIM(skipper) <> '')::int AS total_sailors,
-                    COUNT(DISTINCT TRIM(regatta_name)) FILTER (WHERE regatta_name IS NOT NULL AND TRIM(regatta_name) <> '')::int AS total_regattas,
-                    MIN(regatta_date)::text AS earliest_date,
-                    MAX(regatta_date)::text AS latest_date
-                FROM ${TABLE}
-            `);
-            const bySource = await pool.query(`
-                SELECT source, COUNT(*)::int AS count,
-                    COUNT(DISTINCT source_event_id)::int AS events
-                FROM ${TABLE}
-                GROUP BY source
-                ORDER BY source
-            `);
-            const recent = await pool.query(`
-                SELECT source, regatta_name, regatta_date::text, category, position, sail_number, skipper, yacht_club, total_points
-                FROM ${TABLE}
-                ORDER BY scraped_at DESC, id DESC
-                LIMIT 12
-            `);
-            res.json({
-                success: true,
-                tableName: TABLE,
-                ...r.rows[0],
-                bySource: bySource.rows,
-                recent: recent.rows
+            // Bound query time so the admin UI never spins forever on large tables.
+            const payload = await withStatementTimeout(pool, 8000, async (client) => {
+                // Avoid TRIM() in aggregates so Postgres can use indexes.
+                const r = await client.query(`
+                    SELECT
+                        COUNT(*)::int AS total_records,
+                        COUNT(DISTINCT skipper) FILTER (WHERE skipper IS NOT NULL AND skipper <> '')::int AS total_sailors,
+                        COUNT(DISTINCT regatta_name) FILTER (WHERE regatta_name IS NOT NULL AND regatta_name <> '')::int AS total_regattas,
+                        MIN(regatta_date)::text AS earliest_date,
+                        MAX(regatta_date)::text AS latest_date
+                    FROM ${TABLE}
+                `);
+                const bySource = await client.query(`
+                    SELECT source, COUNT(*)::int AS count,
+                        COUNT(DISTINCT source_event_id)::int AS events
+                    FROM ${TABLE}
+                    GROUP BY source
+                    ORDER BY source
+                `);
+                const recent = await client.query(`
+                    SELECT source, regatta_name, regatta_date::text, category, position, sail_number, skipper, yacht_club, total_points
+                    FROM ${TABLE}
+                    ORDER BY scraped_at DESC NULLS LAST, id DESC
+                    LIMIT 12
+                `);
+                return {
+                    success: true,
+                    tableName: TABLE,
+                    ...r.rows[0],
+                    bySource: bySource.rows,
+                    recent: recent.rows
+                };
             });
+            res.json(payload);
         } catch (e) {
             console.error('race-results stats error:', e);
             res.status(500).json({ success: false, error: e.message });
@@ -1438,7 +1464,10 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
 
     app.get('/api/race-results/scrape-history', async (req, res) => {
         try {
+            // Log table first so history UI works even if results-table scans are slow.
+            await ensureResultsScrapeLogTable(pool);
             await ensureScrapedResultsTable(pool);
+
             const yearsDone = await pool.query(`
                 SELECT source, year,
                     MAX(finished_at) AS last_finished,
@@ -1458,15 +1487,25 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 ORDER BY finished_at DESC
                 LIMIT 40
             `);
-            const dataYears = await pool.query(`
-                SELECT source, EXTRACT(YEAR FROM regatta_date)::int AS year,
-                    COUNT(*)::int AS rows,
-                    COUNT(DISTINCT source_event_id)::int AS events
-                FROM ${TABLE}
-                WHERE regatta_date IS NOT NULL
-                GROUP BY source, EXTRACT(YEAR FROM regatta_date)
-                ORDER BY source, year DESC
-            `);
+
+            let dataYearsRows = [];
+            try {
+                dataYearsRows = await withStatementTimeout(pool, 6000, async (client) => {
+                    const dataYears = await client.query(`
+                        SELECT source, EXTRACT(YEAR FROM regatta_date)::int AS year,
+                            COUNT(*)::int AS rows,
+                            COUNT(DISTINCT source_event_id)::int AS events
+                        FROM ${TABLE}
+                        WHERE regatta_date IS NOT NULL
+                        GROUP BY source, EXTRACT(YEAR FROM regatta_date)
+                        ORDER BY source, year DESC
+                    `);
+                    return dataYears.rows;
+                });
+            } catch (dataYearsErr) {
+                console.warn('[race-results] dataYears skipped:', dataYearsErr.message);
+            }
+
             const bySource = { clubspot: { yearsDone: [], dataYears: [] }, regattanetwork: { yearsDone: [], dataYears: [] } };
             for (const row of yearsDone.rows) {
                 if (!bySource[row.source]) bySource[row.source] = { yearsDone: [], dataYears: [] };
@@ -1478,7 +1517,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                     rowsUpdated: row.rows_updated
                 });
             }
-            for (const row of dataYears.rows) {
+            for (const row of dataYearsRows) {
                 if (!bySource[row.source]) bySource[row.source] = { yearsDone: [], dataYears: [] };
                 bySource[row.source].dataYears.push({
                     year: row.year,
@@ -1571,17 +1610,20 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
             };
 
             if (intent === 'data_summary') {
-                const r = await pool.query(`
-                    SELECT COUNT(*)::int AS total_records,
-                        COUNT(DISTINCT TRIM(skipper)) FILTER (WHERE skipper IS NOT NULL AND TRIM(skipper) <> '')::int AS sailors,
-                        COUNT(DISTINCT TRIM(regatta_name)) FILTER (WHERE regatta_name IS NOT NULL AND TRIM(regatta_name) <> '')::int AS regattas,
-                        MIN(regatta_date)::text AS earliest_date,
-                        MAX(regatta_date)::text AS latest_date
-                    FROM ${TABLE}
-                `);
-                const by = await pool.query(`SELECT source, COUNT(*)::int AS count FROM ${TABLE} GROUP BY source`);
-                const row = r.rows[0];
-                const src = by.rows.map(x => `${x.source}: ${x.count}`).join(', ') || 'none';
+                const summary = await withStatementTimeout(pool, 8000, async (client) => {
+                    const r = await client.query(`
+                        SELECT COUNT(*)::int AS total_records,
+                            COUNT(DISTINCT skipper) FILTER (WHERE skipper IS NOT NULL AND skipper <> '')::int AS sailors,
+                            COUNT(DISTINCT regatta_name) FILTER (WHERE regatta_name IS NOT NULL AND regatta_name <> '')::int AS regattas,
+                            MIN(regatta_date)::text AS earliest_date,
+                            MAX(regatta_date)::text AS latest_date
+                        FROM ${TABLE}
+                    `);
+                    const by = await client.query(`SELECT source, COUNT(*)::int AS count FROM ${TABLE} GROUP BY source`);
+                    return { r, by };
+                });
+                const row = summary.r.rows[0];
+                const src = summary.by.rows.map(x => `${x.source}: ${x.count}`).join(', ') || 'none';
                 return ok({
                     success: true,
                     reply: `Scraped results table **${TABLE}** has **${row.total_records}** rows, **${row.sailors}** sailors, **${row.regattas}** regattas. Dates ${row.earliest_date || '—'} to ${row.latest_date || '—'}. By source: ${src}.`,

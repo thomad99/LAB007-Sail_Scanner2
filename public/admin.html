@@ -1633,7 +1633,7 @@
             if (!box) return;
             box.innerHTML = '<div class="loading">Loading scrape history…</div>';
             try {
-                const data = await fetchJsonWithTimeout('/api/race-results/scrape-history', {}, 15000);
+                const data = await fetchJsonWithTimeout('/api/race-results/scrape-history', {}, 20000);
                 if (!data.success) throw new Error(data.error || 'Failed');
                 populateResultsYearSelect(data.yearOptions || []);
 
@@ -2448,7 +2448,7 @@
             if (!box) return;
             box.innerHTML = '<div class="loading">Loading scraped-results totals…</div>';
             try {
-                const data = await fetchJsonWithTimeout('/api/race-results/stats', {}, 15000);
+                const data = await fetchJsonWithTimeout('/api/race-results/stats', {}, 20000);
                 if (!data.success) throw new Error(data.error || 'Failed');
                 const src = (data.bySource || []).map(s => `${s.source}: ${s.count} rows / ${s.events} events`).join(' · ') || 'No rows yet';
                 box.innerHTML = `
@@ -2723,7 +2723,7 @@
                 'Welcome to Love Sailing ChatBot — loading sailor and regatta counts…'
             );
             try {
-                const data = await fetchJsonWithTimeout('/api/race-results/stats', {}, 12000);
+                const data = await fetchJsonWithTimeout('/api/race-results/stats', {}, 20000);
                 if (data && data.success && bubble) {
                     const sailors = Number(data.total_sailors || 0).toLocaleString();
                     const regattas = Number(data.total_regattas || 0).toLocaleString();
