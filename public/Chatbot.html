@@ -7,14 +7,14 @@
     <title>LoveSailing.AI ChatBot – Regatta Results</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <meta property="og:title" content="LoveSailing.AI ChatBot – Regatta Results">
-    <meta property="og:description" content="AI chatbot for sailing regatta results, sailor info, and yacht clubs.">
+    <meta property="og:description" content="Ask about scraped ClubSpot and Regatta Network race results — sailors, classes, clubs, and years.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://lovesailing.ai/Chatbot.html">
     <meta property="og:image" content="https://lovesailing.ai/Images/LOVE%20SAILING%20LOGO.JPEG">
     <meta property="og:image:alt" content="Love Sailing Logo">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="LoveSailing.AI ChatBot – Regatta Results">
-    <meta name="twitter:description" content="AI chatbot for sailing regatta results, sailor info, and yacht clubs.">
+    <meta name="twitter:description" content="Ask about scraped ClubSpot and Regatta Network race results — sailors, classes, clubs, and years.">
     <meta name="twitter:image" content="https://lovesailing.ai/Images/LOVE%20SAILING%20LOGO.JPEG">
     <style>
         * {
@@ -276,7 +276,11 @@
             }
 
             .input-wrap {
-                padding: 0 0 12px;
+                padding: 0 0 calc(12px + env(safe-area-inset-bottom, 0px));
+            }
+            .chat-container {
+                padding-left: max(8px, env(safe-area-inset-left, 0px));
+                padding-right: max(8px, env(safe-area-inset-right, 0px));
             }
 
             .msg {
@@ -317,21 +321,20 @@
 
         (async function setWelcome() {
             try {
-                const r = await fetch('/api/sailbot/stats');
+                const r = await fetch('/api/race-results/stats');
                 const d = await r.json();
                 if (!d.success) {
-                    welcomeEl.textContent = 'How can I help?';
+                    welcomeEl.textContent = 'Welcome to Love Sailing ChatBot. How can I help?';
                     return;
                 }
                 const sailors = (d.total_sailors != null && !isNaN(Number(d.total_sailors)))
                     ? Number(d.total_sailors).toLocaleString() : '—';
                 const regattas = (d.total_regattas != null && !isNaN(Number(d.total_regattas)))
                     ? Number(d.total_regattas).toLocaleString() : '—';
-                const clubs = (d.total_clubs != null && !isNaN(Number(d.total_clubs)))
-                    ? Number(d.total_clubs).toLocaleString() : '—';
-                welcomeEl.textContent = 'I have knowledge of ' + sailors + ' sailors. ' + regattas + ' Regattas ' + clubs + ' Sailing Clubs. How can I help?';
+                welcomeEl.innerHTML = 'Welcome to Love Sailing ChatBot — I have knowledge of <strong>' +
+                    sailors + '</strong> sailors and <strong>' + regattas + '</strong> regattas.';
             } catch (_) {
-                welcomeEl.textContent = 'How can I help?';
+                welcomeEl.textContent = 'Welcome to Love Sailing ChatBot. How can I help?';
             }
         })();
 
@@ -355,7 +358,51 @@
             const hasRows = (data.rows && data.rows.length);
             let html = '';
 
-            if (rt === 'regatta_summary' && (data.dates || data.sailorCount != null)) {
+            // New scraped-results chatbot shapes (same as admin ChatBot)
+            if (rt === 'list' && hasRows) {
+                const hasCount = data.rows.some(r => r.count != null);
+                html += '<div class="section"><table class="data"><thead><tr><th>Name</th>' +
+                    (hasCount ? '<th>Count</th>' : '') + '</tr></thead><tbody>';
+                data.rows.forEach(r => {
+                    html += '<tr><td>' + escapeHtml(r.name || r.skipper || r.yacht_club || '') + '</td>' +
+                        (hasCount ? '<td>' + escapeHtml(String(r.count ?? '')) + '</td>' : '') + '</tr>';
+                });
+                html += '</tbody></table></div>';
+            } else if (rt === 'sailor_card' && data.sailor) {
+                const sailor = data.sailor || {};
+                const summary = data.summary || {};
+                html += '<div class="section basic-info"><h3>Sailor</h3><table>' +
+                    '<tr><td>Name</td><td>' + escapeHtml(sailor.name || '—') + '</td></tr>' +
+                    '<tr><td>Club</td><td>' + escapeHtml(sailor.club || '—') + '</td></tr>' +
+                    '<tr><td>Regattas</td><td>' + escapeHtml(String(summary.totalRegattas ?? '—')) + '</td></tr>' +
+                    '</table></div>';
+                const hist = data.history || data.regattaAchievements || [];
+                if (hist.length) {
+                    html += '<div class="section"><h3>Recent results</h3><table class="data"><thead><tr><th>Pos</th><th>Regatta</th><th>Date</th><th>Class</th></tr></thead><tbody>';
+                    hist.slice(0, 12).forEach(r => {
+                        html += '<tr><td>' + escapeHtml(String(r.position ?? '—')) + '</td><td>' +
+                            escapeHtml(r.regatta_name || '') + '</td><td>' +
+                            escapeHtml(r.regatta_date || '') + '</td><td>' +
+                            escapeHtml(r.category || '') + '</td></tr>';
+                    });
+                    html += '</tbody></table></div>';
+                }
+            } else if (rt === 'rows' && hasRows) {
+                html += '<div class="section"><table class="data"><thead><tr><th>Pos</th><th>Sailor</th><th>Regatta</th><th>Date</th></tr></thead><tbody>';
+                data.rows.slice(0, 20).forEach(r => {
+                    html += '<tr><td>' + escapeHtml(String(r.position ?? '')) + '</td><td>' +
+                        escapeHtml(r.skipper || '') + '</td><td>' +
+                        escapeHtml(r.regatta_name || '') + '</td><td>' +
+                        escapeHtml(r.regatta_date || '') + '</td></tr>';
+                });
+                html += '</tbody></table></div>';
+            } else if (rt === 'summary') {
+                html += '<div class="section basic-info"><h3>Database</h3><table>' +
+                    '<tr><td>Rows</td><td>' + escapeHtml(String(data.total_records ?? '—')) + '</td></tr>' +
+                    '<tr><td>Sailors</td><td>' + escapeHtml(String(data.sailors ?? data.total_sailors ?? '—')) + '</td></tr>' +
+                    '<tr><td>Regattas</td><td>' + escapeHtml(String(data.regattas ?? data.total_regattas ?? '—')) + '</td></tr>' +
+                    '</table></div>';
+            } else if (rt === 'regatta_summary' && (data.dates || data.sailorCount != null)) {
                 html += '<div class="section basic-info"><h3>Summary</h3><table><tr><td>Dates</td><td>' + escapeHtml((data.dates || []).join(', ') || '—') + '</td></tr><tr><td>Sailors</td><td>' + escapeHtml(String(data.sailorCount ?? '—')) + '</td></tr></table></div>';
                 (data.byClass || []).forEach(function (bc) {
                     html += '<div class="section"><h3>Class: ' + escapeHtml(bc.class || '—') + '</h3><table class="data"><thead><tr><th>Position</th><th>Sailor</th><th>Club</th></tr></thead><tbody>';
@@ -457,7 +504,15 @@
             md.className = 'markdown';
             md.innerHTML = simpleMarkdown(reply);
             div.appendChild(md);
-            const showCard = data && ((data.list && data.list.length) || (data.rows && data.rows.length) || (data.resultType === 'regatta_summary' && (data.dates?.length || data.sailorCount != null || (data.byClass && data.byClass.length))));
+            const showCard = data && (
+                (data.list && data.list.length) ||
+                (data.rows && data.rows.length) ||
+                data.resultType === 'sailor_card' ||
+                data.resultType === 'summary' ||
+                data.resultType === 'list' ||
+                data.resultType === 'rows' ||
+                (data.resultType === 'regatta_summary' && (data.dates?.length || data.sailorCount != null || (data.byClass && data.byClass.length)))
+            );
             if (showCard) {
                 const cardHtml = renderResultsCard(data);
                 if (cardHtml) {
@@ -482,7 +537,7 @@
             status.textContent = '';
             status.className = 'status';
             try {
-                const res = await fetch('/api/chat', {
+                const res = await fetch('/api/race-results/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message: text })

@@ -128,6 +128,51 @@
         }
 
         
+
+        .results-tiles {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-top: 12px;
+            text-align: left;
+        }
+        .admin-tile {
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid rgba(126, 207, 255, 0.18);
+            border-radius: 12px;
+            padding: 20px 18px 18px;
+            box-sizing: border-box;
+        }
+        .admin-tile h2,
+        .admin-tile h3 {
+            margin: 0 0 6px 0;
+            color: #7ecfff;
+            text-align: left;
+        }
+        .admin-tile .tile-sub {
+            margin: 0 0 16px 0;
+            color: #9aa7b8;
+            font-size: 0.95em;
+        }
+        .admin-tile .stats-container {
+            margin-top: 0;
+        }
+        .admin-tile .action-buttons {
+            justify-content: flex-start;
+        }
+        .admin-tile .scrape-history-panel {
+            margin-top: 18px;
+        }
+        .admin-tile.results-scheduler {
+            margin-top: 0;
+            padding-top: 20px;
+            border-top: none;
+        }
+        .admin-tile .scheduler-controls {
+            margin-left: auto;
+            margin-right: auto;
+        }
+
         .results-scheduler {
             margin-top: 28px;
             padding-top: 20px;
@@ -1318,6 +1363,71 @@
         .tab-panel.active {
             display: block;
         }
+
+        body.chat-tab-active {
+            align-items: stretch;
+        }
+        body.chat-tab-active .logo {
+            display: none;
+        }
+        body.chat-tab-active .content {
+            width: 100%;
+            max-width: none;
+            margin-top: 0;
+            padding: 0;
+        }
+        body.chat-tab-active .admin-tabs {
+            margin: 0;
+            border-radius: 0;
+            justify-content: stretch;
+        }
+        body.chat-tab-active .admin-tab {
+            flex: 1;
+        }
+        body.chat-tab-active .back-link {
+            display: none;
+        }
+        body.chat-tab-active .chatbot-panel {
+            margin: 0;
+            border-radius: 0;
+            border-left: none;
+            border-right: none;
+            border-bottom: none;
+            min-height: calc(100dvh - 52px);
+            height: calc(100dvh - 52px);
+            max-height: none;
+            padding: 12px 12px 10px;
+            box-sizing: border-box;
+        }
+        body.chat-tab-active .chatbot-panel .results-chat-log {
+            min-height: 0;
+            flex: 1;
+        }
+        @media (max-width: 768px) {
+            body.chat-tab-active .chatbot-panel h2 {
+                font-size: 1.15em;
+                margin-bottom: 2px;
+            }
+            body.chat-tab-active .chatbot-panel .chatbot-sub {
+                font-size: 0.85em;
+                margin-bottom: 10px;
+            }
+            body.chat-tab-active .results-chat-row {
+                gap: 8px;
+            }
+            body.chat-tab-active .results-chat-row input,
+            body.chat-tab-active .results-chat-row button {
+                min-height: 44px;
+            }
+            .results-tiles {
+                gap: 14px;
+            }
+            .admin-tile {
+                padding: 16px 12px 14px;
+                border-radius: 10px;
+            }
+        }
+
     </style>
 </head>
 
@@ -1453,55 +1563,68 @@
         </div>
 
         <div id="tab-results" class="tab-panel">
+        <div class="results-tiles" id="raceResultsSection">
+            <section class="admin-tile" id="resultsDashTile">
+                <h2>Results Dashboard</h2>
+                <p class="tile-sub">Totals from scraped ClubSpot + Regatta Network race results.</p>
+                <div id="raceResultsStats" class="stats-container"><div class="loading">Loading scraped-results totals…</div></div>
+            </section>
 
-        <div class="scrape-section" id="raceResultsSection">
-            <h2>Scrape Race Results</h2>
+            <section class="admin-tile" id="resultsScrapeTile">
+                <h2>Run a Scrape</h2>
+                <p class="tile-sub">Collect results now by rolling window or calendar year.</p>
 
-            <div id="raceResultsStats" class="stats-container" style="margin-top: 16px;"><div class="loading">Loading scraped-results totals…</div></div>
-
-            <div class="scrape-mode-row">
-                <div class="scrape-source-select">
-                    <label for="resultsModeSelect">Collect by:</label>
-                    <select id="resultsModeSelect" onchange="onResultsModeChange()">
-                        <option value="lookback">Rolling window</option>
-                        <option value="year">Calendar year</option>
-                    </select>
+                <div class="scrape-mode-row">
+                    <div class="scrape-source-select">
+                        <label for="resultsModeSelect">Collect by:</label>
+                        <select id="resultsModeSelect" onchange="onResultsModeChange()">
+                            <option value="lookback">Rolling window</option>
+                            <option value="year">Calendar year</option>
+                        </select>
+                    </div>
+                    <div class="scrape-source-select" id="resultsLookbackWrap">
+                        <label for="resultsLookbackSelect">How far back:</label>
+                        <select id="resultsLookbackSelect" onchange="localStorage.setItem('raceResultsLookbackDays', this.value)">
+                            <option value="7">Last 7 days</option>
+                            <option value="14">Last 14 days</option>
+                            <option value="30">Last 1 month</option>
+                            <option value="60" selected>Last 2 months</option>
+                            <option value="90">Last 3 months</option>
+                            <option value="180">Last 6 months</option>
+                            <option value="365">Last 1 year</option>
+                        </select>
+                    </div>
+                    <div class="scrape-source-select" id="resultsYearWrap" style="display: none;">
+                        <label for="resultsYearSelect">Year:</label>
+                        <select id="resultsYearSelect" onchange="localStorage.setItem('raceResultsYear', this.value)"></select>
+                    </div>
+                    <div class="scrape-source-select">
+                        <label for="resultsSourceSelect">Select Source:</label>
+                        <select id="resultsSourceSelect">
+                            <option value="all">Both sources</option>
+                            <option value="regattanetwork">Regatta Network only</option>
+                            <option value="clubspot">ClubSpot only</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="scrape-source-select" id="resultsLookbackWrap">
-                    <label for="resultsLookbackSelect">How far back:</label>
-                    <select id="resultsLookbackSelect" onchange="localStorage.setItem('raceResultsLookbackDays', this.value)">
-                        <option value="7">Last 7 days</option>
-                        <option value="14">Last 14 days</option>
-                        <option value="30">Last 1 month</option>
-                        <option value="60" selected>Last 2 months</option>
-                        <option value="90">Last 3 months</option>
-                        <option value="180">Last 6 months</option>
-                        <option value="365">Last 1 year</option>
-                    </select>
-                </div>
-                <div class="scrape-source-select" id="resultsYearWrap" style="display: none;">
-                    <label for="resultsYearSelect">Year:</label>
-                    <select id="resultsYearSelect" onchange="localStorage.setItem('raceResultsYear', this.value)"></select>
-                </div>
-                <div class="scrape-source-select">
-                    <label for="resultsSourceSelect">Select Source:</label>
-                    <select id="resultsSourceSelect">
-                        <option value="all">Both sources</option>
-                        <option value="regattanetwork">Regatta Network only</option>
-                        <option value="clubspot">ClubSpot only</option>
-                    </select>
-                </div>
-            </div>
 
-            <div class="action-buttons">
-                <button class="action-button scrape" id="resultsScrapeButton" onclick="startResultsScrape()">Start Results Scrape</button>
-                <button class="action-button" onclick="loadRaceResultsStats(); loadResultsScrapeHistory();">Refresh Stats</button>
-                <button class="action-button danger" onclick="clearScrapedResults()">Clear Scraped Results</button>
-            </div>
+                <div class="action-buttons">
+                    <button class="action-button scrape" id="resultsScrapeButton" onclick="startResultsScrape()">Start Results Scrape</button>
+                    <button class="action-button" onclick="loadRaceResultsStats(); loadResultsScrapeHistory();">Refresh Stats</button>
+                    <button class="action-button danger" onclick="clearScrapedResults()">Clear Scraped Results</button>
+                </div>
 
-                        <div class="results-scheduler" id="resultsSchedulerSection">
-                <h3>Automated Weekly Results Scrape</h3>
-                <p class="scheduler-sub">
+                <div id="resultsScrapeHistory" class="scrape-history-panel">
+                    <div class="loading">Loading scrape history…</div>
+                </div>
+
+                <div class="scrape-status" id="resultsScrapeStatus"></div>
+                <div class="results-log" id="resultsScrapeLog"></div>
+            </section>
+
+            <section class="admin-tile results-scheduler" id="resultsSchedulerSection">
+                <h2>Weekly Scheduler</h2>
+                <p class="tile-sub">
                     Runs weekly and collects ClubSpot + Regatta Network results for the selected lookback period.
                 </p>
                 <div id="resultsSchedulerStatus" class="loading">Loading scheduler…</div>
@@ -1526,14 +1649,7 @@
                     <button type="button" class="action-button scrape" onclick="runResultsScheduleNow()">Run Now</button>
                     <button type="button" class="action-button" onclick="loadResultsSchedule()">Refresh Status</button>
                 </div>
-            </div>
-
-            <div id="resultsScrapeHistory" class="scrape-history-panel">
-                <div class="loading">Loading scrape history…</div>
-            </div>
-
-            <div class="scrape-status" id="resultsScrapeStatus"></div>
-            <div class="results-log" id="resultsScrapeLog"></div>
+            </section>
         </div>
         </div>
 
@@ -1578,12 +1694,14 @@
         <a href="SailScan.html">Photo Database</a>
         <a href="Regatta-pull.html">Scrape Regattas</a>
         <a href="Find-regatta.html">Find Regatta</a>
-        <a href="https://lovesailing-chatbot.onrender.com/chat">ChatBot</a>
+        <a href="Chatbot.html">ChatBot</a>
         <a href="Shop.html">Shop</a>
     </div>
 
     <script>
         function showAdminTab(name) {
+            document.body.classList.toggle('chat-tab-active', name === 'chat');
+
             const tab = ['dates', 'results', 'chat', 'photos'].includes(name) ? name : 'dates';
             document.getElementById('tab-dates').classList.toggle('active', tab === 'dates');
             document.getElementById('tab-results').classList.toggle('active', tab === 'results');
