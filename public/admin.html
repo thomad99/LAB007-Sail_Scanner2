@@ -1522,8 +1522,8 @@
 
         <div id="tab-chat" class="tab-panel">
             <div class="chatbot-panel">
-                <h2>Results ChatBot</h2>
-                <p class="chatbot-sub">Ask about scraped ClubSpot and Regatta Network result rows (sailors, classes, clubs, years).</p>
+                <h2>Love Sailing ChatBot</h2>
+                <p class="chatbot-sub">Ask about scraped ClubSpot and Regatta Network results — sailors, classes, clubs, and years.</p>
                 <div class="results-chat-log" id="resultsChatLog"></div>
                 <div class="results-chat-row">
                     <input id="resultsChatInput" type="text" placeholder="e.g. top 5 sailors in C420 in 2025, best club, sail 5462, who won Sunfish">
@@ -2634,15 +2634,14 @@
             const log = document.getElementById('resultsChatLog');
             if (!log || log.dataset.welcomed === '1') return;
             log.dataset.welcomed = '1';
-            let msg = 'Ask about scraped race results — sailors, classes, clubs, sail numbers, or years.';
+            let msg = 'Welcome to Love Sailing ChatBot. How can I help?';
             try {
                 const res = await fetch('/api/race-results/stats');
                 const data = await res.json();
                 if (data.success) {
                     const sailors = Number(data.total_sailors || 0).toLocaleString();
                     const regattas = Number(data.total_regattas || 0).toLocaleString();
-                    const rows = Number(data.total_records || 0).toLocaleString();
-                    msg = `I have knowledge of <strong>${sailors}</strong> sailors across <strong>${regattas}</strong> regattas (<strong>${rows}</strong> result rows). How can I help?`;
+                    msg = `Welcome to Love Sailing ChatBot — I have knowledge of <strong>${sailors}</strong> sailors and <strong>${regattas}</strong> regattas.`;
                 }
             } catch (_) { /* ignore */ }
             addResultsChat('bot', msg);
