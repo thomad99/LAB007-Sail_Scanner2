@@ -882,6 +882,11 @@
             max-width: 95%;
         }
 
+        .results-chat-msg.bot.pending {
+            opacity: 0.85;
+            font-style: italic;
+        }
+
         .chatbot-panel .results-chat-row input {
             background: rgba(255, 255, 255, 0.12);
             border: 2px solid rgba(168, 216, 240, 0.55);
@@ -1157,9 +1162,11 @@
         }
 
         .results-chat-msg.bot {
-            background: rgba(255, 255, 255, 0.08);
+            background: #a8d8f0;
+            color: #1a1a2e;
             align-self: flex-start;
-            width: 100%;
+            width: auto;
+            max-width: 95%;
         }
 
         .results-chat-row {
@@ -2622,6 +2629,7 @@
 
         function addResultsChat(role, html) {
             const log = document.getElementById('resultsChatLog');
+            if (!log) return null;
             const div = document.createElement('div');
             div.className = 'results-chat-msg ' + role;
             div.innerHTML = html;
@@ -2630,21 +2638,59 @@
             return div;
         }
 
+        async function fetchJsonWithTimeout(url, options = {}, timeoutMs = 25000) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                const res = await fetch(url, { ...options, signal: controller.signal });
+                const text = await res.text();
+                let data;
+                try {
+                    data = text ? JSON.parse(text) : {};
+                } catch (_) {
+                    throw new Error(res.ok ? 'Invalid JSON response' : `HTTP ${res.status}`);
+                }
+                if (!res.ok) {
+                    throw new Error((data && data.error) || `HTTP ${res.status}`);
+                }
+                return data;
+            } catch (err) {
+                if (err && err.name === 'AbortError') {
+                    const e = new Error('Request timed out');
+                    e.name = 'AbortError';
+                    throw e;
+                }
+                throw err;
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+
         async function ensureChatWelcome() {
             const log = document.getElementById('resultsChatLog');
             if (!log || log.dataset.welcomed === '1') return;
             log.dataset.welcomed = '1';
-            let msg = 'Welcome to Love Sailing ChatBot. How can I help?';
+
+            // Show immediately so a slow/hung stats API cannot leave the tab blank.
+            const bubble = addResultsChat(
+                'bot',
+                'Welcome to Love Sailing ChatBot — loading sailor and regatta counts…'
+            );
             try {
-                const res = await fetch('/api/race-results/stats');
-                const data = await res.json();
-                if (data.success) {
+                const data = await fetchJsonWithTimeout('/api/race-results/stats', {}, 12000);
+                if (data && data.success && bubble) {
                     const sailors = Number(data.total_sailors || 0).toLocaleString();
                     const regattas = Number(data.total_regattas || 0).toLocaleString();
-                    msg = `Welcome to Love Sailing ChatBot — I have knowledge of <strong>${sailors}</strong> sailors and <strong>${regattas}</strong> regattas.`;
+                    bubble.innerHTML =
+                        `Welcome to Love Sailing ChatBot — I have knowledge of <strong>${sailors}</strong> sailors and <strong>${regattas}</strong> regattas.`;
+                } else if (bubble) {
+                    bubble.innerHTML = 'Welcome to Love Sailing ChatBot. How can I help?';
                 }
-            } catch (_) { /* ignore */ }
-            addResultsChat('bot', msg);
+            } catch (_) {
+                if (bubble) {
+                    bubble.innerHTML = 'Welcome to Love Sailing ChatBot. How can I help?';
+                }
+            }
         }
 
         function formatReplyMarkdown(text) {
@@ -2810,18 +2856,23 @@
             addResultsChat('user', escapeHtml(text));
             const btn = document.getElementById('resultsChatSend');
             if (btn) btn.disabled = true;
+            const pending = addResultsChat('bot', 'Thinking…');
+            if (pending) pending.classList.add('pending');
             try {
-                const res = await fetch('/api/race-results/chat', {
+                const data = await fetchJsonWithTimeout('/api/race-results/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message: text })
-                });
-                const data = await res.json();
+                }, 45000);
                 if (!data.success) throw new Error(data.error || 'Chat failed');
 
                 let html = formatReplyMarkdown(data.reply || '');
                 const payload = data.data || null;
-                const bot = addResultsChat('bot', html);
+                if (pending) {
+                    pending.classList.remove('pending');
+                    pending.innerHTML = html;
+                }
+                const bot = pending || addResultsChat('bot', html);
 
                 if (payload && payload.resultType === 'sailor_card') {
                     const rendered = renderSailorCard(payload);
@@ -2851,7 +2902,15 @@
                     bot.appendChild(note);
                 }
             } catch (err) {
-                addResultsChat('bot', 'Error: ' + escapeHtml(err.message));
+                const msg = err.name === 'AbortError'
+                    ? 'Error: Chat timed out. Please try again.'
+                    : ('Error: ' + escapeHtml(err.message));
+                if (pending) {
+                    pending.classList.remove('pending');
+                    pending.innerHTML = msg;
+                } else {
+                    addResultsChat('bot', msg);
+                }
             } finally {
                 if (btn) btn.disabled = false;
             }
