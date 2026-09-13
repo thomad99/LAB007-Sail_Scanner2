@@ -32,6 +32,23 @@ const execAsync = promisify(exec);
 const { attachRaceResultsScraper, ensureScrapedResultsTable } = require('./race-results-scraper');
 const { attachRaceResultsScheduler } = require('./race-results-scheduler');
 const { PARSE_APP_ID, clubspotGet, clubspotConfigSummary } = require('./clubspot-http');
+const {
+    parseRnDateText,
+    datesFromEventName,
+    isoDateFromParse,
+    extractBoatTypesFromText,
+    mergeBoatTypes,
+    expandInclusiveDates,
+    resolveClubspotBoatTypes,
+    ensureRegattaExtraColumns,
+    eventDatesSqlExpr,
+    formatEventDatesForApi,
+    clubspotLocationText,
+    attachRegattaCoordinates,
+    fillMissingRegattaCoordinates,
+    haversineMilesSql
+} = require('./regatta-scrape-helpers');
+const { attachResultsWatcher, ensureResultsWatchersTable } = require('./results-watcher');
 
 // Load Puppeteer only if ENABLE_PUPPETEER environment variable is set to 'true'
 // Main server should NOT have this set - only the dedicated scraper service should
@@ -3291,6 +3308,7 @@ async function createRegattasTable() {
             CREATE INDEX IF NOT EXISTS idx_regattas_location ON regattas(location);
         `);
         await pool.query(`ALTER TABLE regattas ADD COLUMN IF NOT EXISTS registrant_count INTEGER;`);
+        await ensureRegattaExtraColumns(pool);
 
         console.log('Regattas table created or verified');
     } catch (err) {
@@ -4468,6 +4486,7 @@ app.post('/api/chat', async (req, res) => {
 
 attachRaceResultsScraper(app, { pool, openai, axios, cheerio });
 attachRaceResultsScheduler(app, { pool, axios, cheerio });
+attachResultsWatcher(app, { pool, axios, cheerio, emailTransporter, cron });
 
 // Static file serving (AFTER all API routes)
 app.use(express.static(path.join(__dirname, 'public')));
@@ -5274,6 +5293,7 @@ async function scrapeClubspot() {
         // Fetch from 30 days ago to catch events already in progress
         const fromDate = new Date();
         fromDate.setDate(fromDate.getDate() - 30);
+        await ensureRegattaExtraColumns(pool);
 
         const where = {
             archived: { $ne: true },
@@ -5282,8 +5302,8 @@ async function scrapeClubspot() {
 
         const baseParams = new URLSearchParams({
             order: 'startDate',
-            include: 'clubObject',
-            keys: 'name,startDate,endDate,city,state,country,clubObject,objectId',
+            include: 'clubObject,boatClassesArray',
+            keys: 'name,startDate,endDate,city,state,country,zipOrPostalCode,clubObject,objectId,boatClassesArray',
             where: JSON.stringify(where)
         });
 
@@ -5320,19 +5340,15 @@ async function scrapeClubspot() {
 
         console.log(`✅ Fetched ${allRegattas.length} regattas from Clubspot API`);
 
-        // Map Parse objects to DB schema
-        const extractedRegattas = allRegattas.map(r => {
-            const startDateIso = r.startDate && r.startDate.iso ? r.startDate.iso : r.startDate;
-            const regattaDate = startDateIso ? startDateIso.substring(0, 10) : null;
+        const extractedRegattas = [];
+        for (const r of allRegattas) {
+            const startDate = isoDateFromParse(r.startDate);
+            const endDate = isoDateFromParse(r.endDate);
+            const eventDates = expandInclusiveDates(startDate, endDate);
+            const regattaDate = eventDates[0] || startDate;
+            if (!regattaDate || !r.name || r.name.length <= 2) continue;
 
-            let location = null;
-            if (r.city && r.state) {
-                location = `${r.city}, ${r.state}`;
-            } else if (r.city) {
-                location = r.city;
-            } else if (r.clubObject && r.clubObject.name) {
-                location = r.clubObject.name;
-            }
+            const location = clubspotLocationText(r);
 
             let eventWebsiteUrl = null;
             if (r.clubObject && r.clubObject.subdomain && r.objectId) {
@@ -5342,16 +5358,20 @@ async function scrapeClubspot() {
                 }
             }
 
-            return {
+            const apiBoatTypes = await resolveClubspotBoatTypes(axios, r.boatClassesArray);
+            extractedRegattas.push({
                 regatta_date: regattaDate,
-                regatta_name: r.name || null,
+                event_dates: eventDates.length ? eventDates : [regattaDate],
+                boat_types: mergeBoatTypes(apiBoatTypes, extractBoatTypesFromText(r.name)),
+                regatta_name: r.name,
                 location,
                 event_website_url: eventWebsiteUrl,
                 source_id: r.objectId
-            };
-        }).filter(r => r.regatta_date && r.regatta_name && r.regatta_name.length > 2);
+            });
+        }
 
         console.log(`📋 Valid regattas after filtering: ${extractedRegattas.length}`);
+        await attachRegattaCoordinates(pool, extractedRegattas);
 
         // Batch upserts: count only true inserts via xmax = 0
         let added = 0;
@@ -5364,19 +5384,36 @@ async function scrapeClubspot() {
             const batch = extractedRegattas.slice(i, i + INSERT_BATCH);
             const values = [];
             const placeholders = batch.map((r, idx) => {
-                const base = idx * 8;
-                values.push(r.regatta_date, r.regatta_name, r.location, r.event_website_url, null, null, 'clubspot', r.source_id);
-                return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},$${base + 7},$${base + 8})`;
+                const base = idx * 12;
+                values.push(
+                    r.regatta_date,
+                    r.regatta_name,
+                    r.location,
+                    r.event_website_url,
+                    null,
+                    null,
+                    'clubspot',
+                    r.source_id,
+                    r.event_dates,
+                    r.boat_types && r.boat_types.length ? r.boat_types : null,
+                    r.latitude == null ? null : r.latitude,
+                    r.longitude == null ? null : r.longitude
+                );
+                return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},$${base + 7},$${base + 8},$${base + 9}::date[],$${base + 10}::text[],$${base + 11},$${base + 12})`;
             });
             try {
                 const result = await pool.query(`
-                    INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id)
+                    INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id, event_dates, boat_types, latitude, longitude)
                     VALUES ${placeholders.join(',')}
                     ON CONFLICT (regatta_name, regatta_date, source)
                     DO UPDATE SET
                         location = EXCLUDED.location,
                         event_website_url = EXCLUDED.event_website_url,
                         source_id = EXCLUDED.source_id,
+                        event_dates = EXCLUDED.event_dates,
+                        boat_types = COALESCE(EXCLUDED.boat_types, regattas.boat_types),
+                        latitude = COALESCE(EXCLUDED.latitude, regattas.latitude),
+                        longitude = COALESCE(EXCLUDED.longitude, regattas.longitude),
                         last_updated = CURRENT_TIMESTAMP
                     RETURNING (xmax = 0) AS was_inserted
                 `, values);
@@ -5419,32 +5456,73 @@ async function scrapeClubspot() {
 // Search regattas endpoint
 app.get('/api/search-regattas', async (req, res) => {
     try {
-        const { date, startDate, endDate, location, name, q, latitude, longitude, radius, locationName } = req.query;
+        const { date, startDate, endDate, location, name, q, latitude, longitude, radius, locationName, boatType } = req.query;
+        const datesExpr = eventDatesSqlExpr();
+        const lat = parseFloat(latitude);
+        const lng = parseFloat(longitude);
+        const nearbySearch = Number.isFinite(lat) && Number.isFinite(lng);
+        const radiusMiles = nearbySearch
+            ? Math.min(250, Math.max(1, parseFloat(radius) || 50))
+            : null;
 
-        let query = 'SELECT * FROM regattas WHERE 1=1';
+        if (nearbySearch) {
+            await ensureRegattaExtraColumns(pool);
+            try {
+                await fillMissingRegattaCoordinates(pool, { limit: 5 });
+            } catch (geoErr) {
+                console.warn('Lazy geocode during search failed:', geoErr.message);
+            }
+        }
+
         const params = [];
         let paramCount = 0;
+        let distanceSql = null;
+        if (nearbySearch) {
+            paramCount++;
+            const latParam = paramCount;
+            paramCount++;
+            const lngParam = paramCount;
+            params.push(lat, lng);
+            distanceSql = haversineMilesSql(latParam, lngParam);
+        }
 
-        // Support date range (startDate and endDate), single date, or blank = today and forward
+        let query = nearbySearch
+            ? `SELECT *, ${distanceSql} AS distance_miles FROM regattas WHERE 1=1`
+            : 'SELECT * FROM regattas WHERE 1=1';
+
+        // Match any stored event date, not just the first day
         if (startDate && endDate) {
             paramCount++;
-            query += ` AND regatta_date::date >= $${paramCount}`;
-            params.push(startDate);
+            const startParam = paramCount;
             paramCount++;
-            query += ` AND regatta_date::date <= $${paramCount}`;
-            params.push(endDate);
+            const endParam = paramCount;
+            query += ` AND EXISTS (
+                SELECT 1 FROM unnest(${datesExpr}) AS d
+                WHERE d >= $${startParam}::date AND d <= $${endParam}::date
+            )`;
+            params.push(startDate, endDate);
         } else if (date) {
             paramCount++;
-            query += ` AND regatta_date::date = $${paramCount}`;
+            query += ` AND $${paramCount}::date = ANY(${datesExpr})`;
             params.push(date);
         } else {
-            query += ' AND regatta_date::date >= CURRENT_DATE';
+            query += ` AND EXISTS (
+                SELECT 1 FROM unnest(${datesExpr}) AS d
+                WHERE d >= CURRENT_DATE
+            )`;
         }
 
         if (q) {
             paramCount++;
             const qParam = paramCount;
-            query += ` AND (location ILIKE $${qParam} OR regatta_name ILIKE $${qParam})`;
+            query += ` AND (
+                location ILIKE $${qParam}
+                OR regatta_name ILIKE $${qParam}
+                OR EXISTS (
+                    SELECT 1 FROM unnest(COALESCE(boat_types, ARRAY[]::text[])) AS t
+                    WHERE t ILIKE $${qParam}
+                )
+            )`;
             params.push(`%${q}%`);
         } else {
             if (name) {
@@ -5459,9 +5537,39 @@ app.get('/api/search-regattas', async (req, res) => {
             }
         }
 
-        // If locationName is provided (from reverse geocoding), try to match against regatta locations
-        if (locationName) {
-            const cityName = locationName.split(',')[0].trim();
+        if (boatType && String(boatType).trim()) {
+            paramCount++;
+            query += ` AND EXISTS (
+                SELECT 1 FROM unnest(COALESCE(boat_types, ARRAY[]::text[])) AS t
+                WHERE t ILIKE $${paramCount}
+            )`;
+            params.push(String(boatType).trim());
+        }
+
+        if (nearbySearch) {
+            paramCount++;
+            const radiusParam = paramCount;
+            params.push(radiusMiles);
+            let locationFallback = '';
+            if (locationName) {
+                const cityName = String(locationName).split(',')[0].trim();
+                paramCount++;
+                const cityParam = paramCount;
+                paramCount++;
+                const fullLocationParam = paramCount;
+                params.push(`%${cityName}%`);
+                params.push(`%${locationName}%`);
+                locationFallback = ` OR (
+                    (latitude IS NULL OR longitude IS NULL)
+                    AND (location ILIKE $${cityParam} OR location ILIKE $${fullLocationParam})
+                )`;
+            }
+            query += ` AND (
+                (latitude IS NOT NULL AND longitude IS NOT NULL AND ${distanceSql} <= $${radiusParam})
+                ${locationFallback}
+            )`;
+        } else if (locationName) {
+            const cityName = String(locationName).split(',')[0].trim();
             paramCount++;
             const cityParam = paramCount;
             paramCount++;
@@ -5471,20 +5579,43 @@ app.get('/api/search-regattas', async (req, res) => {
             params.push(`%${locationName}%`);
         }
 
-        // If a single date is provided, prioritize alphabetical order within that date
-        if (date && !startDate && !endDate) {
+        if (nearbySearch) {
+            query += ' ORDER BY distance_miles ASC NULLS LAST, (SELECT MIN(d) FROM unnest(' + datesExpr + ') d) ASC, regatta_name ASC';
+        } else if (date && !startDate && !endDate) {
             query += ' ORDER BY regatta_name ASC';
         } else {
-            query += ' ORDER BY regatta_date ASC, regatta_name ASC';
+            query += ' ORDER BY (SELECT MIN(d) FROM unnest(' + datesExpr + ') d) ASC, regatta_name ASC';
         }
 
         query += ' LIMIT 500';
 
         const result = await pool.query(query, params);
-        res.json({ success: true, regattas: result.rows, count: result.rows.length });
+        res.json({
+            success: true,
+            regattas: result.rows.map(formatEventDatesForApi),
+            count: result.rows.length
+        });
     } catch (error) {
         console.error('Error searching regattas:', error);
         res.status(500).json({ error: 'Failed to search regattas', details: error.message });
+    }
+});
+
+app.get('/api/boat-types', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT DISTINCT trim(t) AS boat_type
+            FROM regattas, unnest(COALESCE(boat_types, ARRAY[]::text[])) AS t
+            WHERE t IS NOT NULL AND trim(t) <> ''
+            ORDER BY boat_type ASC
+        `);
+        res.json({
+            success: true,
+            boatTypes: result.rows.map(row => row.boat_type)
+        });
+    } catch (error) {
+        console.error('Error fetching boat types:', error);
+        res.status(500).json({ error: 'Failed to fetch boat types', details: error.message });
     }
 });
 
@@ -5722,7 +5853,7 @@ app.get('/api/all-regattas', async (req, res) => {
         params.push(parseInt(offset));
 
         const result = await pool.query(`
-      SELECT regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source
+      SELECT regatta_date, event_dates, boat_types, regatta_name, location, event_website_url, registrants_url, registrant_count, source
       FROM regattas
       ${whereClause}
       ORDER BY ${orderByColumn} ${orderDirection}
@@ -5849,6 +5980,7 @@ async function initializeServer() {
         await createRegattasTable();
         await ensureRegattaNetworkDataTable();
         await ensureScrapedResultsTable(pool);
+        await ensureResultsWatchersTable(pool);
         await createTrackerTables();
         await createPiTables();
         await testS3Connection();

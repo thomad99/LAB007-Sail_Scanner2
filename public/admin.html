@@ -2290,7 +2290,7 @@
                 if (!s) return;
                 parts.push(
                     `${src}: ${s.eventsScraped || 0}/${s.eventsFound || 0} events, ` +
-                    `${s.rowsInserted || 0} new / ${s.rowsUpdated || 0} updated` +
+                    `${s.regattas || 0} regattas / ${s.sailors || 0} sailors` +
                     (s.errors ? `, ${s.errors} errors` : '')
                 );
             });
@@ -2641,8 +2641,8 @@
         function resultsSourceTile(displayName, stats, running) {
             const found = Number(stats.eventsFound || 0);
             const scraped = Number(stats.eventsScraped || 0);
-            const inserted = Number(stats.rowsInserted || 0);
-            const updated = Number(stats.rowsUpdated || 0);
+            const regattas = Number(stats.regattas || 0);
+            const sailors = Number(stats.sailors || 0);
             const errors = Number(stats.errors || 0);
             const pct = found > 0
                 ? Math.min(100, Math.round((scraped / found) * 100))
@@ -2657,12 +2657,12 @@
                         <span class="metric-value">${scraped}/${found}</span>
                     </div>
                     <div class="results-progress-metric">
-                        <span class="metric-label">New rows</span>
-                        <span class="metric-value ok">${inserted}</span>
+                        <span class="metric-label">Regattas</span>
+                        <span class="metric-value ok">${regattas}</span>
                     </div>
                     <div class="results-progress-metric">
-                        <span class="metric-label">Updated</span>
-                        <span class="metric-value warn">${updated}</span>
+                        <span class="metric-label">Sailors</span>
+                        <span class="metric-value warn">${sailors}</span>
                     </div>
                     <div class="results-progress-metric">
                         <span class="metric-label">Errors</span>
@@ -2699,7 +2699,7 @@
                 note = `<div class="results-progress-note">${escapeHtml(data.error)}</div>`;
             } else if (!running && data.finishedAt) {
                 kind = 'success';
-                note = '<div class="results-progress-note">Duplicates are updated, not re-inserted.</div>';
+                note = '<div class="results-progress-note">Counts are distinct regattas and skippers collected so far.</div>';
             } else if (opts.errorText) {
                 title = 'Error';
                 kind = 'error';

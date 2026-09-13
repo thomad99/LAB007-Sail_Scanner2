@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Results Alerts - Love Sailing</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #020053;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .logo {
+            margin-top: 20px;
+            max-width: 250px;
+            width: 40%;
+        }
+
+        .content {
+            margin-top: 30px;
+            text-align: center;
+            width: 90%;
+            max-width: 640px;
+        }
+
+        .card {
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 25px;
+            border-radius: 8px;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin: 14px 0 6px;
+        }
+
+        input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 10px;
+            font-size: 1em;
+            border-radius: 5px;
+            background-color: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        button,
+        .back-link {
+            padding: 10px 16px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+            color: white;
+            font-size: 1em;
+        }
+
+        button {
+            background-color: #aa3333;
+        }
+
+        button.secondary {
+            background-color: #0050a8;
+        }
+
+        .back-link {
+            background-color: rgba(255, 255, 255, 0.15);
+            display: inline-block;
+            margin-top: 24px;
+        }
+
+        .status {
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 6px;
+            display: none;
+        }
+
+        .status.active {
+            display: block;
+        }
+
+        .status.ok {
+            background: rgba(0, 170, 68, 0.2);
+        }
+
+        .status.err {
+            background: rgba(170, 51, 51, 0.25);
+        }
+
+        .watch-list {
+            margin-top: 20px;
+        }
+
+        .watch-item {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+
+        .watch-item a {
+            color: #9fd4ff;
+        }
+
+        .muted {
+            color: #cccccc;
+            font-size: 0.95em;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+
+<body>
+    <img src="/Images/LOVE SAILING LOGO.JPEG" alt="Love Sailing Logo" class="logo">
+    <div class="content">
+        <h1>Results alerts</h1>
+        <div class="card">
+            <p class="muted">Stop score-update emails for a race, or turn off every alert on this email. You can also use the stop link from an alert email.</p>
+            <div id="status" class="status"></div>
+
+            <label for="emailInput">Email</label>
+            <input type="email" id="emailInput" placeholder="you@email.com" autocomplete="email">
+
+            <label for="urlInput">Results page (optional)</label>
+            <input type="url" id="urlInput" placeholder="https://...">
+
+            <div class="actions">
+                <button type="button" class="secondary" id="loadButton">Show my alerts</button>
+                <button type="button" id="stopOneButton">Stop this page</button>
+                <button type="button" id="stopAllButton">Stop all alerts</button>
+            </div>
+
+            <div class="watch-list" id="watchList"></div>
+        </div>
+        <a class="back-link" href="Find-regatta.html">Back to Find Regatta</a>
+    </div>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const token = (params.get('token') || '').trim();
+        const statusEl = document.getElementById('status');
+        const emailInput = document.getElementById('emailInput');
+        const urlInput = document.getElementById('urlInput');
+        const watchList = document.getElementById('watchList');
+
+        function setStatus(message, ok) {
+            statusEl.textContent = message;
+            statusEl.className = 'status active ' + (ok ? 'ok' : 'err');
+        }
+
+        function storedEmail() {
+            try {
+                const state = JSON.parse(localStorage.getItem('ls-results-watches') || '{}');
+                return state.email || '';
+            } catch (_err) {
+                return '';
+            }
+        }
+
+        function forgetStoredWatches() {
+            try {
+                const state = JSON.parse(localStorage.getItem('ls-results-watches') || '{}');
+                state.items = {};
+                localStorage.setItem('ls-results-watches', JSON.stringify(state));
+            } catch (_err) { /* ignore */ }
+        }
+
+        function renderWatches(watches) {
+            if (!watches || !watches.length) {
+                watchList.innerHTML = '<p class="muted">No alerts found for that email.</p>';
+                return;
+            }
+            watchList.innerHTML = watches.map(watch => {
+                const name = watch.regatta_name || 'Regatta results';
+                const active = watch.active ? 'Active' : 'Stopped';
+                return `<div class="watch-item">
+                    <strong>${name}</strong> — ${active}<br>
+                    <a href="${watch.results_url}" target="_blank" rel="noopener">Open results</a>
+                </div>`;
+            }).join('');
+        }
+
+        async function stopByToken(stopToken) {
+            const response = await fetch('/api/results-watch/stop?token=' + encodeURIComponent(stopToken));
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || data.error) {
+                throw new Error(data.error || 'Could not stop this alert.');
+            }
+            return data;
+        }
+
+        async function loadWatches() {
+            const email = emailInput.value.trim();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                setStatus('Enter the email used for alerts.', false);
+                return;
+            }
+            const response = await fetch('/api/results-watch/status?email=' + encodeURIComponent(email));
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || data.error) {
+                setStatus(data.error || 'Could not load alerts.', false);
+                return;
+            }
+            renderWatches(data.watches || []);
+            setStatus('Loaded ' + (data.watches || []).length + ' alert(s).', true);
+        }
+
+        document.getElementById('loadButton').addEventListener('click', () => {
+            loadWatches().catch(err => setStatus(err.message, false));
+        });
+
+        document.getElementById('stopOneButton').addEventListener('click', async () => {
+            const email = emailInput.value.trim();
+            const resultsUrl = urlInput.value.trim();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !resultsUrl) {
+                setStatus('Enter both email and the results page URL to stop one alert.', false);
+                return;
+            }
+            try {
+                const response = await fetch('/api/results-watch/stop', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, resultsUrl })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || data.error) throw new Error(data.error || 'Could not stop alerts.');
+                setStatus(data.message || 'Alerts stopped for that page.', true);
+                await loadWatches();
+            } catch (err) {
+                setStatus(err.message, false);
+            }
+        });
+
+        document.getElementById('stopAllButton').addEventListener('click', async () => {
+            const email = emailInput.value.trim();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                setStatus('Enter the email used for alerts.', false);
+                return;
+            }
+            if (!confirm('Stop every results alert for ' + email + '?')) return;
+            try {
+                const response = await fetch('/api/results-watch/stop', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, stopAll: true })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || data.error) throw new Error(data.error || 'Could not stop alerts.');
+                forgetStoredWatches();
+                setStatus(data.message || 'All alerts stopped.', true);
+                await loadWatches();
+            } catch (err) {
+                setStatus(err.message, false);
+            }
+        });
+
+        emailInput.value = storedEmail();
+
+        if (token) {
+            stopByToken(token)
+                .then(data => {
+                    const name = data.watch && data.watch.regatta_name ? data.watch.regatta_name : 'this race';
+                    setStatus('Alerts stopped for ' + name + '.', true);
+                    if (data.watch && data.watch.email) emailInput.value = data.watch.email;
+                    if (data.watch && data.watch.results_url) urlInput.value = data.watch.results_url;
+                    if (emailInput.value) return loadWatches();
+                })
+                .catch(err => setStatus(err.message, false));
+        }
+    </script>
+</body>
+
+</html>

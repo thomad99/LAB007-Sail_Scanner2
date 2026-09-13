@@ -145,6 +145,14 @@
             color: white;
         }
 
+        .search-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
         .search-button {
             padding: 15px 30px;
             font-size: 1.2em;
@@ -154,7 +162,10 @@
             border-radius: 8px;
             cursor: pointer;
             transition: all 0.3s ease;
-            margin-top: 10px;
+        }
+
+        .search-button-clear {
+            background-color: rgba(255, 255, 255, 0.15);
         }
 
         .inline-button {
@@ -196,6 +207,10 @@
         .search-button:hover:not(:disabled) {
             background-color: #0088ff;
             transform: scale(1.05);
+        }
+
+        .search-button.search-button-clear:hover:not(:disabled) {
+            background-color: rgba(255, 255, 255, 0.25);
         }
 
         .search-button:disabled {
@@ -254,6 +269,22 @@
             margin-bottom: 10px;
         }
 
+        .regatta-item .boat-types {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+
+        .boat-chip {
+            background-color: rgba(0, 136, 255, 0.25);
+            border: 1px solid rgba(0, 136, 255, 0.5);
+            color: #cfe9ff;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.85em;
+        }
+
         .regatta-item .location {
             color: #cccccc;
             margin-bottom: 10px;
@@ -291,8 +322,73 @@
             transition: all 0.3s ease;
         }
 
-        .regatta-item .links button.link-btn:hover {
-            background-color: #0088ff;
+        .regatta-item .links button.link-btn.stop {
+            background-color: #aa3333;
+        }
+
+        .regatta-item .links button.link-btn.stop:hover {
+            background-color: #cc4444;
+        }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.55);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-card {
+            background: #020053;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 10px;
+            padding: 24px;
+            width: 100%;
+            max-width: 420px;
+            text-align: left;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        .modal-card h2 {
+            margin-top: 0;
+            color: #fff;
+        }
+
+        .modal-card p {
+            color: #d0d0d0;
+            line-height: 1.4;
+        }
+
+        .modal-card input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 10px;
+            font-size: 1em;
+            border-radius: 5px;
+            background-color: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            margin: 10px 0 16px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .manage-alerts-link {
+            display: inline-block;
+            margin-top: 16px;
+            color: #9fd4ff;
+            text-decoration: underline;
         }
 
         .no-results {
@@ -435,14 +531,38 @@
                 </div>
             </div>
 
-            <button type="submit" class="search-button" id="searchButton">Search Regattas</button>
+            <div class="form-group">
+                <label for="boatTypeInput">Boat type:</label>
+                <select id="boatTypeInput" name="boatType">
+                    <option value="">All boat types</option>
+                </select>
+            </div>
+
+            <div class="search-actions">
+                <button type="submit" class="search-button" id="searchButton">Search Regattas</button>
+                <button type="button" class="search-button search-button-clear" id="clearFiltersButton">Clear</button>
+            </div>
         </form>
+        <a class="manage-alerts-link" href="stop-alerts.html">Manage results alerts</a>
 
         <div class="results" id="results" style="display: none;">
             <div class="results-header" id="resultsHeader"></div>
             <div id="resultsContent"></div>
         </div>
 
+    </div>
+
+    <div class="modal-overlay" id="alertModal">
+        <div class="modal-card">
+            <h2>Results alerts</h2>
+            <p id="alertModalCopy">Enter your email and we will check this results page about every 15 minutes. If scores change, we will email you a link to the page.</p>
+            <label for="alertEmailInput">Email</label>
+            <input type="email" id="alertEmailInput" placeholder="you@email.com" autocomplete="email">
+            <div class="modal-actions">
+                <button type="button" class="inline-button secondary" id="alertCancelButton">Cancel</button>
+                <button type="button" class="inline-button" id="alertConfirmButton">Set alerts</button>
+            </div>
+        </div>
     </div>
 
     <!-- Hamburger menu icon -->
@@ -457,6 +577,8 @@
         <div class="close-menu" onclick="toggleMenu()">✕</div>
         <a href="index.html">Home</a>
         <a href="SailScan.html">Photo Database</a>
+        <a href="Find-regatta.html">Find Regatta</a>
+        <a href="stop-alerts.html">Results Alerts</a>
         <a href="Regatta-pull.html">Scrape Regattas</a>
         <a href="Chatbot.html">Chatbot</a>
         <a href="https://lovesailing-chatbot.onrender.com/chat">ChatBot (Legacy)</a>
@@ -469,8 +591,167 @@
         let userLatitude = null;
         let userLongitude = null;
         let detectedLocationName = null;
-        let hasSearched = false;
         let usingCurrentLocation = false;
+        let hasSearched = false;
+        const NEARBY_RADIUS_MILES = 50;
+        const WATCH_STORAGE_KEY = 'ls-results-watches';
+        let pendingWatch = null;
+
+        function loadWatchState() {
+            try {
+                return JSON.parse(localStorage.getItem(WATCH_STORAGE_KEY) || '{}') || {};
+            } catch (_err) {
+                return {};
+            }
+        }
+
+        function saveWatchState(state) {
+            localStorage.setItem(WATCH_STORAGE_KEY, JSON.stringify(state));
+        }
+
+        function storedWatchToken(url) {
+            const state = loadWatchState();
+            return state.items && state.items[url] ? state.items[url] : null;
+        }
+
+        function rememberWatch(email, url, token) {
+            const state = loadWatchState();
+            state.email = email;
+            state.items = state.items || {};
+            if (token) state.items[url] = token;
+            saveWatchState(state);
+        }
+
+        function forgetWatch(url) {
+            const state = loadWatchState();
+            if (state.items) delete state.items[url];
+            saveWatchState(state);
+        }
+
+        function ymdParts(value) {
+            const s = String(value || '').slice(0, 10);
+            const parts = s.split('-');
+            if (parts.length !== 3) return null;
+            return { year: parseInt(parts[0], 10), month: parseInt(parts[1], 10), day: parseInt(parts[2], 10) };
+        }
+
+        function formatOneDate(value, { weekday = true } = {}) {
+            const parts = ymdParts(value);
+            if (!parts) return String(value || '');
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            const weekdayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const dateObj = new Date(parts.year, parts.month - 1, parts.day);
+            const prefix = weekday ? `${weekdayNames[dateObj.getDay()]}, ` : '';
+            return `${prefix}${monthNames[parts.month - 1]} ${parts.day}, ${parts.year}`;
+        }
+
+        function formatEventDates(regatta) {
+            const dates = (Array.isArray(regatta.event_dates) && regatta.event_dates.length)
+                ? regatta.event_dates.map(d => String(d).slice(0, 10))
+                : [String(regatta.regatta_date || '').slice(0, 10)].filter(Boolean);
+            if (!dates.length) return '';
+            if (dates.length === 1) return formatOneDate(dates[0]);
+
+            const first = ymdParts(dates[0]);
+            const last = ymdParts(dates[dates.length - 1]);
+            if (!first || !last) return dates.map(d => formatOneDate(d, { weekday: false })).join(', ');
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            const weekdayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const start = new Date(first.year, first.month - 1, first.day);
+            const end = new Date(last.year, last.month - 1, last.day);
+            if (first.year === last.year && first.month === last.month) {
+                return `${weekdayNames[start.getDay()]}–${weekdayNames[end.getDay()]}, ${monthNames[first.month - 1]} ${first.day}–${last.day}, ${first.year}`;
+            }
+            if (first.year === last.year) {
+                return `${monthNames[first.month - 1]} ${first.day} – ${monthNames[last.month - 1]} ${last.day}, ${first.year}`;
+            }
+            return `${formatOneDate(dates[0], { weekday: false })} – ${formatOneDate(dates[dates.length - 1], { weekday: false })}`;
+        }
+
+        function escapeAttr(value) {
+            return String(value || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        }
+
+        function closeAlertModal() {
+            document.getElementById('alertModal').classList.remove('active');
+            pendingWatch = null;
+        }
+
+        function openAlertModal(url, name, button) {
+            pendingWatch = { url, name, button };
+            const state = loadWatchState();
+            document.getElementById('alertEmailInput').value = state.email || '';
+            document.getElementById('alertModalCopy').textContent =
+                `Enter your email and we will check the results page for ${name || 'this regatta'} about every 15 minutes. If scores change, we will email you a link.`;
+            document.getElementById('alertModal').classList.add('active');
+            document.getElementById('alertEmailInput').focus();
+        }
+
+        async function loadBoatTypes() {
+            try {
+                const response = await fetch('/api/boat-types');
+                const data = await response.json();
+                const select = document.getElementById('boatTypeInput');
+                const current = select.value;
+                (data.boatTypes || []).forEach(type => {
+                    const option = document.createElement('option');
+                    option.value = type;
+                    option.textContent = type;
+                    select.appendChild(option);
+                });
+                if (current) select.value = current;
+            } catch (err) {
+                console.error('Could not load boat types', err);
+            }
+        }
+
+        async function stopWatch(url, button) {
+            const token = storedWatchToken(url);
+            const state = loadWatchState();
+            const body = token
+                ? { token }
+                : { email: state.email, resultsUrl: url };
+            const response = await fetch('/api/results-watch/stop', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || data.error) {
+                throw new Error(data.error || 'Could not stop alerts.');
+            }
+            forgetWatch(url);
+            if (button) {
+                button.textContent = 'Alerts';
+                button.classList.remove('stop');
+                button.style.backgroundColor = '';
+                button.disabled = false;
+            }
+        }
+
+        async function startWatch(email, url, name, button) {
+            const response = await fetch('/api/results-watch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email,
+                    resultsUrl: url,
+                    regattaName: name || ''
+                })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || data.error) {
+                throw new Error(data.error || 'Could not set up alerts.');
+            }
+            rememberWatch(email, url, data.token);
+            if (button) {
+                button.textContent = 'Stop alerts';
+                button.classList.add('stop');
+                button.style.backgroundColor = '#aa3333';
+                button.disabled = false;
+            }
+            return data;
+        }
 
         function toggleMenu() {
             const mobileMenu = document.getElementById('mobileMenu');
@@ -625,50 +906,65 @@
 
         window.addEventListener('DOMContentLoaded', async () => {
             setupAutocomplete('locationInput', 'locationAutocomplete', 'location-or-name');
+            loadBoatTypes();
+
+            document.getElementById('alertCancelButton').addEventListener('click', closeAlertModal);
+            document.getElementById('alertModal').addEventListener('click', (e) => {
+                if (e.target.id === 'alertModal') closeAlertModal();
+            });
+            document.getElementById('alertConfirmButton').addEventListener('click', async () => {
+                if (!pendingWatch) return;
+                const email = document.getElementById('alertEmailInput').value.trim();
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                    alert('Please enter a valid email address.');
+                    return;
+                }
+                const { url, name, button } = pendingWatch;
+                const confirmBtn = document.getElementById('alertConfirmButton');
+                confirmBtn.disabled = true;
+                confirmBtn.textContent = 'Setting up…';
+                if (button) {
+                    button.disabled = true;
+                    button.textContent = 'Setting up…';
+                }
+                try {
+                    await startWatch(email, url, name, button);
+                    closeAlertModal();
+                    alert('Alerts are on. Check your email for a stop link.');
+                } catch (err) {
+                    if (button) {
+                        button.disabled = false;
+                        button.textContent = 'Alerts';
+                    }
+                    alert(err.message || 'Could not set up alerts.');
+                } finally {
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Set alerts';
+                }
+            });
+
+            document.getElementById('clearFiltersButton').addEventListener('click', clearSearchForm);
 
             document.getElementById('resultsContent').addEventListener('click', async (e) => {
                 const btn = e.target.closest('button.link-btn[data-results-url]');
                 if (!btn) return;
                 const url = btn.getAttribute('data-results-url');
+                const name = btn.getAttribute('data-regatta-name') || '';
                 if (!url) return;
-                const email = prompt('Enter your email to receive alerts when results are updated:');
-                if (email === null) return; // user cancelled
-                const trimmed = (email || '').trim();
-                if (!trimmed) {
-                    alert('Please enter a valid email address.');
-                    return;
-                }
-                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-                    alert('Please enter a valid email address.');
-                    return;
-                }
-                btn.disabled = true;
-                btn.textContent = 'Setting up…';
-                try {
-                    const r = await fetch('/api/webalert/monitor', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            websiteUrl: url,
-                            email: trimmed,
-                            duration: '420',
-                            pollingInterval: '10'
-                        })
-                    });
-                    const d = await r.json().catch(() => ({}));
-                    if (r.ok && !d.error) {
-                        btn.textContent = 'Alerts on';
-                        btn.style.backgroundColor = '#00aa44';
-                    } else {
-                        btn.textContent = 'Alerts';
+                if (storedWatchToken(url) || btn.classList.contains('stop')) {
+                    if (!confirm('Stop results alerts for this race?')) return;
+                    btn.disabled = true;
+                    btn.textContent = 'Stopping…';
+                    try {
+                        await stopWatch(url, btn);
+                    } catch (err) {
                         btn.disabled = false;
-                        alert(d.error || 'Could not set up alerts. Check that WEBALERT_API_URL is configured.');
+                        btn.textContent = 'Stop alerts';
+                        alert(err.message || 'Could not stop alerts.');
                     }
-                } catch (err) {
-                    btn.textContent = 'Alerts';
-                    btn.disabled = false;
-                    alert('Could not connect to Alerts service.');
+                    return;
                 }
+                openAlertModal(url, name, btn);
             });
         });
 
@@ -677,6 +973,34 @@
             locationStatus.className = message ? 'location-status active' : 'location-status';
             locationStatus.style.backgroundColor = '';
             locationStatus.textContent = message;
+        }
+
+        function resetResultsDisplay() {
+            const results = document.getElementById('results');
+            const resultsContent = document.getElementById('resultsContent');
+            const resultsHeader = document.getElementById('resultsHeader');
+            results.style.display = 'none';
+            resultsHeader.textContent = '';
+            resultsHeader.style.display = 'none';
+            resultsContent.innerHTML = '';
+            hasSearched = false;
+        }
+
+        function clearSearchForm() {
+            document.getElementById('locationInput').value = '';
+            document.getElementById('dateInput').value = '';
+            document.getElementById('boatTypeInput').value = '';
+            const dropdown = document.getElementById('locationAutocomplete');
+            if (dropdown) dropdown.classList.remove('active');
+            userLatitude = null;
+            userLongitude = null;
+            detectedLocationName = null;
+            usingCurrentLocation = false;
+            clearLocationStatus('');
+            resetResultsDisplay();
+            document.getElementById('searchButton').disabled = false;
+            document.getElementById('searchButton').textContent = 'Search Regattas';
+            document.getElementById('useLocationButton').disabled = false;
         }
 
         async function useCurrentLocation() {
@@ -698,8 +1022,8 @@
 
                     detectedLocationName = await getLocationName(userLatitude, userLongitude);
                     const statusText = detectedLocationName
-                        ? `Using current location: ${detectedLocationName} (within ~20 miles)`
-                        : 'Using current location (within ~20 miles)';
+                        ? `Using current location: ${detectedLocationName} (within ~${NEARBY_RADIUS_MILES} miles)`
+                        : `Using current location (within ~${NEARBY_RADIUS_MILES} miles)`;
                     clearLocationStatus(statusText);
                     useBtn.disabled = false;
                 },
@@ -738,6 +1062,7 @@
             try {
                 const date = document.getElementById('dateInput').value;
                 const q = document.getElementById('locationInput').value.trim();
+                const boatType = document.getElementById('boatTypeInput').value;
 
                 const params = new URLSearchParams();
                 if (typeof isAutoSearch !== 'undefined' && isAutoSearch && userLatitude && userLongitude) {
@@ -750,13 +1075,12 @@
                     params.set('date', date);
                 }
                 if (q) params.set('q', q);
-                if (usingCurrentLocation && detectedLocationName) {
-                    params.set('locationName', detectedLocationName);
-                    params.set('radius', '20');
-                } else if (userLatitude && userLongitude) {
+                if (boatType) params.set('boatType', boatType);
+                if (usingCurrentLocation && userLatitude && userLongitude) {
                     params.set('latitude', userLatitude);
                     params.set('longitude', userLongitude);
-                    params.set('radius', '20');
+                    params.set('radius', String(NEARBY_RADIUS_MILES));
+                    if (detectedLocationName) params.set('locationName', detectedLocationName);
                 }
                 const url = '/api/search-regattas?' + params.toString();
                 const response = await fetch(url);
@@ -769,29 +1093,23 @@
 
                     let html = '';
                     data.regattas.forEach(regatta => {
-                        // Parse date string directly to avoid timezone issues
-                        // regatta_date is in format YYYY-MM-DD
-                        let formattedDate = regatta.regatta_date;
-                        if (regatta.regatta_date) {
-                            const dateParts = regatta.regatta_date.split('-');
-                            if (dateParts.length === 3) {
-                                const year = dateParts[0];
-                                const month = parseInt(dateParts[1]);
-                                const day = parseInt(dateParts[2]);
-                                const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                                const weekdayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                                // Create date in local timezone to get weekday
-                                const dateObj = new Date(parseInt(year), month - 1, parseInt(day));
-                                const weekday = weekdayNames[dateObj.getDay()];
-                                formattedDate = `${weekday}, ${monthNames[month - 1]} ${day}, ${year}`;
-                            }
-                        }
+                        const formattedDate = formatEventDates(regatta);
+                        const boatTypes = Array.isArray(regatta.boat_types) ? regatta.boat_types : [];
 
                         html += `<div class="regatta-item">`;
                         html += `<h3>${regatta.regatta_name}</h3>`;
                         html += `<div class="date">📅 ${formattedDate}</div>`;
                         if (regatta.location) {
-                            html += `<div class="location">📍 ${regatta.location}</div>`;
+                            const miles = Number(regatta.distance_miles);
+                            const distanceLabel = Number.isFinite(miles)
+                                ? ` · ${Math.round(miles)} miles away`
+                                : '';
+                            html += `<div class="location">📍 ${regatta.location}${distanceLabel}</div>`;
+                        } else if (Number.isFinite(Number(regatta.distance_miles))) {
+                            html += `<div class="location">📍 ${Math.round(Number(regatta.distance_miles))} miles away</div>`;
+                        }
+                        if (boatTypes.length) {
+                            html += `<div class="boat-types">${boatTypes.map(t => `<span class="boat-chip">${t}</span>`).join('')}</div>`;
                         }
                         if (typeof regatta.registrant_count === 'number') {
                             html += `<div class="location">👥 Entrants: ${regatta.registrant_count}</div>`;
@@ -801,15 +1119,20 @@
                         const rnId = (regatta.source === 'regattanetwork' && rnUrl)
                             ? (/\/event\/(\d+)/.exec(rnUrl)?.[1])
                             : null;
+                        let resultsUrl = null;
                         if (rnId) {
                             const base = `https://www.regattanetwork.com/event/${rnId}`;
-                            const resultsUrl = base + '#_newsroom';
+                            resultsUrl = base + '#_newsroom';
                             html += `<a href="${base}" target="_blank" rel="noopener">Event</a>`;
                             html += `<a href="${base}#_registration" target="_blank" rel="noopener">Entrants</a>`;
                             html += `<a href="${resultsUrl}" target="_blank" rel="noopener">Results</a>`;
-                            html += `<button type="button" class="link-btn" data-results-url="${resultsUrl.replace(/"/g, '&quot;')}">Alerts</button>`;
                         } else {
                             const altUrl = regatta.event_website_url || regatta.registrants_url;
+                            if (regatta.source === 'clubspot' && regatta.event_website_url) {
+                                resultsUrl = regatta.event_website_url.replace(/\/?$/, '') + '/results';
+                            } else {
+                                resultsUrl = altUrl;
+                            }
                             if (regatta.event_website_url) {
                                 html += `<a href="${regatta.event_website_url}" target="_blank" rel="noopener">Event</a>`;
                             }
@@ -820,9 +1143,15 @@
                                     : 'View Registrants');
                                 html += `<a href="${regatta.registrants_url}" target="_blank" rel="noopener">${registrantLabel}</a>`;
                             }
-                            if (altUrl) {
-                                html += `<button type="button" class="link-btn" data-results-url="${altUrl.replace(/"/g, '&quot;')}">Alerts</button>`;
+                            if (resultsUrl) {
+                                html += `<a href="${resultsUrl}" target="_blank" rel="noopener">Results</a>`;
                             }
+                        }
+                        if (resultsUrl) {
+                            const watching = Boolean(storedWatchToken(resultsUrl));
+                            const btnClass = watching ? 'link-btn stop' : 'link-btn';
+                            const btnLabel = watching ? 'Stop alerts' : 'Alerts';
+                            html += `<button type="button" class="${btnClass}" data-results-url="${escapeAttr(resultsUrl)}" data-regatta-name="${escapeAttr(regatta.regatta_name)}">${btnLabel}</button>`;
                         }
                         html += `</div>`;
                         html += `</div>`;

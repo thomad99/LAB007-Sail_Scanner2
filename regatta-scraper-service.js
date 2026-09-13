@@ -5,6 +5,19 @@ const cheerio = require('cheerio');
 const fs = require('fs');
 const path = require('path');
 const { PARSE_APP_ID, clubspotGet, clubspotConfigSummary } = require('./clubspot-http');
+const {
+    parseNamedDateRange,
+    parseRnDateText,
+    datesFromEventName,
+    isoDateFromParse,
+    extractBoatTypesFromText,
+    mergeBoatTypes,
+    expandInclusiveDates,
+    resolveClubspotBoatTypes,
+    ensureRegattaExtraColumns,
+    upsertRegatta,
+    clubspotLocationText
+} = require('./regatta-scrape-helpers');
 
 // Note: Playwright/Puppeteer is no longer needed. Clubspot scraping uses the Parse Server REST API directly.
 
@@ -57,6 +70,7 @@ async function ensureRegattasTable() {
         await pool.query(`CREATE INDEX IF NOT EXISTS idx_regattas_name ON regattas(regatta_name);`);
         await pool.query(`CREATE INDEX IF NOT EXISTS idx_regattas_location ON regattas(location);`);
         await pool.query(`ALTER TABLE regattas ADD COLUMN IF NOT EXISTS registrant_count INTEGER;`);
+        await ensureRegattaExtraColumns(pool);
 
         await pool.query(`
             CREATE TABLE IF NOT EXISTS scrape_log (
@@ -78,50 +92,8 @@ function normalizeText(text) {
     return text ? text.replace(/\s+/g, ' ').trim() : '';
 }
 
-function parseHSSailingDate(dateText, fallbackYear, fallbackMonth) {
-    const months = {
-        jan: '01', feb: '02', mar: '03', apr: '04',
-        may: '05', jun: '06', jul: '07', aug: '08',
-        sep: '09', sept: '09', oct: '10', nov: '11', dec: '12'
-    };
-
-    const normalized = normalizeText(dateText);
-    if (!normalized) return null;
-
-    // e.g. "Jan 3-4", "Sep 6-25 Sat-Sat"
-    const monthDayMatch = normalized.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+(\d{1,2})/i);
-    if (monthDayMatch) {
-        const month = months[monthDayMatch[1].toLowerCase().slice(0, 4)];
-        const day = monthDayMatch[2].padStart(2, '0');
-        const year = fallbackYear || new Date().getFullYear();
-        if (month && day && year) {
-            return `${year}-${month}-${day}`;
-        }
-    }
-
-    // If month name missing, try using month from the current header row
-    if (fallbackMonth) {
-        const dayOnlyMatch = normalized.match(/(\d{1,2})/);
-        const month = months[fallbackMonth.toLowerCase().slice(0, 4)];
-        if (dayOnlyMatch && month) {
-            const day = dayOnlyMatch[1].padStart(2, '0');
-            const year = fallbackYear || new Date().getFullYear();
-            return `${year}-${month}-${day}`;
-        }
-    }
-
-    // Numeric formats like YYYY-MM-DD or MM/DD/YYYY
-    const isoMatch = normalized.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
-    if (isoMatch) {
-        return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
-    }
-
-    const slashMatch = normalized.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if (slashMatch) {
-        return `${slashMatch[3]}-${slashMatch[1].padStart(2, '0')}-${slashMatch[2].padStart(2, '0')}`;
-    }
-
-    return null;
+function parseHSSailingDates(dateText, fallbackYear, fallbackMonth) {
+    return parseNamedDateRange(dateText, fallbackYear, fallbackMonth);
 }
 
 function parseHighSchoolSailingPage(html, defaultYear) {
@@ -158,7 +130,8 @@ function parseHighSchoolSailingPage(html, defaultYear) {
         const venueText = normalizeText(cells.eq(3).text());
         const hostText = normalizeText(cells.eq(2).text());
 
-        const regattaDate = parseHSSailingDate(dateText, currentYear, currentMonthName);
+        const eventDates = parseHSSailingDates(dateText, currentYear, currentMonthName);
+        const regattaDate = eventDates[0] || null;
         if (!regattaDate || !regattaName || regattaName.length < 3) {
             return;
         }
@@ -172,9 +145,15 @@ function parseHighSchoolSailingPage(html, defaultYear) {
         // Prefer venue as location, fall back to host if venue is missing
         const location = venueText || hostText || null;
         const sourceIdBase = eventWebsiteUrl || regattaName;
+        const boatTypes = mergeBoatTypes(
+            extractBoatTypesFromText(regattaName, venueText, hostText),
+            ['High School']
+        );
 
         regattas.push({
             regatta_date: regattaDate,
+            event_dates: eventDates,
+            boat_types: boatTypes,
             regatta_name: regattaName,
             location,
             event_website_url: eventWebsiteUrl,
@@ -235,15 +214,16 @@ async function scrapeRegattaNetwork() {
                 const eventCell = $cells.eq(1);
                 const linksCell = $cells.eq(2);
 
-                let regattaDate = null;
-                if (dateText) {
+                let eventDates = parseRnDateText(dateText);
+                if (!eventDates.length && dateText) {
                     const dateMatch = dateText.match(/(\d{2})\/(\d{2})\/(\d{2})/);
                     if (dateMatch) {
                         const [, month, day, year] = dateMatch;
                         const fullYear = parseInt(year) < 50 ? 2000 + parseInt(year) : 1900 + parseInt(year);
-                        regattaDate = `${fullYear}-${month}-${day}`;
+                        eventDates = [`${fullYear}-${month}-${day}`];
                     }
                 }
+                const regattaDate = eventDates[0] || null;
 
                 const fullText = eventCell.text();
                 const lines = fullText.split('\n').map(l => l.trim()).filter(l => l);
@@ -314,10 +294,15 @@ async function scrapeRegattaNetwork() {
                 }
 
                 if (regattaDate && eventName && eventName.length > 3) {
+                    const yearFromStart = parseInt(regattaDate.slice(0, 4), 10);
+                    const nameDates = datesFromEventName(eventName, yearFromStart);
+                    const allDates = [...new Set([...eventDates, ...nameDates])].sort();
                     const sourceId = `${regattaDate}-${eventName.replace(/\s+/g, '-').toLowerCase().substring(0, 100)}`;
 
                     regattas.push({
                         regatta_date: regattaDate,
+                        event_dates: allDates.length ? allDates : [regattaDate],
+                        boat_types: extractBoatTypesFromText(eventName, location),
                         regatta_name: eventName,
                         location: location || null,
                         event_website_url: eventWebsiteUrl || null,
@@ -382,30 +367,11 @@ async function scrapeRegattaNetwork() {
                     }
                 }
 
-                const upsert = await pool.query(`
-                    INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                    ON CONFLICT (regatta_name, regatta_date, source) 
-                    DO UPDATE SET 
-                        location = EXCLUDED.location,
-                        event_website_url = EXCLUDED.event_website_url,
-                        registrants_url = EXCLUDED.registrants_url,
-                        registrant_count = COALESCE(EXCLUDED.registrant_count, regattas.registrant_count),
-                        source_id = EXCLUDED.source_id,
-                        last_updated = CURRENT_TIMESTAMP
-                    RETURNING (xmax = 0) AS was_inserted
-                `, [
-                    regatta.regatta_date,
-                    regatta.regatta_name,
-                    regatta.location,
-                    regatta.event_website_url,
-                    regatta.registrants_url,
-                    registrantCount,
-                    regatta.source,
-                    regatta.source_id
-                ]);
-                if (countTrueInserts(upsert)) added++;
-                else updated++;
+                await upsertRegatta(pool, {
+                    ...regatta,
+                    registrant_count: registrantCount
+                });
+                added++;
             } catch (err) {
                 if (!err.message.includes('duplicate')) {
                     console.error('Error inserting regatta:', err);
@@ -450,8 +416,8 @@ async function scrapeClubspot() {
 
         const baseParams = new URLSearchParams({
             order: 'startDate',
-            include: 'clubObject',
-            keys: 'name,startDate,endDate,city,state,country,zipOrPostalCode,clubObject,objectId',
+            include: 'clubObject,boatClassesArray',
+            keys: 'name,startDate,endDate,city,state,country,zipOrPostalCode,clubObject,objectId,boatClassesArray',
             where: JSON.stringify(where)
         });
 
@@ -488,76 +454,50 @@ async function scrapeClubspot() {
 
         console.log(`✅ Fetched ${allRegattas.length} regattas from Clubspot API`);
 
-        // Map Parse objects to our DB schema
-        const extractedRegattas = allRegattas.map(r => {
-            // Extract date from Parse Date object (ISO string → YYYY-MM-DD)
-            const startDateIso = r.startDate && r.startDate.iso ? r.startDate.iso : r.startDate;
-            const regattaDate = startDateIso ? startDateIso.substring(0, 10) : null;
+        const extractedRegattas = [];
+        for (const r of allRegattas) {
+            const startDate = isoDateFromParse(r.startDate);
+            const endDate = isoDateFromParse(r.endDate);
+            const eventDates = expandInclusiveDates(startDate, endDate);
+            const regattaDate = eventDates[0] || startDate;
+            if (!regattaDate || !r.name || r.name.length <= 2) continue;
 
-            // Build location string
-            let location = null;
-            if (r.city && r.state) {
-                location = `${r.city}, ${r.state}`;
-            } else if (r.city) {
-                location = r.city;
-            } else if (r.clubObject && r.clubObject.name) {
-                location = r.clubObject.name;
-            }
+            const location = clubspotLocationText(r);
 
-            // Build event URL using club subdomain + regatta objectId
             let eventWebsiteUrl = null;
             if (r.clubObject && r.clubObject.subdomain && r.objectId) {
-                // Subdomains may contain special chars; encode them safely
                 const subdomain = r.clubObject.subdomain.replace(/[^a-zA-Z0-9-]/g, '');
                 if (subdomain) {
                     eventWebsiteUrl = `https://${subdomain}.theclubspot.com/regatta/${r.objectId}`;
                 }
             }
-            // Fallback to main racing site
             if (!eventWebsiteUrl && r.objectId) {
                 eventWebsiteUrl = `https://racing.theclubspot.com/`;
             }
 
-            return {
+            const apiBoatTypes = await resolveClubspotBoatTypes(axios, r.boatClassesArray);
+            extractedRegattas.push({
                 regatta_date: regattaDate,
-                regatta_name: r.name || null,
+                event_dates: eventDates.length ? eventDates : [regattaDate],
+                boat_types: mergeBoatTypes(apiBoatTypes, extractBoatTypesFromText(r.name)),
+                regatta_name: r.name,
                 location,
                 event_website_url: eventWebsiteUrl,
                 source_id: r.objectId
-            };
-        }).filter(r => r.regatta_date && r.regatta_name && r.regatta_name.length > 2);
+            });
+        }
 
         console.log(`📋 Valid regattas after filtering: ${extractedRegattas.length}`);
 
-        // Insert into database (count only true inserts, not updates of existing rows)
         let added = 0;
         let updated = 0;
         for (const regatta of extractedRegattas) {
             try {
-                const upsert = await pool.query(`
-                    INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                    ON CONFLICT (regatta_name, regatta_date, source)
-                    DO UPDATE SET
-                        location = EXCLUDED.location,
-                        event_website_url = EXCLUDED.event_website_url,
-                        registrants_url = EXCLUDED.registrants_url,
-                        registrant_count = COALESCE(EXCLUDED.registrant_count, regattas.registrant_count),
-                        source_id = EXCLUDED.source_id,
-                        last_updated = CURRENT_TIMESTAMP
-                    RETURNING (xmax = 0) AS was_inserted
-                `, [
-                    regatta.regatta_date,
-                    regatta.regatta_name,
-                    regatta.location,
-                    regatta.event_website_url,
-                    null,
-                    null,
-                    'clubspot',
-                    regatta.source_id
-                ]);
-                if (countTrueInserts(upsert)) added++;
-                else updated++;
+                await upsertRegatta(pool, {
+                    ...regatta,
+                    source: 'clubspot'
+                });
+                added++;
             } catch (err) {
                 if (!err.message.includes('duplicate')) {
                     console.error('Error inserting regatta:', err.message);
@@ -649,30 +589,12 @@ async function scrapeHighSchoolSailing() {
         for (const regatta of regattas) {
             try {
                 const sourceId = regatta.source_id || `${regatta.regatta_date}-${regatta.regatta_name.replace(/\s+/g, '-').toLowerCase().substring(0, 120)}`;
-                const upsert = await pool.query(`
-                    INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                    ON CONFLICT (regatta_name, regatta_date, source) 
-                    DO UPDATE SET 
-                        location = EXCLUDED.location,
-                        event_website_url = EXCLUDED.event_website_url,
-                        registrants_url = EXCLUDED.registrants_url,
-                        registrant_count = COALESCE(EXCLUDED.registrant_count, regattas.registrant_count),
-                        source_id = EXCLUDED.source_id,
-                        last_updated = CURRENT_TIMESTAMP
-                    RETURNING (xmax = 0) AS was_inserted
-                `, [
-                    regatta.regatta_date,
-                    regatta.regatta_name,
-                    regatta.location,
-                    regatta.event_website_url,
-                    regatta.registrants_url || null,
-                    null,
-                    'hssailing',
-                    sourceId
-                ]);
-                if (countTrueInserts(upsert)) added++;
-                else updated++;
+                await upsertRegatta(pool, {
+                    ...regatta,
+                    source: 'hssailing',
+                    source_id: sourceId
+                });
+                added++;
             } catch (err) {
                 if (!err.message.includes('duplicate')) {
                     console.error('Error inserting High School Sailing regatta:', err);

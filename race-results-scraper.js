@@ -41,11 +41,45 @@ const job = {
 
 let schemaReadyPromise = null;
 
+function emptySourceStats() {
+    return {
+        eventsFound: 0,
+        eventsScraped: 0,
+        rowsInserted: 0,
+        rowsUpdated: 0,
+        errors: 0,
+        regattas: 0,
+        sailors: 0
+    };
+}
+
 function emptyStats() {
     return {
-        regattanetwork: { eventsFound: 0, eventsScraped: 0, rowsInserted: 0, rowsUpdated: 0, errors: 0 },
-        clubspot: { eventsFound: 0, eventsScraped: 0, rowsInserted: 0, rowsUpdated: 0, errors: 0 }
+        regattanetwork: emptySourceStats(),
+        clubspot: emptySourceStats()
     };
+}
+
+function emptyCollected() {
+    return {
+        regattanetwork: { regattas: new Set(), sailors: new Set() },
+        clubspot: { regattas: new Set(), sailors: new Set() }
+    };
+}
+
+let collected = emptyCollected();
+
+function noteCollected(sourceKey, rows) {
+    const bucket = collected[sourceKey];
+    if (!bucket) return;
+    for (const row of rows || []) {
+        const regattaName = normalizeSpace(row.regatta_name);
+        const skipper = normalizeSpace(row.skipper);
+        if (regattaName) bucket.regattas.add(regattaName.toLowerCase());
+        if (skipper) bucket.sailors.add(skipper.toLowerCase());
+    }
+    job.stats[sourceKey].regattas = bucket.regattas.size;
+    job.stats[sourceKey].sailors = bucket.sailors.size;
 }
 
 function normalizeSpace(s) {
@@ -842,10 +876,11 @@ async function scrapeRegattaNetwork(axios, cheerio, pool, window) {
             job.stats.regattanetwork.eventsScraped += 1;
             job.stats.regattanetwork.rowsInserted += n.inserted;
             job.stats.regattanetwork.rowsUpdated += n.updated;
+            noteCollected('regattanetwork', rows);
             if (!rows.length) {
                 logLine(`RN ${event.source_event_id}: ${event.regatta_name} → no standing rows parsed`);
             } else {
-                logLine(`RN ${event.source_event_id}: ${event.regatta_name} → ${n.inserted} new, ${n.updated} updated (${rows.length} parsed)`);
+                logLine(`RN ${event.source_event_id}: ${event.regatta_name} → ${job.stats.regattanetwork.regattas} regattas, ${job.stats.regattanetwork.sailors} sailors (${rows.length} parsed)`);
             }
         } catch (err) {
             job.stats.regattanetwork.errors += 1;
@@ -978,7 +1013,8 @@ async function scrapeClubspot(axios, pool, window) {
             job.stats.clubspot.eventsScraped += 1;
             job.stats.clubspot.rowsInserted += n.inserted;
             job.stats.clubspot.rowsUpdated += n.updated;
-            logLine(`CS ${event.source_event_id}: ${event.regatta_name} → ${n.inserted} new, ${n.updated} updated`);
+            noteCollected('clubspot', eventRows);
+            logLine(`CS ${event.source_event_id}: ${event.regatta_name} → ${job.stats.clubspot.regattas} regattas, ${job.stats.clubspot.sailors} sailors`);
         } catch (err) {
             job.stats.clubspot.errors += 1;
             logLine(`CS ${event.source_event_id} error: ${err.message}`);
@@ -1261,6 +1297,7 @@ function startResultsScrapeJob({ axios, cheerio, pool, source = 'all', lookbackD
     job.trigger = trigger || 'manual';
     job.error = null;
     job.stats = emptyStats();
+    collected = emptyCollected();
     job.log = [];
     logLine(`Queued scrape trigger=${job.trigger} source=${source} ${window.label} (${window.fromDate} → ${window.toDate})`);
 
