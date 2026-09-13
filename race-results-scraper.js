@@ -8,6 +8,7 @@
 
 const { parseChatIntent } = require('./chat-intent');
 const { PARSE_APP_ID, clubspotGet, clubspotConfigSummary } = require('./clubspot-http');
+const { parseRnListingRows, withRnShowDivisions } = require('./regatta-scrape-helpers');
 
 const LOOKBACK_DAYS = 60;
 const LOOKBACK_MAX_DAYS = 365;
@@ -467,54 +468,17 @@ async function upsertRows(pool, rows) {
 
 function parseRnListing($, lookbackOrWindow) {
     const { fromDate, toDate } = normalizeListingWindow(lookbackOrWindow);
-    const events = [];
-    const seen = new Set();
-
-    $('tr').each((_, tr) => {
-        const $tr = $(tr);
-        const $cells = $tr.children('td');
-        if ($cells.length < 3) return;
-
-        const dateStr = parseRnDate(cellText($, $cells.eq(0)));
-        if (!dateStr || dateStr < fromDate || dateStr > toDate) return;
-
-        const resultsHref = $cells.eq(2).find('a[href*="applet_regatta_results.php"]').attr('href')
-            || $cells.eq(2).find('a[href*="regatta_id="]').attr('href');
-        if (!resultsHref) return;
-
-        const idMatch = resultsHref.match(/regatta_id=(\d+)/);
-        if (!idMatch) return;
-        const sourceEventId = idMatch[1];
-        if (seen.has(sourceEventId)) return;
-        seen.add(sourceEventId);
-
-        const $eventCell = $cells.eq(1);
-        const parts = ($eventCell.clone().find('a').remove().end().html() || '')
-            .split(/<br\s*\/?>/i)
-            .map(p => cheerioLoadText(p))
-            .filter(Boolean);
-        const name = parts[0] || cellText($, $eventCell).split('[')[0].trim();
-        const yachtClub = parts[1] || null;
-
-        const absUrl = resultsHref.startsWith('http')
-            ? resultsHref
-            : `https://www.regattanetwork.com${resultsHref.startsWith('/') ? '' : '/clubmgmt/'}${resultsHref.replace(/^(\.\/)?/, '')}`;
-        const resultsUrl = absUrl.includes('show_divisions=')
-            ? absUrl
-            : `${absUrl}${absUrl.includes('?') ? '&' : '?'}show_divisions=1`;
-
-        if (name && name.length > 2) {
-            events.push({
-                source_event_id: sourceEventId,
-                regatta_name: name.replace(/\[Event Website\]/i, '').trim(),
-                regatta_date: dateStr,
-                host_club: yachtClub || null,
-                results_url: resultsUrl.split('#')[0]
-            });
-        }
-    });
-
-    return events;
+    return parseRnListingRows($, {
+        fromDate,
+        toDate,
+        requireResults: true
+    }).map((row) => ({
+        source_event_id: row.source_event_id,
+        regatta_name: row.regatta_name,
+        regatta_date: row.regatta_date,
+        host_club: row.host_club || null,
+        results_url: withRnShowDivisions(row.results_url)
+    }));
 }
 
 function cheerioLoadText(fragment) {

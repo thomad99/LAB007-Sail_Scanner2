@@ -1967,16 +1967,21 @@
                 const data = await response.json();
 
                 if (data.success && data.regattas && data.regattas.length > 0) {
-                    // Get today's date (YYYY-MM-DD format, timezone-independent)
-                    const today = new Date();
-                    const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
-                    
+                    const now = new Date();
+                    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                    const eventDatesOf = (regatta) => {
+                        if (Array.isArray(regatta.event_dates) && regatta.event_dates.length) {
+                            return regatta.event_dates.map(d => String(d).slice(0, 10));
+                        }
+                        const one = String(regatta.regatta_date || '').slice(0, 10);
+                        return one ? [one] : [];
+                    };
+
                     // Filter out past dates and sort by date ascending (starting from today)
                     const futureRegattas = data.regattas
                         .filter(regatta => {
-                            if (!regatta.regatta_date) return false;
-                            // Compare date strings directly (YYYY-MM-DD format)
-                            return regatta.regatta_date >= todayStr;
+                            const dates = eventDatesOf(regatta);
+                            return dates.some(d => d >= todayStr);
                         })
                         .sort((a, b) => {
                             // Sort by date ascending (earliest first)

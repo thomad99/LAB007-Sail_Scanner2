@@ -176,18 +176,37 @@ function parseRnDateText(dateText) {
     const normalized = String(dateText || '').replace(/\s+/g, ' ').trim();
     if (!normalized) return [];
 
-    // MM/DD/YY, MM/DD-DD/YY, MM/DD-MM/DD/YY, MM/DD/YY-MM/DD/YY
+    // RN listings use MM/DD/YY, MM/DD-DD/YY, MM/DD-MM/DD/YY, MM/DD/YY-MM/DD/YY
     const range = normalized.match(
         /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?(?:\s*[-–]\s*(\d{1,2})(?:\/(\d{1,2}))?(?:\/(\d{2,4}))?)?$/
     );
     if (range) {
         const startMonth = parseInt(range[1], 10);
         const startDay = parseInt(range[2], 10);
-        const endDay = range[4] ? parseInt(range[4], 10) : startDay;
-        const endMonth = range[5] ? parseInt(range[5], 10) : startMonth;
-        const year = twoDigitYear(range[6] || range[3]);
+        let endMonth = startMonth;
+        let endDay = startDay;
+        let yearToken = range[3];
+
+        if (range[4]) {
+            if (range[6]) {
+                // MM/DD[/YY]-MM/DD/YY
+                endMonth = parseInt(range[4], 10);
+                endDay = parseInt(range[5], 10);
+                yearToken = range[6] || range[3];
+            } else if (range[5]) {
+                // RN common range: MM/DD-DD/YY (token after the day is the year)
+                endDay = parseInt(range[4], 10);
+                yearToken = range[5] || range[3];
+            } else {
+                endDay = parseInt(range[4], 10);
+            }
+        }
+
+        const year = twoDigitYear(yearToken);
         let endYear = year;
-        if (endMonth < startMonth) endYear = year + 1;
+        if (endMonth < startMonth || (endMonth === startMonth && endDay < startDay)) {
+            endYear = year + 1;
+        }
         const start = toYmd(year, startMonth, startDay);
         const end = toYmd(endYear, endMonth, endDay);
         return expandInclusiveDates(start, end);
@@ -195,6 +214,199 @@ function parseRnDateText(dateText) {
 
     const iso = parseYmd(normalized);
     return iso ? [iso] : [];
+}
+
+function rnCellText($, el) {
+    return $(el).text().replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function rnFragmentText(fragment) {
+    return String(fragment || '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function absoluteRnUrl(href) {
+    const raw = String(href || '').trim();
+    if (!raw || raw === '#' || /^javascript:/i.test(raw)) return null;
+    if (/^https?:\/\//i.test(raw)) return raw.split('#')[0];
+    const path = raw.startsWith('/')
+        ? raw
+        : `/clubmgmt/${raw.replace(/^(\.\/)?/, '')}`;
+    return `https://www.regattanetwork.com${path}`.split('#')[0];
+}
+
+function withRnShowDivisions(url) {
+    if (!url) return null;
+    if (url.includes('show_divisions=')) return url;
+    return `${url}${url.includes('?') ? '&' : '?'}show_divisions=1`;
+}
+
+/**
+ * Shared RN table-row parser for calendar.php and past-results listings.
+ * Calendar rows have Event Website / Registrants; results rows have View Results.
+ */
+function parseRnListingRows($, options = {}) {
+    const fromDate = options.fromDate || null;
+    const toDate = options.toDate || null;
+    const requireResults = options.requireResults === true;
+    const events = [];
+    const seen = new Set();
+
+    $('tr').each((_, tr) => {
+        const $tr = $(tr);
+        const $cells = $tr.children('td');
+        if ($cells.length < 3) return;
+
+        const eventDates = parseRnDateText(rnCellText($, $cells.eq(0)));
+        const regattaDate = eventDates[0] || null;
+        if (!regattaDate) return;
+        if (fromDate && regattaDate < fromDate) return;
+        if (toDate && regattaDate > toDate) return;
+
+        const $eventCell = $cells.eq(1);
+        const rowHtml = $tr.html() || '';
+        let sourceEventId = null;
+        const nameAnchor = $eventCell.find('a[name^="id"]').attr('name');
+        if (nameAnchor) sourceEventId = String(nameAnchor).replace(/^id/i, '');
+        if (!sourceEventId) {
+            const idMatch = rowHtml.match(/regatta_id=(\d+)/)
+                || rowHtml.match(/\/event\/(\d+)/)
+                || rowHtml.match(/name=["']id(\d+)["']/i);
+            if (idMatch) sourceEventId = idMatch[1];
+        }
+
+        const resultsHref = $cells.eq(2).find('a[href*="applet_regatta_results.php"]').attr('href')
+            || $tr.find('a[href*="applet_regatta_results.php"]').attr('href')
+            || $cells.eq(2).find('a[href*="regatta_id="]').attr('href');
+        const resultsUrl = resultsHref ? withRnShowDivisions(absoluteRnUrl(resultsHref)) : null;
+        if (requireResults) {
+            if (!resultsUrl || !sourceEventId) return;
+        }
+
+        const parts = ($eventCell.clone().find('a').remove().end().html() || '')
+            .split(/<br\s*\/?>/i)
+            .map(rnFragmentText)
+            .filter(Boolean);
+        let name = (parts[0] || rnCellText($, $eventCell).split('[')[0].trim())
+            .replace(/\[Event Website\]/i, '')
+            .trim();
+        if (!name || name.length < 3) return;
+
+        const state = String($tr.attr('data-state') || '').trim();
+        const locationLike = parts.filter((p, idx) => idx > 0 && /,\s*[A-Za-z]{2}$/.test(p));
+        let location = locationLike.length ? locationLike[locationLike.length - 1] : null;
+        let hostClub = parts[1] && parts[1] !== location ? parts[1] : null;
+        if (!location && hostClub && state && /^[A-Za-z]{2}$/.test(state) && !hostClub.endsWith(state)) {
+            location = `${hostClub}, ${state}`;
+        } else if (!location && hostClub) {
+            location = hostClub;
+        } else if (!location && state) {
+            location = state;
+        }
+
+        let eventWebsiteUrl = null;
+        let registrantsUrl = null;
+        $tr.find('a[href]').each((__, a) => {
+            const href = $(a).attr('href') || '';
+            const text = rnCellText($, a);
+            if (!eventWebsiteUrl && (text.includes('Event Website') || /\/event\/\d+/.test(href))) {
+                eventWebsiteUrl = absoluteRnUrl(href);
+            }
+            if (!registrantsUrl && (text.includes('Registrant') || href.includes('registrant'))) {
+                registrantsUrl = absoluteRnUrl(href);
+            }
+        });
+        if (!eventWebsiteUrl && sourceEventId) {
+            eventWebsiteUrl = `https://www.regattanetwork.com/event/${sourceEventId}`;
+        }
+
+        const dedupeKey = sourceEventId || `${regattaDate}|${name.toLowerCase()}`;
+        if (seen.has(dedupeKey)) return;
+        seen.add(dedupeKey);
+
+        const yearFromStart = parseInt(regattaDate.slice(0, 4), 10);
+        const allDates = uniqueSortedDates([...eventDates, ...datesFromEventName(name, yearFromStart)]);
+
+        events.push({
+            source_event_id: sourceEventId,
+            source_id: sourceEventId ? `rn-${sourceEventId}` : `${regattaDate}-${name.replace(/\s+/g, '-').toLowerCase().substring(0, 100)}`,
+            regatta_name: name,
+            regatta_date: regattaDate,
+            event_dates: allDates.length ? allDates : [regattaDate],
+            host_club: hostClub || null,
+            location: location || null,
+            event_website_url: eventWebsiteUrl || null,
+            registrants_url: registrantsUrl || null,
+            results_url: resultsUrl,
+            boat_types: extractBoatTypesFromText(name, location, hostClub)
+        });
+    });
+
+    return events;
+}
+
+function countTrueInserts(upsertResult) {
+    if (!upsertResult?.rows?.length) return 0;
+    return upsertResult.rows.filter((row) => row.was_inserted === true).length;
+}
+
+async function batchUpsertRegattas(pool, regattas) {
+    await ensureRegattaExtraColumns(pool);
+    const rows = (Array.isArray(regattas) ? regattas : [])
+        .map(normalizeRegattaForUpsert)
+        .filter((row) => row.regatta_date && row.regatta_name);
+    let added = 0;
+    let updated = 0;
+    const INSERT_BATCH = 50;
+    for (let i = 0; i < rows.length; i += INSERT_BATCH) {
+        const batch = rows.slice(i, i + INSERT_BATCH);
+        const values = [];
+        const placeholders = batch.map((r, idx) => {
+            const base = idx * 12;
+            values.push(
+                r.regatta_date,
+                r.regatta_name,
+                r.location || null,
+                r.event_website_url || null,
+                r.registrants_url || null,
+                r.registrant_count == null ? null : r.registrant_count,
+                r.source,
+                r.source_id || null,
+                r.event_dates,
+                r.boat_types && r.boat_types.length ? r.boat_types : null,
+                r.latitude == null ? null : r.latitude,
+                r.longitude == null ? null : r.longitude
+            );
+            return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},$${base + 7},$${base + 8},$${base + 9}::date[],$${base + 10}::text[],$${base + 11},$${base + 12})`;
+        });
+        const result = await pool.query(`
+            INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id, event_dates, boat_types, latitude, longitude)
+            VALUES ${placeholders.join(',')}
+            ON CONFLICT (regatta_name, regatta_date, source)
+            DO UPDATE SET
+                location = EXCLUDED.location,
+                event_website_url = EXCLUDED.event_website_url,
+                registrants_url = COALESCE(EXCLUDED.registrants_url, regattas.registrants_url),
+                registrant_count = COALESCE(EXCLUDED.registrant_count, regattas.registrant_count),
+                source_id = COALESCE(EXCLUDED.source_id, regattas.source_id),
+                event_dates = EXCLUDED.event_dates,
+                boat_types = COALESCE(EXCLUDED.boat_types, regattas.boat_types),
+                latitude = COALESCE(EXCLUDED.latitude, regattas.latitude),
+                longitude = COALESCE(EXCLUDED.longitude, regattas.longitude),
+                last_updated = CURRENT_TIMESTAMP
+            RETURNING (xmax = 0) AS was_inserted
+        `, values);
+        const inserted = countTrueInserts(result);
+        added += inserted;
+        updated += (result.rowCount || 0) - inserted;
+    }
+    return { added, updated, found: rows.length };
 }
 
 function monthNumber(token) {
@@ -663,6 +875,9 @@ module.exports = {
     PARSE_APP_ID,
     expandInclusiveDates,
     parseRnDateText,
+    parseRnListingRows,
+    absoluteRnUrl,
+    withRnShowDivisions,
     parseNamedDateRange,
     datesFromEventName,
     isoDateFromParse,
@@ -675,6 +890,8 @@ module.exports = {
     ensureRegattaExtraColumns,
     normalizeRegattaForUpsert,
     upsertRegatta,
+    batchUpsertRegattas,
+    countTrueInserts,
     formatEventDatesForApi,
     uniqueSortedDates,
     parseYmd,

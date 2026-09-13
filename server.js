@@ -33,8 +33,6 @@ const { attachRaceResultsScraper, ensureScrapedResultsTable } = require('./race-
 const { attachRaceResultsScheduler } = require('./race-results-scheduler');
 const { PARSE_APP_ID, clubspotGet, clubspotConfigSummary } = require('./clubspot-http');
 const {
-    parseRnDateText,
-    datesFromEventName,
     isoDateFromParse,
     extractBoatTypesFromText,
     mergeBoatTypes,
@@ -48,6 +46,10 @@ const {
     fillMissingRegattaCoordinates,
     haversineMilesSql
 } = require('./regatta-scrape-helpers');
+const {
+    scrapeRegattaNetworkCalendar,
+    scrapeHighSchoolSailingCalendar
+} = require('./regatta-calendar-scraper');
 const { attachResultsWatcher, ensureResultsWatchersTable } = require('./results-watcher');
 
 // Load Puppeteer only if ENABLE_PUPPETEER environment variable is set to 'true'
@@ -5068,7 +5070,7 @@ app.get('/api/regatta-scrape-status', async (req, res) => {
     }
 });
 
-// Regatta scraping endpoint - forwards to dedicated scraper service
+// Regatta scraping endpoint — RN/HS calendars run locally; Clubspot stays background.
 app.post('/api/scrape-regattas', async (req, res) => {
     const source = req.body && req.body.source ? req.body.source : 'all';
     console.log(`=== Regatta Scraping Request: source="${source}" ===`);
@@ -5085,34 +5087,49 @@ app.post('/api/scrape-regattas', async (req, res) => {
         return;
     }
 
-    // For other sources, forward to the external scraper service if configured
-    const scraperServiceUrl = process.env.SCRAPER_SERVICE_URL;
-    if (scraperServiceUrl) {
-        try {
-            console.log(`Forwarding to scraper service: ${scraperServiceUrl}`);
-            const response = await axios.post(`${scraperServiceUrl}/api/scrape-regattas`, req.body, {
-                timeout: 120000,
-                headers: { 'Content-Type': 'application/json' }
-            });
-            console.log('Scraper service response:', response.data);
-            return res.json(response.data);
-        } catch (error) {
-            console.error('Scraper service error:', error.message);
-            if (error.response) {
-                return res.status(error.response.status).json(error.response.data);
-            }
-            return res.status(503).json({
-                error: 'Scraper service unavailable',
-                details: error.message
-            });
-        }
-    }
+    try {
+        const results = {
+            regattanetwork: { found: 0, added: 0 },
+            clubspot: { found: 0, added: 0 },
+            hssailing: { found: 0, added: 0 }
+        };
+        let totalFound = 0;
+        let totalAdded = 0;
 
-    // No external service and not a locally-handled source
-    return res.status(503).json({
-        error: 'Scraper service not configured',
-        details: 'Set SCRAPER_SERVICE_URL to enable scraping for non-Clubspot sources.'
-    });
+        if (source === 'all' || source === 'regattanetwork') {
+            console.log('Scraping Regatta Network calendar...');
+            results.regattanetwork = await scrapeRegattaNetworkCalendar({ axios, cheerio, pool });
+            totalFound += results.regattanetwork.found || 0;
+            totalAdded += results.regattanetwork.added || 0;
+        }
+        if (source === 'all' || source === 'hssailing') {
+            console.log('Scraping High School Sailing calendar...');
+            results.hssailing = await scrapeHighSchoolSailingCalendar({ axios, cheerio, pool });
+            totalFound += results.hssailing.found || 0;
+            totalAdded += results.hssailing.added || 0;
+        }
+        if (source === 'all') {
+            scrapeClubspot().then(result => {
+                console.log('Background Clubspot scrape complete:', result);
+            }).catch(err => {
+                console.error('Background Clubspot scrape error:', err.message);
+            });
+            results.clubspot = { status: 'started' };
+        }
+
+        return res.json({
+            success: true,
+            totalFound,
+            totalAdded,
+            results
+        });
+    } catch (error) {
+        console.error('Calendar scrape error:', error.message);
+        return res.status(500).json({
+            error: 'Failed to scrape regattas',
+            details: error.message
+        });
+    }
 });
 
 /**
@@ -5124,158 +5141,9 @@ function countTrueInserts(upsertResult) {
     return upsertResult.rows.filter((row) => row.was_inserted === true).length;
 }
 
-// Scrape Regatta Network
+// Scrape Regatta Network calendar (upcoming + category tabs)
 async function scrapeRegattaNetwork() {
-    try {
-        const url = 'https://www.regattanetwork.com/html/calendar.php';
-        const response = await axios.get(url, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            },
-            timeout: 30000
-        });
-
-        const $ = cheerio.load(response.data);
-        const regattas = [];
-
-        // Find the table with regatta data - look for table rows with date, event, and links
-        $('table tr').each((index, element) => {
-            const $row = $(element);
-            const $cells = $row.find('td');
-
-            if ($cells.length >= 3) {
-                const dateText = $cells.eq(0).text().trim();
-                const eventCell = $cells.eq(1);
-                const linksCell = $cells.eq(2);
-
-                // Extract date (format: MM/DD/YY)
-                let regattaDate = null;
-                if (dateText) {
-                    const dateMatch = dateText.match(/(\d{2})\/(\d{2})\/(\d{2})/);
-                    if (dateMatch) {
-                        const [, month, day, year] = dateMatch;
-                        const fullYear = parseInt(year) < 50 ? 2000 + parseInt(year) : 1900 + parseInt(year);
-                        regattaDate = `${fullYear}-${month}-${day}`;
-                    }
-                }
-
-                // Extract event name (first line or text before location)
-                let eventName = eventCell.clone().children().remove().end().text().trim();
-                // If no text, try getting from links
-                if (!eventName) {
-                    eventName = eventCell.text().trim().split('\n')[0];
-                }
-
-                // Extract location (usually after event name, often in format "Club Name, City, ST")
-                let location = '';
-                const fullText = eventCell.text();
-                // Look for pattern: text ending with ", ST" or ", State"
-                const locationMatch = fullText.match(/([A-Z][^,]+(?:,\s*[A-Z][^,]+)*,\s*[A-Z]{2})/);
-                if (locationMatch) {
-                    location = locationMatch[1].trim();
-                } else {
-                    // Try to find location in the text after event name
-                    const lines = fullText.split('\n').map(l => l.trim()).filter(l => l);
-                    if (lines.length > 1) {
-                        location = lines[1];
-                    }
-                }
-
-                // Extract links from event cell
-                let eventWebsiteUrl = '';
-                eventCell.find('a').each((i, link) => {
-                    const href = $(link).attr('href');
-                    const text = $(link).text().trim();
-                    if (text.includes('Event Website') || (href && href.includes('event'))) {
-                        eventWebsiteUrl = href.startsWith('http') ? href : `https://www.regattanetwork.com${href}`;
-                        return false; // break
-                    }
-                });
-
-                // Extract registrants link from links cell
-                let registrantsUrl = '';
-                linksCell.find('a').each((i, link) => {
-                    const href = $(link).attr('href');
-                    const text = $(link).text().trim();
-                    if (text.includes('View Registrants') || text.includes('Registrants') || (href && href.includes('registrant'))) {
-                        registrantsUrl = href.startsWith('http') ? href : `https://www.regattanetwork.com${href}`;
-                        return false; // break
-                    }
-                });
-
-                // Clean up event name (remove location if included)
-                if (eventName && location && eventName.includes(location)) {
-                    eventName = eventName.replace(location, '').trim();
-                }
-
-                if (regattaDate && eventName && eventName.length > 3) {
-                    // Generate source_id for de-duplication
-                    const sourceId = `${regattaDate}-${eventName.replace(/\s+/g, '-').toLowerCase().substring(0, 100)}`;
-
-                    regattas.push({
-                        regatta_date: regattaDate,
-                        regatta_name: eventName,
-                        location: location || null,
-                        event_website_url: eventWebsiteUrl || null,
-                        registrants_url: registrantsUrl || null,
-                        source: 'regattanetwork',
-                        source_id: sourceId
-                    });
-                }
-            }
-        });
-
-        console.log(`Found ${regattas.length} regattas from Regatta Network`);
-
-        // Insert regattas with de-duplication (count only true inserts)
-        let added = 0;
-        let updated = 0;
-        for (const regatta of regattas) {
-            try {
-                const upsert = await pool.query(`
-          INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-          ON CONFLICT (regatta_name, regatta_date, source) 
-          DO UPDATE SET 
-            location = EXCLUDED.location,
-            event_website_url = EXCLUDED.event_website_url,
-            registrants_url = EXCLUDED.registrants_url,
-            registrant_count = COALESCE(EXCLUDED.registrant_count, regattas.registrant_count),
-            source_id = EXCLUDED.source_id,
-            last_updated = CURRENT_TIMESTAMP
-          RETURNING (xmax = 0) AS was_inserted
-        `, [
-                    regatta.regatta_date,
-                    regatta.regatta_name,
-                    regatta.location,
-                    regatta.event_website_url,
-                    regatta.registrants_url,
-                    null,
-                    regatta.source,
-                    regatta.source_id
-                ]);
-                if (countTrueInserts(upsert)) added++;
-                else updated++;
-            } catch (err) {
-                // Skip duplicates silently
-                if (!err.message.includes('duplicate')) {
-                    console.error('Error inserting regatta:', err);
-                }
-            }
-        }
-
-        // Log scrape
-        await pool.query(`
-      INSERT INTO scrape_log (source, regattas_found, regattas_added)
-      VALUES ('regattanetwork', $1, $2)
-    `, [regattas.length, added]);
-
-        console.log(`Regatta Network: ${regattas.length} found, ${added} newly added, ${updated} updated`);
-        return { found: regattas.length, added, updated };
-    } catch (error) {
-        console.error('Error scraping Regatta Network:', error);
-        throw error;
-    }
+    return scrapeRegattaNetworkCalendar({ axios, cheerio, pool });
 }
 
 // Scrape Clubspot via the Parse Server REST API (no headless browser needed)
@@ -5751,13 +5619,15 @@ app.get('/api/regatta-stats', async (req, res) => {
       GROUP BY source
     `);
 
-        // Get upcoming regattas count
-        const today = new Date().toISOString().split('T')[0];
+        const datesExpr = eventDatesSqlExpr();
         const upcomingResult = await pool.query(`
-      SELECT COUNT(*) as count 
-      FROM regattas 
-      WHERE regatta_date >= $1
-    `, [today]);
+      SELECT COUNT(*) as count
+      FROM regattas
+      WHERE EXISTS (
+        SELECT 1 FROM unnest(${datesExpr}) AS d
+        WHERE d >= CURRENT_DATE
+      )
+    `);
 
         res.json({
             success: true,
@@ -5824,8 +5694,19 @@ app.get('/api/all-regattas', async (req, res) => {
 
         if (dateFilter) {
             paramCount++;
-            whereClause += ` AND regatta_date::text ILIKE $${paramCount}`;
+            whereClause += ` AND (
+                regatta_date::text ILIKE $${paramCount}
+                OR EXISTS (
+                    SELECT 1 FROM unnest(${eventDatesSqlExpr()}) AS d
+                    WHERE d::text ILIKE $${paramCount}
+                )
+            )`;
             params.push(`%${dateFilter}%`);
+        } else {
+            whereClause += ` AND EXISTS (
+                SELECT 1 FROM unnest(${eventDatesSqlExpr()}) AS d
+                WHERE d >= CURRENT_DATE
+            )`;
         }
 
         if (nameFilter) {
@@ -5869,7 +5750,7 @@ app.get('/api/all-regattas', async (req, res) => {
 
         res.json({
             success: true,
-            regattas: result.rows,
+            regattas: result.rows.map(formatEventDatesForApi),
             count: result.rows.length,
             total: parseInt(countResult.rows[0].total)
         });
