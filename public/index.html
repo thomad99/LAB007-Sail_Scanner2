@@ -54,15 +54,27 @@
         .nav-item {
             text-align: center;
             text-decoration: none;
+            color: white;
         }
 
         .nav-item img {
             width: 200px;
+            height: auto;
+            display: block;
             transition: transform 0.3s ease;
         }
 
         .nav-item img:hover {
             transform: scale(1.1);
+        }
+
+        .nav-label {
+            display: block;
+            margin-top: 10px;
+            font-size: 1.05rem;
+            font-weight: bold;
+            letter-spacing: 0.4px;
+            color: white;
         }
 
         /* Icon card for pages without a custom image */
@@ -117,8 +129,11 @@
             gap: 0;
         }
         .tracker-overlay-title img {
-            width: 220px;
+            width: 180px;
             opacity: 0.92;
+        }
+        .tracker-overlay-title .nav-label {
+            margin-top: 6px;
         }
         .tracker-overlay-close {
             position: absolute;
@@ -336,22 +351,28 @@
 
     <div class="navigation">
         <a href="Chatbot.html" class="nav-item">
-            <img src="/Images/Chatbot-icon.jpg?v=2" alt="ChatBot">
+            <img src="/Images/icon-sailbot.png" alt="SailBot">
+            <span class="nav-label">SailBot</span>
         </a>
         <a href="SailScan.html" class="nav-item">
-            <img src="/Images/Photos-icon.jpg?v=2" alt="Photo Database">
+            <img src="/Images/icon-photos.png" alt="Photos">
+            <span class="nav-label">Photos</span>
         </a>
         <a href="LiveView.html" class="nav-item nav-item-liveview">
             <img src="/Images/Photos-icon.jpg?v=2" alt="Live View">
+            <span class="nav-label">Live View</span>
         </a>
         <a href="Find-regatta.html" class="nav-item">
-            <img src="/Images/regattasearch_button.png" alt="Find Regatta">
+            <img src="/Images/icon-regatta-search.png" alt="Regatta Search">
+            <span class="nav-label">Regatta Search</span>
         </a>
         <a class="nav-item" onclick="openTrackerMenu()" style="cursor:pointer;">
-            <img src="/Images/Tracker_button.png" alt="Tracker">
+            <img src="/Images/icon-tracker.png" alt="Tracker">
+            <span class="nav-label">Tracker</span>
         </a>
         <a href="Shop.html" class="nav-item">
-            <img src="/Images/Love%20Sailing%20Shop%20Shopping%20Basket%20Icon.jpg?v=3" alt="Love Sailing Shop">
+            <img src="/Images/icon-shopping.png" alt="Shopping">
+            <span class="nav-label">Shopping</span>
         </a>
     </div>
 
@@ -363,7 +384,8 @@
     <div class="tracker-overlay" id="trackerOverlay" onclick="closeTrackerMenu(event)">
         <span class="tracker-overlay-close" onclick="closeTrackerMenu()">✕</span>
         <div class="tracker-overlay-title">
-            <img src="/Images/Tracker_button.png" alt="Tracker">
+            <img src="/Images/icon-tracker.png" alt="Tracker">
+            <span class="nav-label">Tracker</span>
         </div>
         <div class="tracker-sub-menu">
             <a href="Tracker.html" class="nav-sub-btn">
