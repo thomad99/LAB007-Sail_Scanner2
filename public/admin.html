@@ -30,16 +30,22 @@
         }
 
         .logo {
-            margin-top: 20px;
-            max-width: 500px;
-            width: 80%;
+            margin-top: 8px;
+            margin-bottom: 6px;
+            max-width: 250px;
+            width: 40%;
         }
 
         .content {
-            margin-top: 30px;
+            margin-top: 12px;
             text-align: center;
             width: 90%;
             max-width: 1200px;
+        }
+
+        .content h1 {
+            margin: 8px 0 10px;
+            font-size: 1.55em;
         }
 
         .stats-container {
@@ -315,14 +321,14 @@
 
         .refresh-button {
             padding: 15px 30px;
-            font-size: 1.2em;
+            font-size: 1.1em;
             background-color: #0066cc;
             color: white;
             border: none;
             border-radius: 8px;
             cursor: pointer;
             transition: all 0.3s ease;
-            margin-top: 20px;
+            margin-top: 0;
         }
 
         .refresh-button:hover:not(:disabled) {
@@ -342,6 +348,22 @@
             justify-content: center;
             flex-wrap: wrap;
             margin-top: 20px;
+            align-items: stretch;
+        }
+
+        .action-buttons .action-button,
+        .action-buttons .refresh-button {
+            box-sizing: border-box;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 220px;
+            min-height: 52px;
+            padding: 14px 22px;
+            font-size: 1em;
+            line-height: 1.2;
+            margin: 0;
+            text-align: center;
         }
 
         .action-button {
@@ -738,6 +760,18 @@
             color: rgba(255, 255, 255, 0.5);
         }
 
+        .filter-group input[type="date"] {
+            color-scheme: dark;
+            min-height: 38px;
+            cursor: pointer;
+        }
+
+        .filter-group input[type="date"]::-webkit-calendar-picker-indicator {
+            cursor: pointer;
+            filter: invert(1);
+            opacity: 0.85;
+        }
+
         .filter-group select option {
             background-color: #020053;
             color: white;
@@ -897,12 +931,12 @@
             }
 
             .logo {
-                margin-top: 20px;
-                max-width: 80%;
+                margin-top: 8px;
+                max-width: 40%;
             }
 
             .content {
-                margin-top: 20px;
+                margin-top: 10px;
                 width: 95%;
             }
 
@@ -1125,7 +1159,7 @@
         }
 
         .event-modal-card {
-            width: min(920px, 100%);
+            width: min(960px, 100%);
             max-height: 86vh;
             overflow: auto;
             background: #fff;
@@ -1155,6 +1189,40 @@
             padding: 6px 10px;
             cursor: pointer;
             font-weight: 600;
+        }
+
+        .event-modal-toolbar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 10px;
+            margin: 0 0 14px;
+            padding: 12px;
+            background: #f4f7ff;
+            border-radius: 8px;
+        }
+
+        .event-modal-toolbar label {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 0.75em;
+            font-weight: 700;
+            color: #0066cc;
+        }
+
+        .event-modal-toolbar select {
+            padding: 7px 8px;
+            border: 1px solid #c9d6ee;
+            border-radius: 6px;
+            background: #fff;
+            color: #1a1a2e;
+            font-size: 0.9em;
+        }
+
+        @media (max-width: 640px) {
+            .event-modal-toolbar {
+                grid-template-columns: 1fr;
+            }
         }
 
         .sailor-results-card .detail-panel {
@@ -1428,49 +1496,70 @@
         .page-top-dashboard {
             width: 100%;
             text-align: left;
-            margin: 8px 0 0;
+            margin: 4px 0 8px;
         }
         .page-top-dashboard .stats-container {
-            margin-top: 16px;
+            margin-top: 10px;
         }
         body.chat-tab-active .page-top-dashboard,
         body.photos-tab-active .page-top-dashboard {
             display: none;
         }
 
+        .admin-tabs-wrap {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.06);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+        }
+
         .admin-tabs {
             display: flex;
             justify-content: center;
-            gap: 0;
-            margin: 24px auto 8px;
-            width: 100%;
-            max-width: 900px;
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            border-radius: 10px;
-            overflow: hidden;
-            background: rgba(255, 255, 255, 0.06);
+            gap: 6px;
+            margin: 0 auto;
+            width: min(900px, 100%);
+            padding: 8px 12px 0;
+            box-sizing: border-box;
         }
 
         .admin-tab {
             flex: 1;
-            padding: 12px 10px;
-            border: none;
-            background: transparent;
-            color: rgba(255, 255, 255, 0.7);
+            max-width: 220px;
+            padding: 11px 14px 12px;
+            border: 1px solid transparent;
+            border-bottom: none;
+            border-radius: 10px 10px 0 0;
+            background: rgba(255, 255, 255, 0.04);
+            color: #9eb6d4;
             font-size: 0.95em;
-            font-weight: bold;
+            font-weight: 700;
             cursor: pointer;
             letter-spacing: 0.2px;
+            position: relative;
+            top: 1px;
         }
 
         .admin-tab.active {
-            background: #0066cc;
-            color: white;
+            background: #0b1a6b;
+            color: #fff;
+            border-color: rgba(126, 207, 255, 0.45);
+            box-shadow: inset 0 2px 0 #3b9eff;
+        }
+
+        .admin-tab.active::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: -1px;
+            height: 3px;
+            background: #3b9eff;
         }
 
         .admin-tab:hover:not(.active) {
-            background: rgba(255, 255, 255, 0.08);
-            color: white;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
         }
 
         .tab-panel {
@@ -1494,10 +1583,14 @@
             margin-top: 0;
             padding: 0;
         }
-        body.chat-tab-active .admin-tabs {
+        body.chat-tab-active .admin-tabs-wrap {
             margin: 0;
-            border-radius: 0;
+        }
+        body.chat-tab-active .admin-tabs {
+            width: 100%;
+            max-width: none;
             justify-content: stretch;
+            padding: 0 8px;
         }
         body.chat-tab-active .admin-tab {
             flex: 1;
@@ -1537,8 +1630,15 @@
             body.chat-tab-active .results-chat-row button {
                 min-height: 44px;
             }
-            .results-tiles {
-                gap: 14px;
+            .admin-tabs {
+                gap: 4px;
+                padding: 8px 8px 0;
+                overflow-x: auto;
+            }
+            .admin-tab {
+                min-width: 120px;
+                font-size: 0.85em;
+                padding: 10px 8px 11px;
             }
             .admin-tile {
                 padding: 16px 12px 14px;
@@ -1552,6 +1652,15 @@
 <body>
     <img src="/Images/LOVE SAILING LOGO.JPEG" alt="Love Sailing Logo" class="logo">
 
+    <div class="admin-tabs-wrap">
+        <div class="admin-tabs" role="tablist" aria-label="Admin sections">
+            <button type="button" class="admin-tab active" id="tabBtnDates" onclick="showAdminTab('dates')">Regatta Dates</button>
+            <button type="button" class="admin-tab" id="tabBtnResults" onclick="showAdminTab('results')">Regatta Results</button>
+            <button type="button" class="admin-tab" id="tabBtnChat" onclick="showAdminTab('chat')">ChatBot</button>
+            <button type="button" class="admin-tab" id="tabBtnPhotos" onclick="showAdminTab('photos')">Photo Admin</button>
+        </div>
+    </div>
+
     <div class="content">
         <h1>Admin Dashboard</h1>
 
@@ -1561,17 +1670,10 @@
             <div id="raceResultsStats" class="stats-container"><div class="loading">Loading scraped-results totals…</div></div>
         </section>
 
-        <div class="admin-tabs" role="tablist">
-            <button type="button" class="admin-tab active" id="tabBtnDates" onclick="showAdminTab('dates')">Regatta Dates</button>
-            <button type="button" class="admin-tab" id="tabBtnResults" onclick="showAdminTab('results')">Regatta Results</button>
-            <button type="button" class="admin-tab" id="tabBtnChat" onclick="showAdminTab('chat')">ChatBot</button>
-            <button type="button" class="admin-tab" id="tabBtnPhotos" onclick="showAdminTab('photos')">Photo Admin</button>
-        </div>
-
         <div id="tab-dates" class="tab-panel active">
 
         <div class="action-buttons">
-            <button class="refresh-button" id="refreshButton" onclick="loadAll()">Refresh All</button>
+            <button class="action-button" id="refreshButton" onclick="loadAll()">Refresh All</button>
             <a href="Find-regatta.html" class="action-button">Search Regattas</a>
             <button class="action-button danger" id="clearButton" onclick="showClearConfirmation()">Clear All Regattas</button>
         </div>
@@ -1621,7 +1723,7 @@
                 <div class="filters-container">
                     <div class="filter-group">
                         <label for="dateFilter">Date:</label>
-                        <input type="text" id="dateFilter" placeholder="YYYY-MM-DD or YYYY">
+                        <input type="date" id="dateFilter">
                     </div>
                     <div class="filter-group">
                         <label for="nameFilter">Regatta Name:</label>
@@ -1813,11 +1915,11 @@
     <div class="mobile-menu" id="mobileMenu">
         <div class="close-menu" onclick="toggleMenu()">✕</div>
         <a href="index.html">Home</a>
-        <a href="SailScan.html">Photo Database</a>
-        <a href="Regatta-pull.html">Scrape Regattas</a>
-        <a href="Find-regatta.html">Find Regatta</a>
-        <a href="Chatbot.html">ChatBot</a>
-        <a href="Shop.html">Shop</a>
+        <a href="Chatbot.html">SailBot</a>
+        <a href="SailScan.html">Photos</a>
+        <a href="Find-regatta.html">Regatta Search</a>
+        <a href="Tracker.html">Tracker</a>
+        <a href="Shop.html">Shopping</a>
     </div>
 
     <script>
@@ -2180,10 +2282,15 @@
                         return one ? [one] : [];
                     };
 
-                    // Filter out past dates and sort by date ascending (starting from today)
+                    const selectedDate = currentFilters.dateFilter;
+                    // When a calendar date is chosen, show matches for that day.
+                    // Otherwise hide past events and list upcoming ones.
                     const futureRegattas = data.regattas
                         .filter(regatta => {
                             const dates = eventDatesOf(regatta);
+                            if (selectedDate) {
+                                return dates.some(d => d === selectedDate);
+                            }
                             return dates.some(d => d >= todayStr);
                         })
                         .sort((a, b) => {
@@ -2280,7 +2387,11 @@
                     // Update count display
                     const totalFuture = futureRegattas.length;
                     const totalPast = data.regattas.length - totalFuture;
-                    regattaCount.textContent = `Showing ${totalFuture} upcoming regattas (${totalPast} past regattas hidden)`;
+                    if (selectedDate) {
+                        regattaCount.textContent = `Showing ${totalFuture} regatta${totalFuture === 1 ? '' : 's'} on ${selectedDate}`;
+                    } else {
+                        regattaCount.textContent = `Showing ${totalFuture} upcoming regattas (${totalPast} past regattas hidden)`;
+                    }
                     regattaCount.style.display = 'block';
 
                     tableLoading.style.display = 'none';
@@ -2288,9 +2399,11 @@
                     
                     // If no future regattas after filtering, show message
                     if (futureRegattas.length === 0) {
-                        tableLoading.innerHTML = '<p style="text-align: center; color: #cccccc;">No upcoming regattas found. All regattas are in the past.</p>';
+                        tableLoading.innerHTML = selectedDate
+                            ? `<p style="text-align: center; color: #cccccc;">No regattas found on ${selectedDate}.</p>`
+                            : '<p style="text-align: center; color: #cccccc;">No upcoming regattas found. All regattas are in the past.</p>';
                         table.style.display = 'none';
-                        regattaCount.textContent = '0 upcoming regattas';
+                        regattaCount.textContent = selectedDate ? `0 regattas on ${selectedDate}` : '0 upcoming regattas';
                         regattaCount.style.display = 'block';
                     }
                 } else {
@@ -3341,28 +3454,110 @@
             return modal;
         }
 
+        function uniqueEventOptions(rows, key) {
+            const map = new Map();
+            (rows || []).forEach(r => {
+                const raw = String(r[key] || '').trim();
+                if (!raw) return;
+                const k = raw.toLowerCase();
+                if (!map.has(k)) map.set(k, raw);
+            });
+            return [...map.values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        }
+
+        function positionSortValue(pos) {
+            const n = parseInt(String(pos ?? '').replace(/[^\d]/g, ''), 10);
+            return Number.isFinite(n) ? n : 99999;
+        }
+
+        function eventResultRowHtml(r) {
+            return `<tr>
+                <td>${escapeHtml(String(r.position ?? '—'))}</td>
+                <td>${escapeHtml(r.skipper || '')}</td>
+                <td>${escapeHtml(r.yacht_club || '')}</td>
+                <td>${escapeHtml(r.category || '')}</td>
+                <td>${escapeHtml(r.sail_number || '')}</td>
+            </tr>`;
+        }
+
         function renderEventResultsHtml(payload) {
             const rows = (payload && payload.rows) || [];
             const title = (payload && payload.regattaName) || 'Regatta';
             const date = formatChatDateLocal(payload && payload.regattaDate);
             const loc = displayLoc(payload && payload.location);
-            let html = `<h3>${escapeHtml(title)}</h3><p class="event-modal-meta">${escapeHtml(date)} · ${escapeHtml(loc)} · ${rows.length} result${rows.length === 1 ? '' : 's'}</p>`;
-            html += '<table class="data"><thead><tr><th>Position</th><th>Sailor</th><th>Club</th><th>Class</th><th>Sail</th></tr></thead><tbody>';
-            if (!rows.length) {
-                html += '<tr><td colspan="5">No results found for this regatta.</td></tr>';
-            } else {
-                rows.forEach(r => {
-                    html += `<tr>
-                        <td>${escapeHtml(String(r.position ?? '—'))}</td>
-                        <td>${escapeHtml(r.skipper || '')}</td>
-                        <td>${escapeHtml(r.yacht_club || '')}</td>
-                        <td>${escapeHtml(r.category || '')}</td>
-                        <td>${escapeHtml(r.sail_number || '')}</td>
-                    </tr>`;
-                });
-            }
-            html += '</tbody></table>';
+            const classes = uniqueEventOptions(rows, 'category');
+            const clubs = uniqueEventOptions(rows, 'yacht_club');
+            let html = `<h3>${escapeHtml(title)}</h3><p class="event-modal-meta">${escapeHtml(date)} · ${escapeHtml(loc)} · <span class="js-event-count">${rows.length} result${rows.length === 1 ? '' : 's'}</span></p>`;
+            html += `<div class="event-modal-toolbar">
+                <label>Class
+                    <select class="js-event-class">
+                        <option value="">All classes</option>
+                        ${classes.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
+                    </select>
+                </label>
+                <label>Club
+                    <select class="js-event-club">
+                        <option value="">All clubs</option>
+                        ${clubs.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
+                    </select>
+                </label>
+                <label>Sort
+                    <select class="js-event-sort">
+                        <option value="position">Position</option>
+                        <option value="name-asc">Sailor A–Z</option>
+                        <option value="name-desc">Sailor Z–A</option>
+                    </select>
+                </label>
+            </div>`;
+            html += '<table class="data"><thead><tr><th>Position</th><th>Sailor</th><th>Club</th><th>Class</th><th>Sail</th></tr></thead><tbody class="js-event-tbody"></tbody></table>';
             return html;
+        }
+
+        function wireEventResultsView(body, payload) {
+            const rows = (payload && payload.rows) || [];
+            const classSel = body.querySelector('.js-event-class');
+            const clubSel = body.querySelector('.js-event-club');
+            const sortSel = body.querySelector('.js-event-sort');
+            const tbody = body.querySelector('.js-event-tbody');
+            const countEl = body.querySelector('.js-event-count');
+            if (!tbody) return;
+
+            const apply = () => {
+                const cls = (classSel && classSel.value || '').toLowerCase();
+                const club = (clubSel && clubSel.value || '').toLowerCase();
+                const sort = (sortSel && sortSel.value) || 'position';
+                let list = rows.filter(r => {
+                    if (cls && String(r.category || '').trim().toLowerCase() !== cls) return false;
+                    if (club && String(r.yacht_club || '').trim().toLowerCase() !== club) return false;
+                    return true;
+                });
+                list.sort((a, b) => {
+                    if (sort === 'name-asc' || sort === 'name-desc') {
+                        const cmp = String(a.skipper || '').localeCompare(String(b.skipper || ''), undefined, { sensitivity: 'base' });
+                        return sort === 'name-desc' ? -cmp : cmp;
+                    }
+                    const pos = positionSortValue(a.position) - positionSortValue(b.position);
+                    if (pos !== 0) return pos;
+                    return String(a.skipper || '').localeCompare(String(b.skipper || ''), undefined, { sensitivity: 'base' });
+                });
+                if (!list.length) {
+                    tbody.innerHTML = '<tr><td colspan="5">No results match these filters.</td></tr>';
+                } else {
+                    tbody.innerHTML = list.map(eventResultRowHtml).join('');
+                }
+                if (countEl) {
+                    if (list.length === rows.length) {
+                        countEl.textContent = `${rows.length} result${rows.length === 1 ? '' : 's'}`;
+                    } else {
+                        countEl.textContent = `showing ${list.length} of ${rows.length} results`;
+                    }
+                }
+            };
+
+            if (classSel) classSel.addEventListener('change', apply);
+            if (clubSel) clubSel.addEventListener('change', apply);
+            if (sortSel) sortSel.addEventListener('change', apply);
+            apply();
         }
 
         async function openRegattaEventCard(name, date) {
@@ -3376,7 +3571,9 @@
                 if (date) params.set('date', date);
                 const data = await fetchJsonWithTimeout('/api/race-results/event?' + params.toString(), {}, 20000);
                 if (!data.success) throw new Error(data.error || 'Failed to load event');
-                body.innerHTML = renderEventResultsHtml(data.data || {});
+                const payload = data.data || {};
+                body.innerHTML = renderEventResultsHtml(payload);
+                wireEventResultsView(body, payload);
             } catch (err) {
                 body.innerHTML = `<h3>${escapeHtml(name)}</h3><p class="event-modal-meta">${escapeHtml(err.message || 'Could not load event results.')}</p>`;
             }
@@ -3511,6 +3708,10 @@
                     });
                 }
             });
+            const dateFilterInput = document.getElementById('dateFilter');
+            if (dateFilterInput) {
+                dateFilterInput.addEventListener('change', applyFilters);
+            }
 
             const chatInput = document.getElementById('resultsChatInput');
             if (chatInput) {

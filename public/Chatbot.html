@@ -254,7 +254,7 @@
         }
 
         .event-modal-card {
-            width: min(920px, 100%);
+            width: min(960px, 100%);
             max-height: 86vh;
             overflow: auto;
             background: #fff;
@@ -284,6 +284,40 @@
             padding: 6px 10px;
             cursor: pointer;
             font-weight: 600;
+        }
+
+        .event-modal-toolbar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 10px;
+            margin: 0 0 14px;
+            padding: 12px;
+            background: #f4f7ff;
+            border-radius: 8px;
+        }
+
+        .event-modal-toolbar label {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 0.75em;
+            font-weight: 700;
+            color: #0066cc;
+        }
+
+        .event-modal-toolbar select {
+            padding: 7px 8px;
+            border: 1px solid #c9d6ee;
+            border-radius: 6px;
+            background: #fff;
+            color: #1a1a2e;
+            font-size: 0.9em;
+        }
+
+        @media (max-width: 640px) {
+            .event-modal-toolbar {
+                grid-template-columns: 1fr;
+            }
         }
 
         .results-card .section:last-child {
@@ -710,28 +744,103 @@
             return modal;
         }
 
+        function uniqueEventOptions(rows, key) {
+            const map = new Map();
+            (rows || []).forEach(r => {
+                const raw = String(r[key] || '').trim();
+                if (!raw) return;
+                const k = raw.toLowerCase();
+                if (!map.has(k)) map.set(k, raw);
+            });
+            return [...map.values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        }
+
+        function positionSortValue(pos) {
+            const n = parseInt(String(pos ?? '').replace(/[^\d]/g, ''), 10);
+            return Number.isFinite(n) ? n : 99999;
+        }
+
+        function eventResultRowHtml(r) {
+            return '<tr><td>' + escapeHtml(String(r.position ?? '—')) + '</td><td>' +
+                escapeHtml(r.skipper || '') + '</td><td>' +
+                escapeHtml(r.yacht_club || '') + '</td><td>' +
+                escapeHtml(r.category || '') + '</td><td>' +
+                escapeHtml(r.sail_number || '') + '</td></tr>';
+        }
+
         function renderEventResultsHtml(payload) {
             const rows = (payload && payload.rows) || [];
             const title = (payload && payload.regattaName) || 'Regatta';
             const date = formatChatDateLocal(payload && payload.regattaDate);
             const loc = displayLoc(payload && payload.location);
+            const classes = uniqueEventOptions(rows, 'category');
+            const clubs = uniqueEventOptions(rows, 'yacht_club');
             let html = '<h3>' + escapeHtml(title) + '</h3><p class="event-modal-meta">' +
-                escapeHtml(date) + ' · ' + escapeHtml(loc) + ' · ' + rows.length +
-                ' result' + (rows.length === 1 ? '' : 's') + '</p>';
-            html += '<table class="data"><thead><tr><th>Position</th><th>Sailor</th><th>Club</th><th>Class</th><th>Sail</th></tr></thead><tbody>';
-            if (!rows.length) {
-                html += '<tr><td colspan="5">No results found for this regatta.</td></tr>';
-            } else {
-                rows.forEach(r => {
-                    html += '<tr><td>' + escapeHtml(String(r.position ?? '—')) + '</td><td>' +
-                        escapeHtml(r.skipper || '') + '</td><td>' +
-                        escapeHtml(r.yacht_club || '') + '</td><td>' +
-                        escapeHtml(r.category || '') + '</td><td>' +
-                        escapeHtml(r.sail_number || '') + '</td></tr>';
-                });
-            }
-            html += '</tbody></table>';
+                escapeHtml(date) + ' · ' + escapeHtml(loc) +
+                ' · <span class="js-event-count">' + rows.length +
+                ' result' + (rows.length === 1 ? '' : 's') + '</span></p>';
+            html += '<div class="event-modal-toolbar"><label>Class<select class="js-event-class"><option value="">All classes</option>';
+            classes.forEach(c => {
+                html += '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>';
+            });
+            html += '</select></label><label>Club<select class="js-event-club"><option value="">All clubs</option>';
+            clubs.forEach(c => {
+                html += '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>';
+            });
+            html += '</select></label><label>Sort<select class="js-event-sort">' +
+                '<option value="position">Position</option>' +
+                '<option value="name-asc">Sailor A–Z</option>' +
+                '<option value="name-desc">Sailor Z–A</option>' +
+                '</select></label></div>';
+            html += '<table class="data"><thead><tr><th>Position</th><th>Sailor</th><th>Club</th><th>Class</th><th>Sail</th></tr></thead><tbody class="js-event-tbody"></tbody></table>';
             return html;
+        }
+
+        function wireEventResultsView(body, payload) {
+            const rows = (payload && payload.rows) || [];
+            const classSel = body.querySelector('.js-event-class');
+            const clubSel = body.querySelector('.js-event-club');
+            const sortSel = body.querySelector('.js-event-sort');
+            const tbody = body.querySelector('.js-event-tbody');
+            const countEl = body.querySelector('.js-event-count');
+            if (!tbody) return;
+
+            const apply = () => {
+                const cls = (classSel && classSel.value || '').toLowerCase();
+                const club = (clubSel && clubSel.value || '').toLowerCase();
+                const sort = (sortSel && sortSel.value) || 'position';
+                let list = rows.filter(r => {
+                    if (cls && String(r.category || '').trim().toLowerCase() !== cls) return false;
+                    if (club && String(r.yacht_club || '').trim().toLowerCase() !== club) return false;
+                    return true;
+                });
+                list.sort((a, b) => {
+                    if (sort === 'name-asc' || sort === 'name-desc') {
+                        const cmp = String(a.skipper || '').localeCompare(String(b.skipper || ''), undefined, { sensitivity: 'base' });
+                        return sort === 'name-desc' ? -cmp : cmp;
+                    }
+                    const pos = positionSortValue(a.position) - positionSortValue(b.position);
+                    if (pos !== 0) return pos;
+                    return String(a.skipper || '').localeCompare(String(b.skipper || ''), undefined, { sensitivity: 'base' });
+                });
+                if (!list.length) {
+                    tbody.innerHTML = '<tr><td colspan="5">No results match these filters.</td></tr>';
+                } else {
+                    tbody.innerHTML = list.map(eventResultRowHtml).join('');
+                }
+                if (countEl) {
+                    if (list.length === rows.length) {
+                        countEl.textContent = rows.length + ' result' + (rows.length === 1 ? '' : 's');
+                    } else {
+                        countEl.textContent = 'showing ' + list.length + ' of ' + rows.length + ' results';
+                    }
+                }
+            };
+
+            if (classSel) classSel.addEventListener('change', apply);
+            if (clubSel) clubSel.addEventListener('change', apply);
+            if (sortSel) sortSel.addEventListener('change', apply);
+            apply();
         }
 
         async function openRegattaEventCard(name, date) {
@@ -746,7 +855,9 @@
                 const res = await fetch('/api/race-results/event?' + params.toString());
                 const data = await res.json();
                 if (!data.success) throw new Error(data.error || 'Failed to load event');
-                body.innerHTML = renderEventResultsHtml(data.data || {});
+                const payload = data.data || {};
+                body.innerHTML = renderEventResultsHtml(payload);
+                wireEventResultsView(body, payload);
             } catch (err) {
                 body.innerHTML = '<h3>' + escapeHtml(name) + '</h3><p class="event-modal-meta">' +
                     escapeHtml(err.message || 'Could not load event results.') + '</p>';

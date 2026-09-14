@@ -315,13 +315,6 @@
             cursor: pointer;
         }
 
-        /* Live View: only show on mobile */
-        @media (min-width: 769px) {
-            .nav-item-liveview {
-                display: none !important;
-            }
-        }
-
         /* Responsive styles */
         @media (max-width: 768px) {
             .navigation {
@@ -357,9 +350,6 @@
         <a href="SailScan.html" class="nav-item">
             <img src="/Images/icon-photos.png" alt="Photos">
             <span class="nav-label">Photos</span>
-        </a>
-        <a href="LiveView.html" class="nav-item nav-item-liveview">
-            <img src="/Images/Photos-icon.jpg?v=2" alt="Live View">
         </a>
         <a href="Find-regatta.html" class="nav-item">
             <img src="/Images/icon-regatta-search.png" alt="Regatta Search">
@@ -413,23 +403,20 @@
     <div class="mobile-menu" id="mobileMenu">
         <div class="close-menu" onclick="toggleMenu()">✕</div>
 
-        <a href="index.html">Home</a>
-        <a href="SailScan.html">Photo Database</a>
-        <a href="LiveView.html">Live View</a>
-        <a href="Find-regatta.html">Find Regatta</a>
-        <a href="Chatbot.html">Chatbot</a>
+        <a href="Chatbot.html">SailBot</a>
+        <a href="SailScan.html">Photos</a>
+        <a href="Find-regatta.html">Regatta Search</a>
         <div class="mobile-group">
             <button class="mobile-tracker-toggle" id="trackerToggle" onclick="toggleTrackerSub()">
-                🗺️ Tracker <span class="arrow">▶</span>
+                Tracker <span class="arrow">▶</span>
             </button>
             <div class="mobile-tracker-sub" id="trackerSub">
-                <a href="Tracker.html">📍 Web Tracker</a>
-                <a href="Tracker-dashboard.html">🗺️ Track Dashboard</a>
-                <a href="PiControl.html">🥧 Pi Control</a>
+                <a href="Tracker.html">Web Tracker</a>
+                <a href="Tracker-dashboard.html">Track Dashboard</a>
+                <a href="PiControl.html">Pi Control</a>
             </div>
         </div>
-        <a href="Shop.html">Shop</a>
-        <a href="game.html">GAME</a>
+        <a href="Shop.html">Shopping</a>
     </div>
 
     <script>
