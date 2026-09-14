@@ -6,6 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Find Regatta - Love Sailing</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <meta property="og:title" content="Find Regatta - Love Sailing">
     <meta property="og:description" content="Search for regattas, events, and sailing results.">
     <meta property="og:type" content="website">
@@ -17,102 +20,222 @@
     <meta name="twitter:description" content="Search for regattas, events, and sailing results.">
     <meta name="twitter:image" content="https://lovesailing.ai/Images/LOVE%20SAILING%20LOGO.JPEG">
     <style>
+        :root {
+            --navy: #071433;
+            --navy-deep: #04102b;
+            --blue: #1d4ed8;
+            --blue-hover: #1e40af;
+            --ink: #0f172a;
+            --muted: #64748b;
+            --line: #e2e8f0;
+            --chip: #f1f5f9;
+            --page: #f8fafc;
+            --card-shadow: 0 18px 50px rgba(15, 23, 42, 0.12);
+            --radius: 20px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             margin: 0;
             padding: 0;
-            background-color: #020053;
-            color: white;
-            font-family: Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            background: #fff;
+            color: var(--ink);
+            font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif;
             min-height: 100vh;
         }
 
-        .logo {
-            margin-top: 20px;
-            max-width: 250px;
-            width: 40%;
+        a {
+            color: inherit;
         }
 
-        .content {
-            margin-top: 30px;
-            text-align: center;
-            width: 90%;
-            max-width: 1000px;
+        button,
+        input,
+        select {
+            font-family: inherit;
+        }
+
+        .site-header {
+            background: var(--navy-deep);
+            color: #fff;
+        }
+
+        .header-inner,
+        .hero-inner,
+        .page-inner,
+        .footer-inner {
+            width: min(1120px, calc(100% - 40px));
+            margin: 0 auto;
+        }
+
+        .header-inner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 72px;
+            gap: 20px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+        }
+
+        .brand img {
+            height: 44px;
+            width: 168px;
+            object-fit: cover;
+            object-position: left center;
+        }
+
+        .desktop-nav {
+            display: flex;
+            align-items: center;
+            gap: 28px;
+        }
+
+        .desktop-nav a {
+            color: #dbe4f0;
+            text-decoration: none;
+            font-size: 0.95rem;
+            font-weight: 500;
+            padding: 8px 0;
+            border-bottom: 2px solid transparent;
+        }
+
+        .desktop-nav a.active {
+            color: #fff;
+            border-bottom-color: #60a5fa;
+        }
+
+        .hero {
+            background:
+                linear-gradient(100deg, rgba(4, 16, 43, 0.94) 0%, rgba(4, 16, 43, 0.72) 42%, rgba(4, 16, 43, 0.28) 100%),
+                url("/Images/Gemini_Generated_Image_8bt7028bt7028bt7.png") right center / cover no-repeat,
+                linear-gradient(180deg, var(--navy-deep), #0b2a5c);
+            color: #fff;
+            padding: 36px 0 88px;
+        }
+
+        .hero-inner h1 {
+            margin: 0 0 12px;
+            font-size: clamp(2rem, 5vw, 3.4rem);
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            max-width: 14ch;
+            line-height: 1.1;
+        }
+
+        .hero-inner p {
+            margin: 0;
+            max-width: 36rem;
+            color: #d7e2f2;
+            font-size: 1.08rem;
+            line-height: 1.55;
+        }
+
+        .page {
+            background: var(--page);
+            padding: 0 0 64px;
+            min-height: 40vh;
+        }
+
+        .search-card {
+            position: relative;
+            margin-top: -56px;
+            background: #fff;
+            border-radius: var(--radius);
+            box-shadow: var(--card-shadow);
+            padding: 22px 22px 16px;
         }
 
         .search-form {
-            background-color: rgba(255, 255, 255, 0.1);
-            padding: 25px;
-            border-radius: 8px;
-            margin-top: 20px;
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 12px;
+        }
+
+        .search-grid {
+            display: grid;
+            grid-template-columns: 1.3fr 0.9fr 0.9fr auto;
+            gap: 16px;
+            align-items: end;
         }
 
         .form-group {
             display: flex;
             flex-direction: column;
-            align-items: center;
-            text-align: center;
+            gap: 8px;
+            min-width: 0;
         }
 
         .form-group label {
-            margin-bottom: 5px;
-            font-weight: bold;
-            font-size: 1.28em;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--ink);
+        }
+
+        .field {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 50px;
+            padding: 0 14px;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: #fff;
+        }
+
+        .field:focus-within {
+            border-color: #93c5fd;
+            box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12);
+        }
+
+        .field svg {
+            flex: 0 0 auto;
+            color: #94a3b8;
         }
 
         .form-group input,
         .form-group select {
-            padding: 10px;
-            font-size: 1em;
-            border-radius: 5px;
-            background-color: rgba(255, 255, 255, 0.1);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            max-width: 400px;
             width: 100%;
-            text-align: left;
+            border: 0;
+            outline: none;
+            background: transparent;
+            color: var(--ink);
+            font-size: 0.95rem;
+            min-width: 0;
         }
 
-        .form-group.date-group input[type="date"] {
-            text-align: center;
-            min-width: 220px;
-            max-width: 280px;
-            padding: 12px;
+        .form-group input[type="date"] {
+            color-scheme: light;
         }
 
-        .date-row {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            flex-wrap: wrap;
+        .form-group input::placeholder {
+            color: #94a3b8;
         }
 
         .autocomplete-wrapper {
             position: relative;
-            max-width: 400px;
             width: 100%;
         }
 
         .autocomplete-dropdown {
             position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
-            background-color: rgba(2, 0, 83, 0.95);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 5px;
-            margin-top: 2px;
-            max-height: 200px;
+            top: calc(100% + 8px);
+            left: -42px;
+            right: -14px;
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            max-height: 220px;
             overflow-y: auto;
-            z-index: 1000;
+            z-index: 20;
             display: none;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
         }
 
         .autocomplete-dropdown.active {
@@ -120,112 +243,81 @@
         }
 
         .autocomplete-item {
-            padding: 10px 15px;
+            padding: 10px 14px;
             cursor: pointer;
-            color: white;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            transition: background-color 0.2s ease;
+            color: var(--ink);
+            border-bottom: 1px solid #f1f5f9;
         }
 
         .autocomplete-item:hover,
         .autocomplete-item.selected {
-            background-color: rgba(0, 136, 255, 0.3);
-        }
-
-        .autocomplete-item:last-child {
-            border-bottom: none;
-        }
-
-        .form-group input::placeholder {
-            color: rgba(255, 255, 255, 0.6);
-        }
-
-        .form-group select option {
-            background-color: #020053;
-            color: white;
-        }
-
-        .search-actions {
-            display: flex;
-            gap: 12px;
-            justify-content: center;
-            flex-wrap: wrap;
-            margin-top: 10px;
+            background: #eff6ff;
         }
 
         .search-button {
-            padding: 15px 30px;
-            font-size: 1.2em;
-            background-color: #0066cc;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .search-button-clear {
-            background-color: rgba(255, 255, 255, 0.15);
-        }
-
-        .inline-button {
-            padding: 10px 14px;
-            font-size: 0.95em;
-            background-color: #0050a8;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .inline-button.secondary {
-            background-color: rgba(255, 255, 255, 0.15);
-        }
-
-        .inline-button:hover:not(:disabled) {
-            background-color: #0074e8;
-        }
-
-        .inline-button.secondary:hover:not(:disabled) {
-            background-color: rgba(255, 255, 255, 0.25);
-        }
-
-        .inline-button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
-        .location-actions {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
+            display: inline-flex;
+            align-items: center;
             justify-content: center;
-            margin-top: 8px;
+            gap: 8px;
+            min-height: 50px;
+            padding: 0 22px;
+            border: 0;
+            border-radius: 12px;
+            background: var(--blue);
+            color: #fff;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
         }
 
         .search-button:hover:not(:disabled) {
-            background-color: #0088ff;
-            transform: scale(1.05);
-        }
-
-        .search-button.search-button-clear:hover:not(:disabled) {
-            background-color: rgba(255, 255, 255, 0.25);
+            background: var(--blue-hover);
         }
 
         .search-button:disabled {
-            background-color: #666;
+            opacity: 0.65;
             cursor: not-allowed;
+        }
+
+        .search-links {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 18px;
+            padding: 4px 2px 2px;
+        }
+
+        .text-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: 0;
+            background: none;
+            padding: 0;
+            color: var(--blue);
+            font-size: 0.92rem;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .text-link.muted {
+            color: var(--muted);
+        }
+
+        .text-link:disabled {
             opacity: 0.6;
+            cursor: not-allowed;
         }
 
         .location-status {
-            padding: 10px;
-            background-color: rgba(0, 255, 0, 0.15);
-            border-radius: 5px;
-            margin-bottom: 10px;
             display: none;
-            font-size: 0.9em;
+            margin: 0 2px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: #ecfdf5;
+            color: #166534;
+            font-size: 0.9rem;
             line-height: 1.4;
         }
 
@@ -233,108 +325,313 @@
             display: block;
         }
 
-        .results {
-            margin-top: 30px;
-            text-align: left;
+        .results-layout {
+            display: none;
+            grid-template-columns: minmax(0, 1fr) 280px;
+            gap: 24px;
+            margin-top: 28px;
+            align-items: start;
         }
 
-        .results-header {
-            background-color: rgba(255, 255, 255, 0.1);
-            padding: 15px;
-            border-radius: 8px 8px 0 0;
-            font-weight: bold;
+        .results-layout.visible {
+            display: grid;
         }
 
-        .regatta-item {
-            background-color: rgba(255, 255, 255, 0.1);
-            padding: 20px;
-            margin-bottom: 10px;
-            border-radius: 8px;
-            transition: all 0.3s ease;
-        }
-
-        .regatta-item:hover {
-            background-color: rgba(255, 255, 255, 0.15);
-            transform: translateX(5px);
-        }
-
-        .regatta-item h3 {
-            margin-top: 0;
-            color: #0088ff;
-        }
-
-        .regatta-item .date {
-            font-weight: bold;
-            color: #00ff88;
-            margin-bottom: 10px;
-        }
-
-        .regatta-item .boat-types {
+        .results-toolbar {
             display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
             flex-wrap: wrap;
-            gap: 6px;
-            margin-bottom: 10px;
         }
 
-        .boat-chip {
-            background-color: rgba(0, 136, 255, 0.25);
-            border: 1px solid rgba(0, 136, 255, 0.5);
-            color: #cfe9ff;
-            padding: 4px 10px;
-            border-radius: 999px;
-            font-size: 0.85em;
-        }
-
-        .regatta-item .location {
-            color: #cccccc;
-            margin-bottom: 10px;
-        }
-
-        .regatta-item .links {
-            margin-top: 15px;
+        .results-toolbar-left {
             display: flex;
+            align-items: center;
             gap: 10px;
             flex-wrap: wrap;
         }
 
-        .regatta-item .links a {
-            padding: 8px 15px;
-            background-color: #0066cc;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            font-size: 0.9em;
-            transition: all 0.3s ease;
+        #resultsCount {
+            font-size: 1.05rem;
+            font-weight: 700;
         }
 
-        .regatta-item .links a:hover {
-            background-color: #0088ff;
+        .filter-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
         }
 
-        .regatta-item .links button.link-btn {
-            padding: 8px 15px;
-            background-color: #0055aa;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 0.9em;
+        .filter-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 10px;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: #1e3a8a;
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+
+        .filter-chip button {
+            border: 0;
+            background: none;
+            color: inherit;
             cursor: pointer;
-            transition: all 0.3s ease;
+            padding: 0;
+            line-height: 1;
+            font-size: 0.95rem;
         }
 
-        .regatta-item .links button.link-btn.stop {
-            background-color: #aa3333;
+        .sort-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--muted);
+            font-size: 0.9rem;
         }
 
-        .regatta-item .links button.link-btn.stop:hover {
-            background-color: #cc4444;
+        .sort-control select {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: #fff;
+            color: var(--ink);
+            padding: 8px 10px;
+            font-size: 0.9rem;
+        }
+
+        .regatta-item {
+            display: flex;
+            gap: 20px;
+            background: #fff;
+            border-radius: 18px;
+            padding: 22px;
+            margin-bottom: 14px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+        }
+
+        .date-badge {
+            flex: 0 0 92px;
+            width: 92px;
+            min-height: 92px;
+            border-radius: 14px;
+            background: #f8fafc;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 10px 6px;
+        }
+
+        .date-badge .month {
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+        }
+
+        .date-badge .day {
+            font-size: 1.45rem;
+            font-weight: 700;
+            line-height: 1.1;
+            margin: 4px 0;
+        }
+
+        .date-badge .year {
+            font-size: 0.78rem;
+            color: var(--muted);
+        }
+
+        .regatta-body {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .regatta-item h3 {
+            margin: 0 0 10px;
+            color: var(--blue);
+            font-size: 1.15rem;
+            line-height: 1.3;
+        }
+
+        .regatta-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 10px;
+            color: var(--muted);
+            font-size: 0.92rem;
+        }
+
+        .regatta-meta span {
+            display: inline-flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .regatta-meta svg {
+            flex: 0 0 auto;
+            margin-top: 2px;
+            color: #94a3b8;
+        }
+
+        .boat-types {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 14px;
+        }
+
+        .boat-chip {
+            background: #f1f5f9;
+            color: #334155;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .links a,
+        .links button.link-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 9px 14px;
+            border-radius: 10px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            text-decoration: none;
+            border: 1px solid var(--line);
+            background: #fff;
+            color: var(--ink);
+            cursor: pointer;
+        }
+
+        .links a.primary,
+        .links button.link-btn.primary {
+            background: var(--blue);
+            border-color: var(--blue);
+            color: #fff;
+        }
+
+        .links a:hover,
+        .links button.link-btn:hover:not(:disabled) {
+            border-color: #bfdbfe;
+            background: #eff6ff;
+        }
+
+        .links a.primary:hover,
+        .links button.link-btn.primary:hover:not(:disabled) {
+            background: var(--blue-hover);
+            border-color: var(--blue-hover);
+            color: #fff;
+        }
+
+        .links button.link-btn.stop {
+            background: #b91c1c;
+            border-color: #b91c1c;
+            color: #fff;
+        }
+
+        .links button.link-btn.stop:hover:not(:disabled) {
+            background: #dc2626;
+            border-color: #dc2626;
+        }
+
+        .links button.link-btn:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+        }
+
+        .show-more-wrap {
+            display: flex;
+            justify-content: center;
+            margin: 8px 0 4px;
+        }
+
+        .show-more {
+            display: none;
+            border: 1px solid var(--line);
+            background: #fff;
+            color: var(--ink);
+            border-radius: 999px;
+            padding: 10px 18px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .show-more.visible {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .alerts-sidebar {
+            background: #fff;
+            border-radius: 18px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+            padding: 28px 22px;
+            text-align: center;
+        }
+
+        .bell-icon {
+            width: 56px;
+            height: 56px;
+            margin: 0 auto 14px;
+            color: var(--blue);
+        }
+
+        .alerts-sidebar h2 {
+            margin: 0 0 8px;
+            font-size: 1.25rem;
+        }
+
+        .alerts-sidebar p {
+            margin: 0 0 18px;
+            color: var(--muted);
+            line-height: 1.45;
+            font-size: 0.95rem;
+        }
+
+        .sidebar-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            min-height: 46px;
+            border: 1px solid #bfdbfe;
+            border-radius: 12px;
+            background: #fff;
+            color: var(--blue);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px 20px;
+            background: #fff;
+            border-radius: 18px;
+            color: var(--muted);
         }
 
         .modal-overlay {
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.55);
+            background: rgba(15, 23, 42, 0.45);
             z-index: 2000;
             align-items: center;
             justify-content: center;
@@ -346,36 +643,37 @@
         }
 
         .modal-card {
-            background: #020053;
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            border-radius: 10px;
+            background: #fff;
+            border-radius: 16px;
             padding: 24px;
             width: 100%;
             max-width: 420px;
-            text-align: left;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
         }
 
         .modal-card h2 {
             margin-top: 0;
-            color: #fff;
         }
 
         .modal-card p {
-            color: #d0d0d0;
-            line-height: 1.4;
+            color: var(--muted);
+            line-height: 1.45;
+        }
+
+        .modal-card label {
+            display: block;
+            font-weight: 600;
+            font-size: 0.9rem;
         }
 
         .modal-card input {
             width: 100%;
             box-sizing: border-box;
-            padding: 10px;
-            font-size: 1em;
-            border-radius: 5px;
-            background-color: rgba(255, 255, 255, 0.1);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            margin: 10px 0 16px;
+            padding: 10px 12px;
+            font-size: 1rem;
+            border-radius: 10px;
+            border: 1px solid var(--line);
+            margin: 8px 0 16px;
         }
 
         .modal-actions {
@@ -384,64 +682,69 @@
             justify-content: flex-end;
         }
 
-        .manage-alerts-link {
-            display: inline-block;
-            margin-top: 16px;
-            color: #9fd4ff;
-            text-decoration: underline;
-        }
-
-        .no-results {
-            text-align: center;
-            padding: 40px;
-            background-color: rgba(255, 255, 255, 0.1);
+        .inline-button {
+            padding: 10px 14px;
+            font-size: 0.95rem;
+            background: var(--blue);
+            color: #fff;
+            border: none;
             border-radius: 8px;
-            margin-top: 20px;
+            cursor: pointer;
         }
 
-        .back-link {
-            margin-top: 40px;
-            color: white;
+        .inline-button.secondary {
+            background: #e2e8f0;
+            color: var(--ink);
+        }
+
+        .site-footer {
+            background: #fff;
+            border-top: 1px solid var(--line);
+            padding: 22px 0;
+        }
+
+        .footer-inner {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+
+        .footer-brand {
+            display: flex;
+            align-items: center;
             text-decoration: none;
-            padding: 10px 20px;
-            background-color: rgba(255, 255, 255, 0.1);
-            border-radius: 5px;
         }
 
-        .back-link:hover {
-            background-color: rgba(255, 255, 255, 0.2);
+        .footer-brand img {
+            height: 36px;
+            width: 140px;
+            object-fit: cover;
+            object-position: left center;
         }
 
-        /* Mobile menu styling */
         .hamburger-menu {
             display: none;
             cursor: pointer;
-            position: fixed;
-            top: 20px;
-            right: 20px;
             z-index: 1000;
-            background-color: rgba(2, 0, 83, 0.8);
-            padding: 10px;
-            border-radius: 5px;
+            padding: 8px;
         }
 
         .hamburger-menu span {
             display: block;
-            width: 30px;
-            height: 3px;
-            margin: 6px 0;
-            background-color: white;
-            transition: all 0.3s ease;
+            width: 22px;
+            height: 2px;
+            margin: 5px 0;
+            background: #fff;
         }
 
         .mobile-menu {
             display: none;
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: #020053;
+            inset: 0;
+            background: var(--navy-deep);
             z-index: 999;
             flex-direction: column;
             justify-content: center;
@@ -451,20 +754,14 @@
 
         .mobile-menu a {
             display: block;
-            padding: 20px;
-            margin: 10px 0;
-            font-size: 1.5em;
+            padding: 16px;
+            margin: 8px 0;
+            font-size: 1.2rem;
             color: white;
             text-decoration: none;
             width: 80%;
-            text-align: center;
             border-radius: 8px;
-            background-color: rgba(255, 255, 255, 0.1);
-            transition: all 0.3s ease;
-        }
-
-        .mobile-menu a:hover {
-            background-color: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.08);
         }
 
         .close-menu {
@@ -476,81 +773,208 @@
             cursor: pointer;
         }
 
+        @media (max-width: 900px) {
+            .results-layout.visible {
+                grid-template-columns: 1fr;
+            }
+
+            .alerts-sidebar {
+                order: 2;
+            }
+        }
+
         @media (max-width: 768px) {
+            .desktop-nav {
+                display: none;
+            }
+
             .hamburger-menu {
                 display: block;
             }
 
-            .logo {
-                margin-top: 20px;
-                max-width: 40%;
+            .header-inner,
+            .hero-inner,
+            .page-inner,
+            .footer-inner {
+                width: min(1120px, calc(100% - 28px));
             }
 
-            .content {
-                margin-top: 20px;
-                width: 95%;
+            .hero {
+                padding: 24px 0 72px;
             }
 
-            .search-form {
-                padding: 15px;
+            .search-grid {
+                grid-template-columns: 1fr;
             }
 
-            .date-row {
+            .search-button {
+                width: 100%;
+            }
+
+            .regatta-item {
+                flex-direction: column;
+                gap: 14px;
+            }
+
+            .date-badge {
+                flex-direction: row;
+                width: 100%;
+                min-height: 0;
+                justify-content: flex-start;
                 gap: 10px;
+                padding: 10px 12px;
+            }
+
+            .date-badge .day {
+                margin: 0;
+            }
+
+            .footer-inner {
+                flex-direction: column;
+                text-align: center;
             }
         }
     </style>
 </head>
 
 <body>
-    <img src="/Images/LOVE SAILING LOGO.JPEG" alt="Love Sailing Logo" class="logo">
-
-    <div class="content">
-        <h1>Find Regatta</h1>
-
-        <div class="location-status" id="locationStatus"></div>
-
-        <form class="search-form" onsubmit="searchRegattas(event)">
-            <div class="form-group">
-                <label for="locationInput">Regatta or Location Name:</label>
-                <div class="autocomplete-wrapper">
-                    <input type="text" id="locationInput" name="q" placeholder="Regatta or location..." maxlength="60"
-                        autocomplete="off">
-                    <div class="autocomplete-dropdown" id="locationAutocomplete"></div>
-                </div>
-                <div class="location-actions">
-                    <button type="button" class="inline-button" id="useLocationButton"
-                        onclick="useCurrentLocation()">Use Current Location</button>
-                </div>
+    <header class="site-header">
+        <div class="header-inner">
+            <a class="brand" href="index.html">
+                <img src="/Images/LoveSailing-Left.jpg" alt="Love Sailing">
+            </a>
+            <nav class="desktop-nav" aria-label="Primary">
+                <a href="Find-regatta.html" class="active">Find regattas</a>
+                <a href="stop-alerts.html">Results alerts</a>
+            </nav>
+            <div class="hamburger-menu" onclick="toggleMenu()" aria-label="Open menu">
+                <span></span>
+                <span></span>
+                <span></span>
             </div>
-
-            <div class="form-group date-group">
-                <label for="dateInput">Date:</label>
-                <div class="date-row">
-                    <input type="date" id="dateInput" name="date" title="Leave empty for today and future regattas">
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label for="boatTypeInput">Boat type:</label>
-                <select id="boatTypeInput" name="boatType">
-                    <option value="">All boat types</option>
-                </select>
-            </div>
-
-            <div class="search-actions">
-                <button type="submit" class="search-button" id="searchButton">Search Regattas</button>
-                <button type="button" class="search-button search-button-clear" id="clearFiltersButton">Clear</button>
-            </div>
-        </form>
-        <a class="manage-alerts-link" href="stop-alerts.html">Manage results alerts</a>
-
-        <div class="results" id="results" style="display: none;">
-            <div class="results-header" id="resultsHeader"></div>
-            <div id="resultsContent"></div>
         </div>
+    </header>
 
-    </div>
+    <section class="hero">
+        <div class="hero-inner">
+            <h1>Find your next regatta.</h1>
+            <p>Search events, explore results and follow your favourite fleets.</p>
+        </div>
+    </section>
+
+    <main class="page">
+        <div class="page-inner">
+            <section class="search-card">
+                <form class="search-form" onsubmit="searchRegattas(event)">
+                    <div class="search-grid">
+                        <div class="form-group">
+                            <label for="locationInput">Regatta or location</label>
+                            <div class="field">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <circle cx="11" cy="11" r="7"></circle>
+                                    <path d="m20 20-3-3"></path>
+                                </svg>
+                                <div class="autocomplete-wrapper">
+                                    <input type="text" id="locationInput" name="q" placeholder="Search by name or place" maxlength="60" autocomplete="off">
+                                    <div class="autocomplete-dropdown" id="locationAutocomplete"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group date-group">
+                            <label for="dateInput">Date</label>
+                            <div class="field">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+                                    <path d="M16 2v4M8 2v4M3 10h18"></path>
+                                </svg>
+                                <input type="date" id="dateInput" name="date" title="Leave empty for today and future regattas">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="boatTypeInput">Boat class</label>
+                            <div class="field">
+                                <select id="boatTypeInput" name="boatType">
+                                    <option value="">All boat classes</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="search-button" id="searchButton">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <circle cx="11" cy="11" r="7"></circle>
+                                <path d="m20 20-3-3"></path>
+                            </svg>
+                            Search regattas
+                        </button>
+                    </div>
+
+                    <div class="search-links">
+                        <button type="button" class="text-link" id="useLocationButton" onclick="useCurrentLocation()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path d="M12 21s7-5.3 7-11a7 7 0 1 0-14 0c0 5.7 7 11 7 11z"></path>
+                                <circle cx="12" cy="10" r="2.5"></circle>
+                            </svg>
+                            Use my location
+                        </button>
+                        <button type="button" class="text-link muted" id="clearFiltersButton">Clear filters</button>
+                    </div>
+                    <div class="location-status" id="locationStatus"></div>
+                </form>
+            </section>
+
+            <div class="results-layout" id="results">
+                <div class="results-main">
+                    <div class="results-toolbar" id="resultsHeader">
+                        <div class="results-toolbar-left">
+                            <div id="resultsCount"></div>
+                            <div class="filter-chips" id="filterChips"></div>
+                        </div>
+                        <div class="sort-control">
+                            <label for="sortSelect">Sort by:</label>
+                            <select id="sortSelect">
+                                <option value="earliest">Date: earliest first</option>
+                                <option value="latest">Date: latest first</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="resultsContent"></div>
+                    <div class="show-more-wrap">
+                        <button type="button" class="show-more" id="showMoreButton">Show more regattas
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path d="m6 9 6 6 6-6"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <aside class="alerts-sidebar">
+                    <svg class="bell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                        <path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"></path>
+                        <path d="M13.7 21a2 2 0 0 1-3.4 0"></path>
+                    </svg>
+                    <h2>Stay in the loop</h2>
+                    <p>Get notified when race results are published.</p>
+                    <a class="sidebar-button" href="stop-alerts.html">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9c.3.7.9 1.2 1.6 1.3H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path>
+                        </svg>
+                        Manage results alerts
+                    </a>
+                </aside>
+            </div>
+        </div>
+    </main>
+
+    <footer class="site-footer">
+        <div class="footer-inner">
+            <a class="footer-brand" href="index.html">
+                <img src="/Images/LoveSailing-Left.jpg" alt="Love Sailing">
+            </a>
+            <p>Sailing communities. Brighter days ahead.</p>
+        </div>
+    </footer>
 
     <div class="modal-overlay" id="alertModal">
         <div class="modal-card">
@@ -565,14 +989,6 @@
         </div>
     </div>
 
-    <!-- Hamburger menu icon -->
-    <div class="hamburger-menu" onclick="toggleMenu()">
-        <span></span>
-        <span></span>
-        <span></span>
-    </div>
-
-    <!-- Mobile menu -->
     <div class="mobile-menu" id="mobileMenu">
         <div class="close-menu" onclick="toggleMenu()">✕</div>
         <a href="index.html">Home</a>
@@ -593,6 +1009,10 @@
         let detectedLocationName = null;
         let usingCurrentLocation = false;
         let hasSearched = false;
+        let lastRegattas = [];
+        let lastResultCount = 0;
+        let visibleCount = 10;
+        const PAGE_SIZE = 10;
         const NEARBY_RADIUS_MILES = 50;
         const WATCH_STORAGE_KEY = 'ls-results-watches';
         let pendingWatch = null;
@@ -645,10 +1065,14 @@
             return `${prefix}${monthNames[parts.month - 1]} ${parts.day}, ${parts.year}`;
         }
 
-        function formatEventDates(regatta) {
-            const dates = (Array.isArray(regatta.event_dates) && regatta.event_dates.length)
+        function getRegattaDates(regatta) {
+            return (Array.isArray(regatta.event_dates) && regatta.event_dates.length)
                 ? regatta.event_dates.map(d => String(d).slice(0, 10))
                 : [String(regatta.regatta_date || '').slice(0, 10)].filter(Boolean);
+        }
+
+        function formatEventDates(regatta) {
+            const dates = getRegattaDates(regatta);
             if (!dates.length) return '';
             if (dates.length === 1) return formatOneDate(dates[0]);
 
@@ -668,8 +1092,30 @@
             return `${formatOneDate(dates[0], { weekday: false })} – ${formatOneDate(dates[dates.length - 1], { weekday: false })}`;
         }
 
+        function formatDateBadge(regatta) {
+            const dates = getRegattaDates(regatta);
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            const first = dates.length ? ymdParts(dates[0]) : null;
+            const last = dates.length > 1 ? ymdParts(dates[dates.length - 1]) : first;
+            if (!first) return { month: '', day: '—', year: '' };
+            let day = String(first.day);
+            if (last && (last.day !== first.day || last.month !== first.month || last.year !== first.year)) {
+                day = `${first.day}–${last.day}`;
+            }
+            return {
+                month: monthNames[first.month - 1].toUpperCase(),
+                day,
+                year: String(first.year)
+            };
+        }
+
         function escapeAttr(value) {
             return String(value || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        }
+
+        function alertButtonMarkup(watching) {
+            const iconAlert = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"></path><path d="M13.7 21a2 2 0 0 1-3.4 0"></path></svg>';
+            return watching ? `${iconAlert} Stop alerts` : `${iconAlert} Get alerts`;
         }
 
         function closeAlertModal() {
@@ -722,7 +1168,7 @@
             }
             forgetWatch(url);
             if (button) {
-                button.textContent = 'Alerts';
+                button.innerHTML = alertButtonMarkup(false);
                 button.classList.remove('stop');
                 button.style.backgroundColor = '';
                 button.disabled = false;
@@ -745,9 +1191,9 @@
             }
             rememberWatch(email, url, data.token);
             if (button) {
-                button.textContent = 'Stop alerts';
+                button.innerHTML = alertButtonMarkup(true);
                 button.classList.add('stop');
-                button.style.backgroundColor = '#aa3333';
+                button.style.backgroundColor = '#b91c1c';
                 button.disabled = false;
             }
             return data;
@@ -762,17 +1208,14 @@
             }
         }
 
-        // Function to get location name from coordinates using reverse geocoding
         async function getLocationName(lat, lng) {
             try {
                 const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10`);
                 const data = await response.json();
 
                 if (data.display_name) {
-                    // Extract city and state/country from the full address
                     const parts = data.display_name.split(', ');
                     if (parts.length >= 3) {
-                        // Return city and state/country
                         return `${parts[0]}, ${parts[parts.length - 2]}`;
                     }
                     return data.display_name;
@@ -784,7 +1227,6 @@
             }
         }
 
-        // Autocomplete functionality
         let autocompleteTimeout = null;
         let selectedIndex = -1;
 
@@ -831,7 +1273,7 @@
                 return;
             }
 
-            suggestions.forEach((suggestion, index) => {
+            suggestions.forEach((suggestion) => {
                 const item = document.createElement('div');
                 item.className = 'autocomplete-item';
                 item.textContent = suggestion;
@@ -896,12 +1338,147 @@
                 }
             });
 
-            // Close dropdown when clicking outside
             document.addEventListener('click', (e) => {
                 if (!input.contains(e.target) && !dropdown.contains(e.target)) {
                     dropdown.classList.remove('active');
                 }
             });
+        }
+
+        function setResultsVisible(visible) {
+            const results = document.getElementById('results');
+            results.classList.toggle('visible', visible);
+            results.style.display = visible ? 'grid' : 'none';
+        }
+
+        function renderFilterChips() {
+            const chips = document.getElementById('filterChips');
+            if (!chips) return;
+            const q = document.getElementById('locationInput').value.trim();
+            const date = document.getElementById('dateInput').value;
+            const boatType = document.getElementById('boatTypeInput').value;
+            const parts = [];
+            if (q) parts.push({ key: 'q', label: q });
+            if (usingCurrentLocation) parts.push({ key: 'geo', label: detectedLocationName || 'My location' });
+            if (date) parts.push({ key: 'date', label: formatOneDate(date, { weekday: false }) });
+            if (boatType) parts.push({ key: 'boat', label: boatType });
+            chips.innerHTML = parts.map(chip => (
+                `<span class="filter-chip">${escapeHtml(chip.label)} <button type="button" data-clear-chip="${chip.key}" aria-label="Clear ${escapeAttr(chip.label)}">×</button></span>`
+            )).join('');
+        }
+
+        function renderResultsHeader(count) {
+            const header = document.getElementById('resultsHeader');
+            const countEl = document.getElementById('resultsCount');
+            if (count == null) {
+                header.style.display = 'none';
+                countEl.textContent = '';
+                document.getElementById('filterChips').innerHTML = '';
+                return;
+            }
+            header.style.display = '';
+            const n = Number(count) || 0;
+            countEl.textContent = `${n} regatta${n === 1 ? '' : 's'} found`;
+            renderFilterChips();
+        }
+
+        function sortRegattas(regattas) {
+            const latest = document.getElementById('sortSelect').value === 'latest';
+            return [...regattas].sort((a, b) => {
+                const da = getRegattaDates(a)[0] || '';
+                const db = getRegattaDates(b)[0] || '';
+                if (da === db) return 0;
+                if (latest) return da < db ? 1 : -1;
+                return da < db ? -1 : 1;
+            });
+        }
+
+        function buildActionLinks(regatta) {
+            let html = '';
+            const rnUrl = regatta.event_website_url || regatta.registrants_url;
+            const rnId = (regatta.source === 'regattanetwork' && rnUrl)
+                ? (/\/event\/(\d+)/.exec(rnUrl)?.[1])
+                : null;
+            let resultsUrl = null;
+            const iconEvent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 5h5v5"></path><path d="M10 14 19 5"></path><path d="M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"></path></svg>';
+            const iconResults = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 19V9"></path><path d="M10 19V5"></path><path d="M16 19v-7"></path><path d="M22 19V8"></path></svg>';
+            if (rnId) {
+                const base = `https://www.regattanetwork.com/event/${rnId}`;
+                resultsUrl = base + '#_newsroom';
+                html += `<a class="primary" href="${base}" target="_blank" rel="noopener">${iconEvent} View event</a>`;
+                html += `<a href="${base}#_registration" target="_blank" rel="noopener">Entrants</a>`;
+                html += `<a href="${resultsUrl}" target="_blank" rel="noopener">${iconResults} Results</a>`;
+            } else {
+                const altUrl = regatta.event_website_url || regatta.registrants_url;
+                if (regatta.source === 'clubspot' && regatta.event_website_url) {
+                    resultsUrl = regatta.event_website_url.replace(/\/?$/, '') + '/results';
+                } else {
+                    resultsUrl = altUrl;
+                }
+                if (regatta.event_website_url) {
+                    html += `<a class="primary" href="${regatta.event_website_url}" target="_blank" rel="noopener">${iconEvent} View event</a>`;
+                }
+                if (regatta.registrants_url) {
+                    const isHs = regatta.source === 'hssailing';
+                    const registrantLabel = isHs ? 'Entrants' : (typeof regatta.registrant_count === 'number'
+                        ? `View Registrants (${regatta.registrant_count})`
+                        : 'View Registrants');
+                    html += `<a href="${regatta.registrants_url}" target="_blank" rel="noopener">${registrantLabel}</a>`;
+                }
+                if (resultsUrl) {
+                    html += `<a href="${resultsUrl}" target="_blank" rel="noopener">${iconResults} Results</a>`;
+                }
+            }
+            if (resultsUrl) {
+                const watching = Boolean(storedWatchToken(resultsUrl));
+                const btnClass = watching ? 'link-btn stop' : 'link-btn';
+                html += `<button type="button" class="${btnClass}" data-results-url="${escapeAttr(resultsUrl)}" data-regatta-name="${escapeAttr(regatta.regatta_name)}">${alertButtonMarkup(watching)}</button>`;
+            }
+            return html;
+        }
+
+        function renderRegattaList() {
+            const resultsContent = document.getElementById('resultsContent');
+            const showMore = document.getElementById('showMoreButton');
+            const sorted = sortRegattas(lastRegattas);
+            const visible = sorted.slice(0, visibleCount);
+            let html = '';
+            visible.forEach(regatta => {
+                const formattedDate = formatEventDates(regatta);
+                const badge = formatDateBadge(regatta);
+                const boatTypes = Array.isArray(regatta.boat_types) ? regatta.boat_types : [];
+                const miles = Number(regatta.distance_miles);
+                let locationLine = '';
+                if (regatta.location) {
+                    const distanceLabel = Number.isFinite(miles) ? ` · ${Math.round(miles)} miles away` : '';
+                    locationLine = `${regatta.location}${distanceLabel}`;
+                } else if (Number.isFinite(miles)) {
+                    locationLine = `${Math.round(miles)} miles away`;
+                }
+
+                html += `<article class="regatta-item">`;
+                html += `<div class="date-badge"><div class="month">${escapeHtml(badge.month)}</div><div class="day">${escapeHtml(badge.day)}</div><div class="year">${escapeHtml(badge.year)}</div></div>`;
+                html += `<div class="regatta-body">`;
+                html += `<h3>${escapeHtml(regatta.regatta_name)}</h3>`;
+                html += `<div class="regatta-meta">`;
+                if (locationLine) {
+                    html += `<span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s7-5.3 7-11a7 7 0 1 0-14 0c0 5.7 7 11 7 11z"></path><circle cx="12" cy="10" r="2.5"></circle></svg>${escapeHtml(locationLine)}</span>`;
+                }
+                if (formattedDate) {
+                    html += `<span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>${escapeHtml(formattedDate)}</span>`;
+                }
+                if (typeof regatta.registrant_count === 'number') {
+                    html += `<span>Entrants: ${regatta.registrant_count}</span>`;
+                }
+                html += `</div>`;
+                if (boatTypes.length) {
+                    html += `<div class="boat-types">${boatTypes.map(t => `<span class="boat-chip">${escapeHtml(t)}</span>`).join('')}</div>`;
+                }
+                html += `<div class="links">${buildActionLinks(regatta)}</div>`;
+                html += `</div></article>`;
+            });
+            resultsContent.innerHTML = html;
+            showMore.classList.toggle('visible', sorted.length > visibleCount);
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
@@ -934,7 +1511,7 @@
                 } catch (err) {
                     if (button) {
                         button.disabled = false;
-                        button.textContent = 'Alerts';
+                        button.innerHTML = alertButtonMarkup(false);
                     }
                     alert(err.message || 'Could not set up alerts.');
                 } finally {
@@ -944,6 +1521,30 @@
             });
 
             document.getElementById('clearFiltersButton').addEventListener('click', clearSearchForm);
+            document.getElementById('sortSelect').addEventListener('change', () => {
+                if (lastRegattas.length) renderRegattaList();
+            });
+            document.getElementById('showMoreButton').addEventListener('click', () => {
+                visibleCount += PAGE_SIZE;
+                renderRegattaList();
+            });
+            document.getElementById('filterChips').addEventListener('click', (e) => {
+                const btn = e.target.closest('[data-clear-chip]');
+                if (!btn) return;
+                const key = btn.getAttribute('data-clear-chip');
+                if (key === 'q') document.getElementById('locationInput').value = '';
+                if (key === 'date') document.getElementById('dateInput').value = '';
+                if (key === 'boat') document.getElementById('boatTypeInput').value = '';
+                if (key === 'geo') {
+                    userLatitude = null;
+                    userLongitude = null;
+                    detectedLocationName = null;
+                    usingCurrentLocation = false;
+                    clearLocationStatus('');
+                }
+                if (hasSearched) searchRegattas();
+                else renderFilterChips();
+            });
 
             document.getElementById('resultsContent').addEventListener('click', async (e) => {
                 const btn = e.target.closest('button.link-btn[data-results-url]');
@@ -959,7 +1560,7 @@
                         await stopWatch(url, btn);
                     } catch (err) {
                         btn.disabled = false;
-                        btn.textContent = 'Stop alerts';
+                        btn.innerHTML = alertButtonMarkup(true);
                         alert(err.message || 'Could not stop alerts.');
                     }
                     return;
@@ -976,13 +1577,14 @@
         }
 
         function resetResultsDisplay() {
-            const results = document.getElementById('results');
             const resultsContent = document.getElementById('resultsContent');
-            const resultsHeader = document.getElementById('resultsHeader');
-            results.style.display = 'none';
-            resultsHeader.textContent = '';
-            resultsHeader.style.display = 'none';
+            setResultsVisible(false);
+            renderResultsHeader(null);
             resultsContent.innerHTML = '';
+            lastRegattas = [];
+            lastResultCount = 0;
+            visibleCount = PAGE_SIZE;
+            document.getElementById('showMoreButton').classList.remove('visible');
             hasSearched = false;
         }
 
@@ -999,7 +1601,7 @@
             clearLocationStatus('');
             resetResultsDisplay();
             document.getElementById('searchButton').disabled = false;
-            document.getElementById('searchButton').textContent = 'Search Regattas';
+            document.getElementById('searchButton').innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3-3"></path></svg> Search regattas';
             document.getElementById('useLocationButton').disabled = false;
         }
 
@@ -1039,25 +1641,29 @@
             );
         }
 
+        function setSearchButtonIdle() {
+            const button = document.getElementById('searchButton');
+            button.disabled = false;
+            button.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3-3"></path></svg> Search regattas';
+        }
+
         async function searchRegattas(event) {
             if (event) {
                 event.preventDefault();
             }
 
             const button = document.getElementById('searchButton');
-            const results = document.getElementById('results');
             const resultsContent = document.getElementById('resultsContent');
-            const resultsHeader = document.getElementById('resultsHeader');
 
-            // Reset results display until we know what to show
-            results.style.display = 'none';
-            resultsHeader.textContent = '';
-            resultsHeader.style.display = 'none';
+            setResultsVisible(false);
+            renderResultsHeader(null);
             resultsContent.innerHTML = '';
+            document.getElementById('showMoreButton').classList.remove('visible');
 
             button.disabled = true;
             button.textContent = 'Searching...';
             hasSearched = true;
+            visibleCount = PAGE_SIZE;
 
             try {
                 const date = document.getElementById('dateInput').value;
@@ -1087,80 +1693,16 @@
                 const data = await response.json();
 
                 if (data.success && data.regattas && data.regattas.length > 0) {
-                    results.style.display = 'block';
-                    resultsHeader.style.display = 'block';
-                    resultsHeader.textContent = `Found ${data.count} regatta(s)`;
-
-                    let html = '';
-                    data.regattas.forEach(regatta => {
-                        const formattedDate = formatEventDates(regatta);
-                        const boatTypes = Array.isArray(regatta.boat_types) ? regatta.boat_types : [];
-
-                        html += `<div class="regatta-item">`;
-                        html += `<h3>${regatta.regatta_name}</h3>`;
-                        html += `<div class="date">📅 ${formattedDate}</div>`;
-                        if (regatta.location) {
-                            const miles = Number(regatta.distance_miles);
-                            const distanceLabel = Number.isFinite(miles)
-                                ? ` · ${Math.round(miles)} miles away`
-                                : '';
-                            html += `<div class="location">📍 ${regatta.location}${distanceLabel}</div>`;
-                        } else if (Number.isFinite(Number(regatta.distance_miles))) {
-                            html += `<div class="location">📍 ${Math.round(Number(regatta.distance_miles))} miles away</div>`;
-                        }
-                        if (boatTypes.length) {
-                            html += `<div class="boat-types">${boatTypes.map(t => `<span class="boat-chip">${t}</span>`).join('')}</div>`;
-                        }
-                        if (typeof regatta.registrant_count === 'number') {
-                            html += `<div class="location">👥 Entrants: ${regatta.registrant_count}</div>`;
-                        }
-                        html += `<div class="links">`;
-                        const rnUrl = regatta.event_website_url || regatta.registrants_url;
-                        const rnId = (regatta.source === 'regattanetwork' && rnUrl)
-                            ? (/\/event\/(\d+)/.exec(rnUrl)?.[1])
-                            : null;
-                        let resultsUrl = null;
-                        if (rnId) {
-                            const base = `https://www.regattanetwork.com/event/${rnId}`;
-                            resultsUrl = base + '#_newsroom';
-                            html += `<a href="${base}" target="_blank" rel="noopener">Event</a>`;
-                            html += `<a href="${base}#_registration" target="_blank" rel="noopener">Entrants</a>`;
-                            html += `<a href="${resultsUrl}" target="_blank" rel="noopener">Results</a>`;
-                        } else {
-                            const altUrl = regatta.event_website_url || regatta.registrants_url;
-                            if (regatta.source === 'clubspot' && regatta.event_website_url) {
-                                resultsUrl = regatta.event_website_url.replace(/\/?$/, '') + '/results';
-                            } else {
-                                resultsUrl = altUrl;
-                            }
-                            if (regatta.event_website_url) {
-                                html += `<a href="${regatta.event_website_url}" target="_blank" rel="noopener">Event</a>`;
-                            }
-                            if (regatta.registrants_url) {
-                                const isHs = regatta.source === 'hssailing';
-                                const registrantLabel = isHs ? 'Entrants' : (typeof regatta.registrant_count === 'number'
-                                    ? `View Registrants (${regatta.registrant_count})`
-                                    : 'View Registrants');
-                                html += `<a href="${regatta.registrants_url}" target="_blank" rel="noopener">${registrantLabel}</a>`;
-                            }
-                            if (resultsUrl) {
-                                html += `<a href="${resultsUrl}" target="_blank" rel="noopener">Results</a>`;
-                            }
-                        }
-                        if (resultsUrl) {
-                            const watching = Boolean(storedWatchToken(resultsUrl));
-                            const btnClass = watching ? 'link-btn stop' : 'link-btn';
-                            const btnLabel = watching ? 'Stop alerts' : 'Alerts';
-                            html += `<button type="button" class="${btnClass}" data-results-url="${escapeAttr(resultsUrl)}" data-regatta-name="${escapeAttr(regatta.regatta_name)}">${btnLabel}</button>`;
-                        }
-                        html += `</div>`;
-                        html += `</div>`;
-                    });
-
-                    resultsContent.innerHTML = html;
+                    lastRegattas = data.regattas;
+                    lastResultCount = data.count;
+                    setResultsVisible(true);
+                    renderResultsHeader(data.count);
+                    renderRegattaList();
                 } else if (hasSearched) {
-                    results.style.display = 'block';
-                    resultsHeader.style.display = 'none';
+                    lastRegattas = [];
+                    lastResultCount = 0;
+                    setResultsVisible(true);
+                    renderResultsHeader(null);
                     resultsContent.innerHTML = `
                         <div class="no-results">
                             <p>No results found. Try adjusting your date or keywords.</p>
@@ -1169,17 +1711,18 @@
                 }
             } catch (error) {
                 console.error('Search error:', error);
-                results.style.display = 'block';
-                resultsHeader.style.display = 'block';
-                resultsHeader.textContent = 'Error';
+                lastRegattas = [];
+                setResultsVisible(true);
+                renderResultsHeader(null);
+                document.getElementById('resultsCount').textContent = 'Error';
+                document.getElementById('resultsHeader').style.display = '';
                 resultsContent.innerHTML = `
                     <div class="no-results">
                         <p>An error occurred while searching. Please try again.</p>
                     </div>
                 `;
             } finally {
-                button.disabled = false;
-                button.textContent = 'Search Regattas';
+                setSearchButtonIdle();
             }
         }
     </script>

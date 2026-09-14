@@ -33,6 +33,7 @@ const job = {
     source: null,
     mode: 'lookback',
     year: null,
+    years: null,
     lookbackDays: LOOKBACK_DAYS,
     fromDate: null,
     toDate: null,
@@ -137,6 +138,7 @@ function snapshotJob() {
         source: job.source,
         mode: job.mode,
         year: job.year,
+        years: job.years,
         lookbackDays: job.lookbackDays,
         fromDate: job.fromDate,
         toDate: job.toDate,
@@ -148,13 +150,54 @@ function snapshotJob() {
     };
 }
 
+const RESULTS_YEAR_MIN = 2020;
+
+/** Calendar years shown in the admin filter: 2020 through the current year. */
+function resultsYearOptions(now) {
+    const currentYear = (now || new Date()).getUTCFullYear();
+    const years = [];
+    for (let y = currentYear; y >= RESULTS_YEAR_MIN; y--) years.push(y);
+    return years;
+}
+
+function parseSelectedYears(year, years) {
+    const raw = [];
+    if (Array.isArray(years)) raw.push(...years);
+    else if (years != null && String(years).trim() !== '') {
+        String(years).split(/[,\s]+/).forEach((part) => raw.push(part));
+    }
+    if (year != null && String(year).trim() !== '') raw.push(year);
+    const maxY = new Date().getUTCFullYear() + 1;
+    const unique = [...new Set(
+        raw.map((y) => parseInt(y, 10)).filter((y) => Number.isFinite(y) && y >= RESULTS_YEAR_MIN && y <= maxY)
+    )];
+    unique.sort((a, b) => a - b);
+    return unique;
+}
+
+function sourceStatsDelta(current, previous) {
+    const out = emptySourceStats();
+    for (const key of Object.keys(out)) {
+        const delta = (Number(current && current[key]) || 0) - (Number(previous && previous[key]) || 0);
+        out[key] = delta < 0 ? (Number(current && current[key]) || 0) : delta;
+    }
+    return out;
+}
+
+/** Resolve one or more year windows, or a rolling lookback. */
+function resolveScrapeWindows({ lookbackDays, year, years } = {}) {
+    const selected = parseSelectedYears(year, years);
+    if (selected.length) return selected.map((y) => resolveScrapeWindow({ year: y }));
+    return [resolveScrapeWindow({ lookbackDays })];
+}
+
 /** Resolve a rolling lookback or a full calendar year into an inclusive UTC date window. */
 function resolveScrapeWindow({ lookbackDays, year } = {}) {
     const now = new Date();
     now.setUTCHours(0, 0, 0, 0);
     const today = now.toISOString().slice(0, 10);
     const y = year != null && String(year).trim() !== '' ? parseInt(year, 10) : NaN;
-    if (Number.isFinite(y) && y >= 2000 && y <= now.getUTCFullYear() + 1) {
+    if (Number.isFinite(y) && y >= RESULTS_YEAR_MIN && y <= now.getUTCFullYear() + 1) {
         const fromDate = `${y}-01-01`;
         let toDate = `${y}-12-31`;
         if (toDate > today) toDate = today;
@@ -324,6 +367,7 @@ async function ensureScrapedResultsTable(pool) {
             )
         `);
         await pool.query(`ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS dedupe_key TEXT`);
+        await pool.query(`ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS location TEXT`);
     })().catch((err) => {
         schemaReadyPromise = null;
         throw err;
@@ -357,6 +401,29 @@ async function withSessionTimeout(pool, timeoutMs, fn) {
         try { await client.query('RESET statement_timeout'); } catch (_) { /* ignore */ }
         client.release();
     }
+}
+
+function toIsoDateOnly(value) {
+    if (value == null || value === '') return null;
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        return value.toISOString().slice(0, 10);
+    }
+    const s = String(value);
+    const iso = s.match(/(\d{4}-\d{2}-\d{2})/);
+    if (iso) return iso[1];
+    const parsed = new Date(s);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+    return null;
+}
+
+function yearFromDateValue(value) {
+    const iso = toIsoDateOnly(value);
+    if (iso) {
+        const y = parseInt(iso.slice(0, 4), 10);
+        return Number.isFinite(y) ? y : null;
+    }
+    const match = String(value == null ? '' : value).match(/\b((?:19|20)\d{2})\b/);
+    return match ? parseInt(match[1], 10) : null;
 }
 
 function parseJsonArray(value) {
@@ -691,15 +758,16 @@ async function upsertRows(pool, rows) {
                 r.yacht_club || null,
                 r.results || null,
                 r.total_points || null,
-                r.dedupe_key
+                r.dedupe_key,
+                r.location || null
             );
-            return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8},$${b + 9},$${b + 10},$${b + 11},$${b + 12},$${b + 13},$${b + 14})`;
+            return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8},$${b + 9},$${b + 10},$${b + 11},$${b + 12},$${b + 13},$${b + 14},$${b + 15})`;
         });
         const result = await pool.query(`
             INSERT INTO ${TABLE} (
                 source, source_event_id, source_url, regatta_name, regatta_date,
                 category, position, sail_number, boat_name, skipper, yacht_club,
-                results, total_points, dedupe_key
+                results, total_points, dedupe_key, location
             )
             VALUES ${placeholders.join(',')}
             ON CONFLICT (dedupe_key)
@@ -715,6 +783,7 @@ async function upsertRows(pool, rows) {
                 yacht_club = EXCLUDED.yacht_club,
                 results = EXCLUDED.results,
                 total_points = EXCLUDED.total_points,
+                location = COALESCE(EXCLUDED.location, ${TABLE}.location),
                 scraped_at = NOW()
             RETURNING (xmax = 0) AS inserted
         `, values);
@@ -737,6 +806,7 @@ function parseRnListing($, lookbackOrWindow) {
         regatta_name: row.regatta_name,
         regatta_date: row.regatta_date,
         host_club: row.host_club || null,
+        location: row.location || null,
         results_url: withRnShowDivisions(row.results_url)
     }));
 }
@@ -935,6 +1005,7 @@ function parseRnResultsPage($, event) {
                 source_url: event.results_url,
                 regatta_name: event.regatta_name,
                 regatta_date: event.regatta_date,
+                location: event.location || null,
                 ...parsed
             });
         });
@@ -1055,6 +1126,7 @@ function rowsFromClubspotPayload(payload, event, classId) {
             sail_number: ro.sailNumber != null ? String(ro.sailNumber) : '',
             boat_name: ro.boatName || null,
             yacht_club: ro.clubName || event.host_club || null,
+            location: event.location || null,
             results: formatClubspotRaceCells(item.entry.scoring_data),
             total_points: points
         };
@@ -1246,9 +1318,13 @@ async function scrapeClubspot(axios, pool, window) {
     }
 }
 
-async function runScrape({ axios, cheerio, pool, source, window }) {
+async function runScrape({ axios, cheerio, pool, source, window, deferFinish = false, skipCleanup = false }) {
     logLine(`Starting scrape source=${source} window=${window.label} (${window.fromDate} → ${window.toDate})`);
     const startedAt = job.startedAt;
+    const statsAtStart = {
+        regattanetwork: { ...job.stats.regattanetwork },
+        clubspot: { ...job.stats.clubspot }
+    };
 
     try {
         await ensureScrapedResultsTable(pool);
@@ -1258,18 +1334,20 @@ async function runScrape({ axios, cheerio, pool, source, window }) {
         if (source === 'all' || source === 'clubspot') {
             await scrapeClubspot(axios, pool, window);
         }
-        logLine('Scrape complete');
-        try {
-            await cleanupScrapedResultsData(pool);
-        } catch (cleanupErr) {
-            console.error('[race-results] post-scrape cleanup failed:', cleanupErr.message);
+        logLine(`${window.label} complete`);
+        if (!skipCleanup) {
+            try {
+                await cleanupScrapedResultsData(pool);
+            } catch (cleanupErr) {
+                console.error('[race-results] post-scrape cleanup failed:', cleanupErr.message);
+            }
         }
         const status = job.error ? 'error' : 'success';
         if (source === 'all' || source === 'regattanetwork') {
             await logResultsScrape(pool, {
                 source: 'regattanetwork',
                 window,
-                stats: job.stats.regattanetwork,
+                stats: sourceStatsDelta(job.stats.regattanetwork, statsAtStart.regattanetwork),
                 startedAt,
                 status
             });
@@ -1278,7 +1356,7 @@ async function runScrape({ axios, cheerio, pool, source, window }) {
             await logResultsScrape(pool, {
                 source: 'clubspot',
                 window,
-                stats: job.stats.clubspot,
+                stats: sourceStatsDelta(job.stats.clubspot, statsAtStart.clubspot),
                 startedAt,
                 status
             });
@@ -1291,15 +1369,41 @@ async function runScrape({ axios, cheerio, pool, source, window }) {
             await logResultsScrape(pool, {
                 source: src,
                 window,
-                stats: job.stats[src] || emptyStats()[src],
+                stats: sourceStatsDelta(job.stats[src] || emptySourceStats(), statsAtStart[src] || emptySourceStats()),
                 startedAt,
                 status: 'error'
             });
         }
     } finally {
-        job.running = false;
-        job.finishedAt = new Date().toISOString();
+        if (!deferFinish) {
+            job.running = false;
+            job.finishedAt = new Date().toISOString();
+        }
     }
+}
+
+/** Chat/event SELECT: persist location plus a fallback lookup on calendar `regattas`. */
+function scrapedResultsSelectSql() {
+    return `
+        SELECT source, regatta_name, regatta_date::text, category, position, sail_number, boat_name, skipper, yacht_club, results, total_points, source_url,
+            COALESCE(
+                NULLIF(TRIM(location), ''),
+                (
+                    SELECT r.location
+                    FROM regattas r
+                    WHERE r.location IS NOT NULL AND TRIM(r.location) <> ''
+                      AND LOWER(TRIM(r.regatta_name)) = LOWER(TRIM(${TABLE}.regatta_name))
+                    ORDER BY CASE WHEN r.regatta_date IS NOT DISTINCT FROM ${TABLE}.regatta_date THEN 0 ELSE 1 END
+                    LIMIT 1
+                )
+            ) AS location
+        FROM ${TABLE}
+    `;
+}
+
+function displayLocation(value) {
+    const text = normalizeSpace(value);
+    return text || '—';
 }
 
 function formatChatDate(isoOrText) {
@@ -1426,6 +1530,7 @@ function buildSailorCard(rows, preferredName) {
             sail_number: row.sail_number || null,
             boat_name: row.boat_name || null,
             yacht_club: row.yacht_club || null,
+            location: displayLocation(row.location),
             results: row.results || null,
             resultsCells: cells,
             total_points: row.total_points || null
@@ -1436,7 +1541,8 @@ function buildSailorCard(rows, preferredName) {
             regatta_name: row.regatta_name || null,
             regatta_date: formatChatDate(row.regatta_date),
             regatta_date_raw: row.regatta_date || null,
-            category: row.category || null
+            category: row.category || null,
+            location: displayLocation(row.location)
         });
         cells.forEach((cell) => {
             if (cell.place == null) return;
@@ -1447,23 +1553,36 @@ function buildSailorCard(rows, preferredName) {
                 throwout: cell.throwout,
                 regatta_name: row.regatta_name || null,
                 regatta_date: formatChatDate(row.regatta_date),
+                regatta_date_raw: row.regatta_date || null,
                 category: row.category || null
             });
         });
     });
 
-    const regattaAchievements = history
-        .filter(r => parseNumericPlace(r.position) != null)
-        .slice()
-        .sort((a, b) => parseNumericPlace(a.position) - parseNumericPlace(b.position))
-        .slice(0, 8);
+    const seenRegatta = new Set();
+    const regattaAchievements = [];
+    for (const row of history) {
+        const key = [
+            normalizeSpace(row.regatta_name).toLowerCase(),
+            row.regatta_date_raw || '',
+            normalizeSpace(row.category).toLowerCase()
+        ].join('|');
+        if (seenRegatta.has(key)) continue;
+        seenRegatta.add(key);
+        regattaAchievements.push(row);
+    }
 
     const raceAchievements = racePlaces
         .slice()
-        .sort((a, b) => a.racePlace - b.racePlace || String(b.regatta_date || '').localeCompare(String(a.regatta_date || '')))
-        .slice(0, 8);
+        .sort((a, b) =>
+            a.racePlace - b.racePlace
+            || String(b.regatta_date_raw || b.regatta_date || '').localeCompare(String(a.regatta_date_raw || a.regatta_date || ''))
+            || (a.raceIndex || 0) - (b.raceIndex || 0)
+        )
+        .slice(0, 10);
 
-    const bestRegattaPlace = regattaAchievements.length ? parseNumericPlace(regattaAchievements[0].position) : null;
+    const numericPlaces = sailorRows.map(r => parseNumericPlace(r.position)).filter(n => n != null);
+    const bestRegattaPlace = numericPlaces.length ? Math.min(...numericPlaces) : null;
     const bestRacePlace = raceAchievements.length ? raceAchievements[0].racePlace : null;
     const uniqueRegattas = new Set(
         sailorRows.map(r => `${normalizeSpace(r.regatta_name).toLowerCase()}|${r.regatta_date || ''}`)
@@ -1495,7 +1614,7 @@ function buildSailorCard(rows, preferredName) {
  * @returns {{ success: true, window: object, status: object }}
  * @throws Error with code SCRAPE_BUSY or VALIDATION
  */
-function startResultsScrapeJob({ axios, cheerio, pool, source = 'all', lookbackDays, year, trigger = 'manual', onComplete } = {}) {
+function startResultsScrapeJob({ axios, cheerio, pool, source = 'all', lookbackDays, year, years, trigger = 'manual', onComplete } = {}) {
     if (job.running) {
         const err = new Error('A results scrape is already running');
         err.code = 'SCRAPE_BUSY';
@@ -1507,23 +1626,39 @@ function startResultsScrapeJob({ axios, cheerio, pool, source = 'all', lookbackD
         err.code = 'VALIDATION';
         throw err;
     }
-    const window = resolveScrapeWindow({ lookbackDays, year });
+    const windows = resolveScrapeWindows({ lookbackDays, year, years });
+    const first = windows[0];
+    const last = windows[windows.length - 1];
+    const selectedYears = first.mode === 'year' ? windows.map((w) => w.year) : null;
+    const overallLabel = selectedYears && selectedYears.length > 1
+        ? `Years ${selectedYears.join(', ')}`
+        : first.label;
+    const overallWindow = {
+        ...first,
+        year: selectedYears && selectedYears.length === 1 ? selectedYears[0] : first.year,
+        years: selectedYears,
+        fromDate: first.fromDate,
+        toDate: last.toDate,
+        label: overallLabel
+    };
+
     job.running = true;
     job.startedAt = new Date().toISOString();
     job.finishedAt = null;
     job.source = source;
-    job.mode = window.mode;
-    job.year = window.year;
-    job.lookbackDays = window.lookbackDays;
-    job.fromDate = window.fromDate;
-    job.toDate = window.toDate;
-    job.windowLabel = window.label;
+    job.mode = first.mode;
+    job.year = selectedYears && selectedYears.length === 1 ? selectedYears[0] : first.year;
+    job.years = selectedYears;
+    job.lookbackDays = first.lookbackDays;
+    job.fromDate = first.fromDate;
+    job.toDate = last.toDate;
+    job.windowLabel = overallLabel;
     job.trigger = trigger || 'manual';
     job.error = null;
     job.stats = emptyStats();
     collected = emptyCollected();
     job.log = [];
-    logLine(`Queued scrape trigger=${job.trigger} source=${source} ${window.label} (${window.fromDate} → ${window.toDate})`);
+    logLine(`Queued scrape trigger=${job.trigger} source=${source} ${overallLabel} (${first.fromDate} → ${last.toDate})`);
 
     const finish = (report) => {
         if (typeof onComplete === 'function') {
@@ -1533,49 +1668,69 @@ function startResultsScrapeJob({ axios, cheerio, pool, source = 'all', lookbackD
         }
     };
 
-    runScrape({ axios, cheerio, pool, source, window }).then(() => {
-        finish({
-            success: !job.error,
-            status: job.error ? 'error' : 'success',
-            error: job.error,
-            trigger: job.trigger,
-            source: job.source,
-            mode: job.mode,
-            lookbackDays: job.lookbackDays,
-            year: job.year,
-            fromDate: job.fromDate,
-            toDate: job.toDate,
-            windowLabel: job.windowLabel,
-            startedAt: job.startedAt,
-            finishedAt: job.finishedAt,
-            stats: job.stats
-        });
+    const reportFromJob = (extra) => ({
+        success: !job.error,
+        status: job.error ? 'error' : 'success',
+        error: job.error,
+        trigger: job.trigger,
+        source: job.source,
+        mode: job.mode,
+        lookbackDays: job.lookbackDays,
+        year: job.year,
+        years: job.years,
+        fromDate: job.fromDate,
+        toDate: job.toDate,
+        windowLabel: job.windowLabel,
+        startedAt: job.startedAt,
+        finishedAt: job.finishedAt,
+        stats: job.stats,
+        ...extra
+    });
+
+    (async () => {
+        const errors = [];
+        for (let i = 0; i < windows.length; i++) {
+            const window = windows[i];
+            job.mode = window.mode;
+            job.year = window.year;
+            job.lookbackDays = window.lookbackDays;
+            job.fromDate = window.fromDate;
+            job.toDate = window.toDate;
+            if (windows.length > 1) {
+                logLine(`── ${window.label} (${i + 1} of ${windows.length}) ──`);
+            }
+            job.error = null;
+            const isLast = i === windows.length - 1;
+            await runScrape({
+                axios,
+                cheerio,
+                pool,
+                source,
+                window,
+                deferFinish: !isLast,
+                skipCleanup: !isLast
+            });
+            if (job.error) errors.push(`${window.label}: ${job.error}`);
+        }
+        job.windowLabel = overallLabel;
+        job.fromDate = first.fromDate;
+        job.toDate = last.toDate;
+        job.year = selectedYears && selectedYears.length === 1 ? selectedYears[0] : first.year;
+        job.years = selectedYears;
+        job.error = errors.length ? errors.join(' · ') : null;
+    })().then(() => {
+        finish(reportFromJob({}));
     }).catch(err => {
         job.running = false;
         job.finishedAt = new Date().toISOString();
         job.error = err.message;
         logLine(`Background scrape crash: ${err.message}`);
-        finish({
-            success: false,
-            status: 'error',
-            error: err.message,
-            trigger: job.trigger,
-            source: job.source,
-            mode: job.mode,
-            lookbackDays: job.lookbackDays,
-            year: job.year,
-            fromDate: job.fromDate,
-            toDate: job.toDate,
-            windowLabel: job.windowLabel,
-            startedAt: job.startedAt,
-            finishedAt: job.finishedAt,
-            stats: job.stats
-        });
+        finish(reportFromJob({ success: false, status: 'error', error: err.message }));
     });
 
     return {
         success: true,
-        window,
+        window: overallWindow,
         status: snapshotJob()
     };
 }
@@ -1608,6 +1763,45 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
         } catch (e) {
             console.error('race-results stats error:', e);
             res.json(emptyStatsSnapshot());
+        }
+    });
+
+    app.get('/api/race-results/event', async (req, res) => {
+        try {
+            const name = String((req.query && (req.query.name || req.query.regatta_name)) || '').trim();
+            const date = String((req.query && (req.query.date || req.query.regatta_date)) || '').trim().slice(0, 10);
+            if (!name) {
+                return res.status(400).json({ success: false, error: 'regatta name required' });
+            }
+            await ensureScrapedResultsTable(pool);
+            const params = ['%' + name + '%'];
+            let where = 'regatta_name ILIKE $1';
+            if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                params.push(date);
+                where += ` AND regatta_date = $${params.length}`;
+            }
+            params.push(500);
+            const result = await pool.query(`
+                ${scrapedResultsSelectSql()}
+                WHERE ${where}
+                ORDER BY category ASC, position ASC NULLS LAST, skipper ASC
+                LIMIT $${params.length}
+            `, params);
+            const rows = result.rows || [];
+            const first = rows[0] || {};
+            res.json({
+                success: true,
+                data: {
+                    resultType: 'regatta_event',
+                    regattaName: first.regatta_name || name,
+                    regattaDate: first.regatta_date || date || null,
+                    location: displayLocation(first.location),
+                    rows
+                }
+            });
+        } catch (e) {
+            console.error('race-results event error:', e);
+            res.status(500).json({ success: false, error: e.message });
         }
     });
 
@@ -1756,10 +1950,9 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                     events: row.events
                 });
             }
-            const currentYear = new Date().getUTCFullYear();
             res.json({
                 success: true,
-                yearOptions: Array.from({ length: 8 }, (_, i) => currentYear - i),
+                yearOptions: resultsYearOptions(),
                 bySource,
                 recent: recent.rows
             });
@@ -1773,6 +1966,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
         try {
             const source = (req.body && req.body.source) || 'all';
             const yearRaw = req.body && (req.body.year != null && req.body.year !== '' ? req.body.year : null);
+            const yearsRaw = req.body && req.body.years;
             const started = startResultsScrapeJob({
                 axios,
                 cheerio,
@@ -1780,6 +1974,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 source,
                 lookbackDays: req.body && req.body.lookbackDays,
                 year: yearRaw,
+                years: yearsRaw,
                 trigger: 'manual'
             });
             res.json({
@@ -1788,6 +1983,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 message: `Race-results scrape started (${source}, ${started.window.label}). Poll /api/race-results/status.`,
                 lookbackDays: started.window.lookbackDays,
                 year: started.window.year,
+                years: started.window.years || null,
                 mode: started.window.mode,
                 fromDate: started.window.fromDate,
                 toDate: started.window.toDate,
@@ -1844,13 +2040,15 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 const snapshot = await readRaceResultsStatsSnapshot(pool);
                 kickStaleStatsRefresh(pool, snapshot);
                 const row = snapshot || emptyStatsSnapshot();
-                const src = (row.bySource || []).map(x => `${x.source}: ${x.count}`).join(', ') || 'none';
+                const src = (row.bySource || []).map(x => {
+                    const events = x.events != null ? x.events : x.regattas;
+                    return events != null ? `${x.source}: ${events} events` : x.source;
+                }).join(', ') || 'none';
                 return ok({
                     success: true,
-                    reply: `Scraped results table **${TABLE}** has **${row.total_records}** rows, **${row.total_sailors}** sailors, **${row.total_regattas}** regattas. Dates ${row.earliest_date || '—'} to ${row.latest_date || '—'}. By source: ${src}.`,
+                    reply: `Scraped results have **${row.total_sailors}** sailors and **${row.total_regattas}** regattas. Dates ${row.earliest_date || '—'} to ${row.latest_date || '—'}. By source: ${src}.`,
                     data: {
                         resultType: 'summary',
-                        total_records: row.total_records,
                         sailors: row.total_sailors,
                         regattas: row.total_regattas,
                         earliest_date: row.earliest_date,
@@ -1985,12 +2183,12 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 });
             }
 
-            const selectSql = `
-                SELECT source, regatta_name, regatta_date::text, category, position, sail_number, boat_name, skipper, yacht_club, results, total_points, source_url
-                FROM ${TABLE}
-            `;
+            const selectSql = scrapedResultsSelectSql();
+            const sailorIntent = intent === 'sailor_search'
+                || (criteria.skipper && !criteria.regatta_name && !criteria.boat_name && !criteria.yacht_club && !criteria.sail_number && !criteria.position);
+            const rowLimit = sailorIntent ? 400 : 80;
             n++;
-            params.push(80);
+            params.push(rowLimit);
             let result = await pool.query(`
                 ${selectSql}
                 WHERE ${where}
@@ -2059,14 +2257,12 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                         criteria.year && `year ${criteria.year}`
                     ].filter(Boolean);
                     reply = bits.length
-                        ? `No rows matched ${bits.join(', ')}. The table has **${count}** scraped rows — try a different spelling, a sail number, or ask "sample" / "what's in the data".`
-                        : `No rows matched "${String(message).trim()}". The table has **${count}** scraped rows — try "sample", a sailor name from the data, or a regatta name.`;
+                        ? `No results matched ${bits.join(', ')}. Try a different spelling, a sail number, or ask "sample" / "what's in the data".`
+                        : `No results matched "${String(message).trim()}". Try "sample", a sailor name from the data, or a regatta name.`;
                 }
                 return ok({ success: true, reply, data: null });
             }
 
-            const sailorIntent = intent === 'sailor_search'
-                || (criteria.skipper && !criteria.regatta_name && !criteria.boat_name && !criteria.yacht_club && !criteria.sail_number && !criteria.position);
             if (sailorIntent) {
                 const card = buildSailorCard(result.rows, criteria.skipper || String(message).trim());
                 if (card && card.resultType === 'sailors_list') {
@@ -2077,16 +2273,10 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                     });
                 }
                 if (card && card.resultType === 'sailor_card') {
-                    const s = card.summary || {};
-                    const bits = [
-                        s.totalRegattas != null && `**Total number of regattas:** ${s.totalRegattas}`,
-                        s.bestRegattaPlace != null && `**Best regatta place:** ${s.bestRegattaPlace}`,
-                        s.bestRacePlace != null && `**Best race place:** ${s.bestRacePlace}`
-                    ].filter(Boolean);
-                    reply = `I found the following information:\n\n${bits.join('\n')}\n\nSee the tables below for achievements and race history.`;
+                    const sailorName = card.sailor && card.sailor.name ? card.sailor.name : 'that sailor';
                     return ok({
                         success: true,
-                        reply,
+                        reply: `Results for **${sailorName}**.`,
                         data: card
                     });
                 }
@@ -2121,7 +2311,10 @@ module.exports = {
     TABLE,
     SCRAPE_LOG_TABLE,
     STATS_SNAPSHOT_TABLE,
+    RESULTS_YEAR_MIN,
+    resultsYearOptions,
     resolveScrapeWindow,
+    resolveScrapeWindows,
     ensureScrapedResultsTable,
     ensureStatsSnapshotTable,
     ensureRaceResultsStatsIndexes,

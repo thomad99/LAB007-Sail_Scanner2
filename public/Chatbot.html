@@ -145,8 +145,145 @@
             font-weight: 600;
         }
 
+        .results-card table.data th.sortable {
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        .results-card table.data th.sortable:hover {
+            background: #e4edff;
+        }
+
+        .results-card table.data th.sortable.sort-asc::after {
+            content: '▲';
+            font-size: 0.75em;
+            margin-left: 4px;
+        }
+
+        .results-card table.data th.sortable.sort-desc::after {
+            content: '▼';
+            font-size: 0.75em;
+            margin-left: 4px;
+        }
+
+        .results-card table.data tbody tr:nth-child(even) {
+            background: #f7fbff;
+        }
+
+        .results-card .pos-link,
+        .results-card .name-link {
+            background: none;
+            border: none;
+            color: #0066cc;
+            font-weight: 700;
+            cursor: pointer;
+            text-decoration: underline;
+            padding: 0;
+            font-size: inherit;
+            text-align: left;
+        }
+
+        .results-card .pos-link:hover,
+        .results-card .name-link:hover {
+            color: #0088ff;
+        }
+
+        .results-card .sailor-title {
+            margin: 0 0 14px;
+            color: #0066cc;
+            font-size: 1.15em;
+            text-decoration: none;
+        }
+
+        .results-card .detail-panel {
+            display: none;
+            margin: 8px 0 12px;
+            padding: 12px;
+            background: #f4f8ff;
+            border: 1px solid #d5e4ff;
+            border-radius: 8px;
+            font-size: 0.88em;
+        }
+
+        .results-card .detail-panel.open {
+            display: block;
+        }
+
+        .results-card tr.detail-row > td {
+            padding: 0;
+            border-bottom: none;
+        }
+
+        .results-card .race-cells {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .results-card .race-cell {
+            background: #e8f1ff;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .results-card .race-cell.best {
+            background: #d8ffe8;
+            font-weight: 700;
+        }
+
         .results-card .section {
             margin-bottom: 18px;
+        }
+
+        .event-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 80;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: rgba(10, 16, 40, 0.55);
+        }
+
+        .event-modal.open {
+            display: flex;
+        }
+
+        .event-modal-card {
+            width: min(920px, 100%);
+            max-height: 86vh;
+            overflow: auto;
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px 22px;
+            color: #1a1a2e;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+        }
+
+        .event-modal-card h3 {
+            margin: 0 0 6px;
+            color: #0066cc;
+        }
+
+        .event-modal-meta {
+            margin: 0 0 14px;
+            color: #445;
+            font-size: 0.9em;
+        }
+
+        .event-modal-close {
+            float: right;
+            border: none;
+            background: #eef3ff;
+            color: #0066cc;
+            border-radius: 8px;
+            padding: 6px 10px;
+            cursor: pointer;
+            font-weight: 600;
         }
 
         .results-card .section:last-child {
@@ -327,15 +464,24 @@
             return d.toISOString().slice(0, 10);
         }
 
+        function oldestDataYear(data) {
+            if (data && data.earliest_year != null && data.earliest_year !== '') {
+                const y = parseInt(data.earliest_year, 10);
+                if (Number.isFinite(y) && y >= 1900 && y <= 2100) return String(y);
+            }
+            const raw = data && data.earliest_date;
+            if (raw == null || raw === '') return null;
+            const match = String(raw).match(/\b((?:19|20)\d{2})\b/);
+            return match ? match[1] : null;
+        }
+
         function formatChatWelcomeHtml(data) {
             const sailors = Number(data && data.total_sailors || 0).toLocaleString();
             const regattas = Number(data && data.total_regattas || 0).toLocaleString();
-            const year = (data && (data.earliest_year || (data.earliest_date && String(data.earliest_date).slice(0, 4)))) || null;
-            const yearBit = year ? ', going as far back as <strong>' + String(year) + '</strong>' : '';
-            const asOf = formatStatsAsOf(data);
-            const asOfBit = asOf ? ' (as of <strong>' + asOf + '</strong>)' : '';
+            const year = oldestDataYear(data);
+            const yearBit = year ? ', going as far back as <strong>' + year + '</strong>' : '';
             return 'Welcome to Love Sailing ChatBot — I have knowledge of <strong>' +
-                sailors + '</strong> sailors and <strong>' + regattas + '</strong> regattas' + yearBit + asOfBit + '.';
+                sailors + '</strong> sailors and <strong>' + regattas + '</strong> regattas' + yearBit + '.';
         }
 
         (async function setWelcome() {
@@ -367,6 +513,246 @@
                 .replace(/\n/g, '<br>');
         }
 
+        function displayLoc(value) {
+            const t = String(value == null ? '' : value).trim();
+            return t && t !== '—' ? t : '—';
+        }
+
+        function formatChatDateLocal(isoOrText) {
+            if (!isoOrText) return '—';
+            const s = String(isoOrText).slice(0, 10);
+            const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (!m) return String(isoOrText);
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            return parseInt(m[3], 10) + ' ' + months[parseInt(m[2], 10) - 1] + ' ' + m[1];
+        }
+
+        function sortPairsFromTable(table) {
+            const tbody = table.tBodies[0];
+            if (!tbody) return [];
+            const pairs = [];
+            Array.from(tbody.children).forEach(tr => {
+                if (tr.classList.contains('detail-row')) {
+                    if (pairs.length) pairs[pairs.length - 1].detail = tr;
+                    return;
+                }
+                pairs.push({ row: tr, detail: null });
+            });
+            return pairs;
+        }
+
+        function compareSortValues(a, b, type) {
+            if (type === 'num') {
+                const an = Number(a);
+                const bn = Number(b);
+                const aOk = Number.isFinite(an);
+                const bOk = Number.isFinite(bn);
+                if (aOk && bOk && an !== bn) return an - bn;
+                if (aOk !== bOk) return aOk ? -1 : 1;
+                return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+            }
+            return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+        }
+
+        function applyTableSort(table, key, dir) {
+            const tbody = table.tBodies[0];
+            if (!tbody) return;
+            const header = table.querySelector('th[data-sort="' + key + '"]');
+            const type = (header && header.getAttribute('data-type')) || 'text';
+            const pairs = sortPairsFromTable(table);
+            pairs.sort((x, y) => {
+                const av = x.row.getAttribute('data-' + key) || '';
+                const bv = y.row.getAttribute('data-' + key) || '';
+                const cmp = compareSortValues(av, bv, type);
+                return dir === 'desc' ? -cmp : cmp;
+            });
+            pairs.forEach(p => {
+                tbody.appendChild(p.row);
+                if (p.detail) tbody.appendChild(p.detail);
+            });
+            table.querySelectorAll('th.sortable').forEach(th => {
+                th.classList.toggle('sort-asc', th.getAttribute('data-sort') === key && dir === 'asc');
+                th.classList.toggle('sort-desc', th.getAttribute('data-sort') === key && dir === 'desc');
+            });
+            table.dataset.sortKey = key;
+            table.dataset.sortDir = dir;
+        }
+
+        function wireSortableTable(table, defaultKey, defaultDir) {
+            if (!table) return;
+            applyTableSort(table, defaultKey, defaultDir);
+            table.querySelectorAll('th.sortable').forEach(th => {
+                th.addEventListener('click', () => {
+                    const key = th.getAttribute('data-sort');
+                    const same = table.dataset.sortKey === key;
+                    const next = same
+                        ? (table.dataset.sortDir === 'asc' ? 'desc' : 'asc')
+                        : (th.getAttribute('data-default-dir') || 'asc');
+                    applyTableSort(table, key, next);
+                });
+            });
+        }
+
+        function renderDetailHtml(detail) {
+            if (!detail) return '<em>No detail available.</em>';
+            const cells = detail.resultsCells || [];
+            const best = cells.reduce((min, c) => (c.place != null && (min == null || c.place < min) ? c.place : min), null);
+            let html = '<div><strong>' + escapeHtml(detail.regatta_name || 'Regatta') + '</strong> · ' + escapeHtml(formatChatDateLocal(detail.regatta_date)) + '</div>';
+            html += '<div style="margin-top:6px;">Class: ' + escapeHtml(detail.category || '—') + ' · Overall place: ' + escapeHtml(String(detail.position ?? '—')) + ' · Points: ' + escapeHtml(String(detail.total_points ?? '—')) + '</div>';
+            html += '<div style="margin-top:6px;">Sail: ' + escapeHtml(detail.sail_number || '—') + ' · Boat: ' + escapeHtml(detail.boat_name || '—') + ' · Club: ' + escapeHtml(detail.yacht_club || '—') + '</div>';
+            if (cells.length) {
+                html += '<div class="race-cells">';
+                cells.forEach(c => {
+                    const cls = c.place != null && c.place === best ? 'race-cell best' : 'race-cell';
+                    html += '<span class="' + cls + '">R' + c.index + ': ' + escapeHtml(c.raw) + '</span>';
+                });
+                html += '</div>';
+            } else if (detail.results) {
+                html += '<div style="margin-top:8px;">Race scores: ' + escapeHtml(detail.results) + '</div>';
+            }
+            if (detail.source_url) {
+                html += '<div style="margin-top:8px;"><a href="' + escapeHtml(detail.source_url) + '" target="_blank" rel="noopener">Open source results</a></div>';
+            }
+            return html;
+        }
+
+        function renderSailorCardHtml(data) {
+            const sailor = data.sailor || {};
+            let html = '<h3 class="sailor-title">' + escapeHtml(sailor.name || 'Sailor') + '</h3>';
+            html += '<div class="section"><h3>Regatta results</h3><table class="data js-regatta-table"><thead><tr>' +
+                '<th class="sortable" data-sort="sortpos" data-type="num" data-default-dir="asc">Position</th>' +
+                '<th class="sortable" data-sort="sortname" data-type="text" data-default-dir="asc">Regatta Name</th>' +
+                '<th class="sortable" data-sort="sortdate" data-type="text" data-default-dir="desc">Date</th>' +
+                '<th class="sortable" data-sort="sortclass" data-type="text" data-default-dir="asc">Class</th>' +
+                '<th class="sortable" data-sort="sortloc" data-type="text" data-default-dir="asc">Location</th>' +
+                '</tr></thead><tbody>';
+            const regattaRows = data.regattaAchievements || [];
+            if (regattaRows.length) {
+                regattaRows.forEach(r => {
+                    const pos = r.position != null ? String(r.position) : '—';
+                    const loc = displayLoc(r.location);
+                    html += '<tr data-sortpos="' + escapeHtml(String(r.position ?? '')) +
+                        '" data-sortname="' + escapeHtml((r.regatta_name || '').toLowerCase()) +
+                        '" data-sortdate="' + escapeHtml(r.regatta_date_raw || r.regatta_date || '') +
+                        '" data-sortclass="' + escapeHtml((r.category || '').toLowerCase()) +
+                        '" data-sortloc="' + escapeHtml(loc.toLowerCase()) + '">' +
+                        '<td><button type="button" class="pos-link" data-detail="' + escapeHtml(r.detailId) + '">' + escapeHtml(pos) + '</button></td>' +
+                        '<td><button type="button" class="name-link" data-regatta-name="' + escapeHtml(r.regatta_name || '') + '" data-regatta-date="' + escapeHtml(r.regatta_date_raw || '') + '">' + escapeHtml(r.regatta_name || '') + '</button></td>' +
+                        '<td>' + escapeHtml(r.regatta_date || '') + '</td>' +
+                        '<td>' + escapeHtml(r.category || '') + '</td>' +
+                        '<td>' + escapeHtml(loc) + '</td></tr>' +
+                        '<tr class="detail-row"><td colspan="5"><div class="detail-panel" data-detail-panel="' + escapeHtml(r.detailId) + '"></div></td></tr>';
+                });
+            } else {
+                html += '<tr><td colspan="5">—</td></tr>';
+            }
+            html += '</tbody></table></div>';
+            html += '<div class="section"><h3>Best Race Achievements</h3><table class="data"><thead><tr><th>Race place</th><th>Race #</th><th>Regatta Name</th><th>Date</th></tr></thead><tbody>';
+            const raceRows = data.raceAchievements || [];
+            if (raceRows.length) {
+                raceRows.forEach(r => {
+                    html += '<tr>' +
+                        '<td><button type="button" class="pos-link" data-detail="' + escapeHtml(r.detailId) + '">' + escapeHtml(String(r.racePlace)) + '</button></td>' +
+                        '<td>' + escapeHtml(String(r.raceIndex)) + (r.throwout ? ' (TO)' : '') + '</td>' +
+                        '<td>' + escapeHtml(r.regatta_name || '') + '</td>' +
+                        '<td>' + escapeHtml(r.regatta_date || '') + '</td></tr>' +
+                        '<tr class="detail-row"><td colspan="4"><div class="detail-panel" data-detail-panel="' + escapeHtml(r.detailId) + '"></div></td></tr>';
+                });
+            } else {
+                html += '<tr><td colspan="4">No per-race scores available yet.</td></tr>';
+            }
+            html += '</tbody></table></div>';
+            return html;
+        }
+
+        function wireSailorCard(cardEl, data) {
+            const details = data.details || {};
+            cardEl.querySelectorAll('.pos-link').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const id = btn.getAttribute('data-detail');
+                    let panel = btn.closest('tr') && btn.closest('tr').nextElementSibling
+                        ? btn.closest('tr').nextElementSibling.querySelector('.detail-panel[data-detail-panel="' + id + '"]')
+                        : null;
+                    if (!panel) panel = cardEl.querySelector('.detail-panel[data-detail-panel="' + id + '"]');
+                    if (!panel) return;
+                    const opening = !panel.classList.contains('open');
+                    cardEl.querySelectorAll('.detail-panel.open').forEach(p => {
+                        if (p !== panel) p.classList.remove('open');
+                    });
+                    if (opening) {
+                        panel.innerHTML = renderDetailHtml(details[id]);
+                        panel.classList.add('open');
+                    } else {
+                        panel.classList.remove('open');
+                    }
+                });
+            });
+            cardEl.querySelectorAll('.name-link').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    openRegattaEventCard(btn.getAttribute('data-regatta-name'), btn.getAttribute('data-regatta-date'));
+                });
+            });
+            wireSortableTable(cardEl.querySelector('.js-regatta-table'), 'sortdate', 'desc');
+        }
+
+        function ensureEventModal() {
+            let modal = document.getElementById('regattaEventModal');
+            if (modal) return modal;
+            modal = document.createElement('div');
+            modal.id = 'regattaEventModal';
+            modal.className = 'event-modal';
+            modal.innerHTML = '<div class="event-modal-card results-card" role="dialog" aria-modal="true"><button type="button" class="event-modal-close">Close</button><div class="js-event-body"></div></div>';
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.classList.remove('open');
+            });
+            modal.querySelector('.event-modal-close').addEventListener('click', () => modal.classList.remove('open'));
+            document.body.appendChild(modal);
+            return modal;
+        }
+
+        function renderEventResultsHtml(payload) {
+            const rows = (payload && payload.rows) || [];
+            const title = (payload && payload.regattaName) || 'Regatta';
+            const date = formatChatDateLocal(payload && payload.regattaDate);
+            const loc = displayLoc(payload && payload.location);
+            let html = '<h3>' + escapeHtml(title) + '</h3><p class="event-modal-meta">' +
+                escapeHtml(date) + ' · ' + escapeHtml(loc) + ' · ' + rows.length +
+                ' result' + (rows.length === 1 ? '' : 's') + '</p>';
+            html += '<table class="data"><thead><tr><th>Position</th><th>Sailor</th><th>Club</th><th>Class</th><th>Sail</th></tr></thead><tbody>';
+            if (!rows.length) {
+                html += '<tr><td colspan="5">No results found for this regatta.</td></tr>';
+            } else {
+                rows.forEach(r => {
+                    html += '<tr><td>' + escapeHtml(String(r.position ?? '—')) + '</td><td>' +
+                        escapeHtml(r.skipper || '') + '</td><td>' +
+                        escapeHtml(r.yacht_club || '') + '</td><td>' +
+                        escapeHtml(r.category || '') + '</td><td>' +
+                        escapeHtml(r.sail_number || '') + '</td></tr>';
+                });
+            }
+            html += '</tbody></table>';
+            return html;
+        }
+
+        async function openRegattaEventCard(name, date) {
+            if (!name) return;
+            const modal = ensureEventModal();
+            const body = modal.querySelector('.js-event-body');
+            body.innerHTML = '<h3>' + escapeHtml(name) + '</h3><p class="event-modal-meta">Loading event results…</p>';
+            modal.classList.add('open');
+            try {
+                const params = new URLSearchParams({ name });
+                if (date) params.set('date', date);
+                const res = await fetch('/api/race-results/event?' + params.toString());
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Failed to load event');
+                body.innerHTML = renderEventResultsHtml(data.data || {});
+            } catch (err) {
+                body.innerHTML = '<h3>' + escapeHtml(name) + '</h3><p class="event-modal-meta">' +
+                    escapeHtml(err.message || 'Could not load event results.') + '</p>';
+            }
+        }
+
         function renderResultsCard(data) {
             const rt = data.resultType || 'race_history';
             const hasList = (data.list && data.list.length);
@@ -384,24 +770,7 @@
                 });
                 html += '</tbody></table></div>';
             } else if (rt === 'sailor_card' && data.sailor) {
-                const sailor = data.sailor || {};
-                const summary = data.summary || {};
-                html += '<div class="section basic-info"><h3>Sailor</h3><table>' +
-                    '<tr><td>Name</td><td>' + escapeHtml(sailor.name || '—') + '</td></tr>' +
-                    '<tr><td>Club</td><td>' + escapeHtml(sailor.club || '—') + '</td></tr>' +
-                    '<tr><td>Regattas</td><td>' + escapeHtml(String(summary.totalRegattas ?? '—')) + '</td></tr>' +
-                    '</table></div>';
-                const hist = data.history || data.regattaAchievements || [];
-                if (hist.length) {
-                    html += '<div class="section"><h3>Recent results</h3><table class="data"><thead><tr><th>Pos</th><th>Regatta</th><th>Date</th><th>Class</th></tr></thead><tbody>';
-                    hist.slice(0, 12).forEach(r => {
-                        html += '<tr><td>' + escapeHtml(String(r.position ?? '—')) + '</td><td>' +
-                            escapeHtml(r.regatta_name || '') + '</td><td>' +
-                            escapeHtml(r.regatta_date || '') + '</td><td>' +
-                            escapeHtml(r.category || '') + '</td></tr>';
-                    });
-                    html += '</tbody></table></div>';
-                }
+                html += renderSailorCardHtml(data);
             } else if (rt === 'rows' && hasRows) {
                 html += '<div class="section"><table class="data"><thead><tr><th>Pos</th><th>Sailor</th><th>Regatta</th><th>Date</th></tr></thead><tbody>';
                 data.rows.slice(0, 20).forEach(r => {
@@ -413,7 +782,6 @@
                 html += '</tbody></table></div>';
             } else if (rt === 'summary') {
                 html += '<div class="section basic-info"><h3>Database</h3><table>' +
-                    '<tr><td>Rows</td><td>' + escapeHtml(String(data.total_records ?? '—')) + '</td></tr>' +
                     '<tr><td>Sailors</td><td>' + escapeHtml(String(data.sailors ?? data.total_sailors ?? '—')) + '</td></tr>' +
                     '<tr><td>Regattas</td><td>' + escapeHtml(String(data.regattas ?? data.total_regattas ?? '—')) + '</td></tr>' +
                     '</table></div>';
@@ -483,6 +851,9 @@
                     cols = ['regatta', 'dates', 'sailor_count'];
                     rows = [{ regatta: data.regattaName || '', dates: (data.dates || []).join('; '), sailor_count: data.sailorCount ?? '' }];
                 } else if (!rows.length) return;
+            } else if (data.resultType === 'sailor_card') {
+                cols = ['position', 'regatta_name', 'regatta_date', 'category', 'location'];
+                rows = data.regattaAchievements || data.history || [];
             } else if (data.list && data.list.length) {
                 const hasCount = data.list.some(r => r.count != null);
                 cols = hasCount ? ['name', 'count'] : ['name'];
@@ -536,6 +907,7 @@
                     card.innerHTML = cardHtml;
                     const btn = card.querySelector('.js-download-results');
                     if (btn) btn.addEventListener('click', () => doDownload(data));
+                    if (data.resultType === 'sailor_card') wireSailorCard(card, data);
                     div.appendChild(card);
                 }
             }

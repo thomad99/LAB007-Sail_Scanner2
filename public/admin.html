@@ -1056,11 +1056,36 @@
             font-weight: 600;
         }
 
+        .sailor-results-card table.data th.sortable {
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        .sailor-results-card table.data th.sortable:hover {
+            background: #e4edff;
+        }
+
+        .sailor-results-card table.data th.sortable.sort-asc::after,
+        .sailor-results-card table.data th.sortable.sort-desc::after {
+            font-size: 0.75em;
+            margin-left: 4px;
+        }
+
+        .sailor-results-card table.data th.sortable.sort-asc::after {
+            content: '▲';
+        }
+
+        .sailor-results-card table.data th.sortable.sort-desc::after {
+            content: '▼';
+        }
+
         .sailor-results-card table.data tbody tr:nth-child(even) {
             background: #f7fbff;
         }
 
-        .sailor-results-card .pos-link {
+        .sailor-results-card .pos-link,
+        .sailor-results-card .name-link {
             background: none;
             border: none;
             color: #0066cc;
@@ -1069,10 +1094,67 @@
             text-decoration: underline;
             padding: 0;
             font-size: inherit;
+            text-align: left;
         }
 
-        .sailor-results-card .pos-link:hover {
+        .sailor-results-card .pos-link:hover,
+        .sailor-results-card .name-link:hover {
             color: #0088ff;
+        }
+
+        .sailor-results-card .sailor-title {
+            margin: 0 0 14px;
+            color: #0066cc;
+            font-size: 1.15em;
+            text-decoration: none;
+        }
+
+        .event-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 80;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: rgba(10, 16, 40, 0.55);
+        }
+
+        .event-modal.open {
+            display: flex;
+        }
+
+        .event-modal-card {
+            width: min(920px, 100%);
+            max-height: 86vh;
+            overflow: auto;
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px 22px;
+            color: #1a1a2e;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+        }
+
+        .event-modal-card h3 {
+            margin: 0 0 6px;
+            color: #0066cc;
+        }
+
+        .event-modal-meta {
+            margin: 0 0 14px;
+            color: #445;
+            font-size: 0.9em;
+        }
+
+        .event-modal-close {
+            float: right;
+            border: none;
+            background: #eef3ff;
+            color: #0066cc;
+            border-radius: 8px;
+            padding: 6px 10px;
+            cursor: pointer;
+            font-weight: 600;
         }
 
         .sailor-results-card .detail-panel {
@@ -1182,6 +1264,29 @@
             display: flex;
             flex-wrap: wrap;
             gap: 8px;
+        }
+
+        #resultsYearWrap {
+            flex: 1 1 100%;
+        }
+
+        .year-picker {
+            margin-top: 8px;
+        }
+
+        .year-picker .year-chip {
+            user-select: none;
+        }
+
+        .year-picker-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .year-picker-actions button {
+            min-width: auto;
         }
 
         .year-chip {
@@ -1320,6 +1425,19 @@
             margin-top: 12px;
         }
 
+        .page-top-dashboard {
+            width: 100%;
+            text-align: left;
+            margin: 8px 0 0;
+        }
+        .page-top-dashboard .stats-container {
+            margin-top: 16px;
+        }
+        body.chat-tab-active .page-top-dashboard,
+        body.photos-tab-active .page-top-dashboard {
+            display: none;
+        }
+
         .admin-tabs {
             display: flex;
             justify-content: center;
@@ -1436,6 +1554,12 @@
 
     <div class="content">
         <h1>Admin Dashboard</h1>
+
+        <section class="admin-tile page-top-dashboard" id="resultsDashTile">
+            <h2>Results Dashboard</h2>
+            <p class="tile-sub">Totals from scraped ClubSpot + Regatta Network race results.</p>
+            <div id="raceResultsStats" class="stats-container"><div class="loading">Loading scraped-results totals…</div></div>
+        </section>
 
         <div class="admin-tabs" role="tablist">
             <button type="button" class="admin-tab active" id="tabBtnDates" onclick="showAdminTab('dates')">Regatta Dates</button>
@@ -1564,12 +1688,6 @@
 
         <div id="tab-results" class="tab-panel">
         <div class="results-tiles" id="raceResultsSection">
-            <section class="admin-tile" id="resultsDashTile">
-                <h2>Results Dashboard</h2>
-                <p class="tile-sub">Totals from scraped ClubSpot + Regatta Network race results.</p>
-                <div id="raceResultsStats" class="stats-container"><div class="loading">Loading scraped-results totals…</div></div>
-            </section>
-
             <section class="admin-tile" id="resultsScrapeTile">
                 <h2>Run a Scrape</h2>
                 <p class="tile-sub">Collect results now by rolling window or calendar year.</p>
@@ -1595,8 +1713,12 @@
                         </select>
                     </div>
                     <div class="scrape-source-select" id="resultsYearWrap" style="display: none;">
-                        <label for="resultsYearSelect">Year:</label>
-                        <select id="resultsYearSelect" onchange="localStorage.setItem('raceResultsYear', this.value)"></select>
+                        <label>Years (select one or more):</label>
+                        <div id="resultsYearSelect" class="year-chip-row year-picker" role="group" aria-label="Select years to scrape"></div>
+                        <div class="year-picker-actions">
+                            <button type="button" class="filter-button" onclick="selectAllResultsYears()">All years</button>
+                            <button type="button" class="filter-button clear" onclick="resetResultsYearsToCurrent()">This year</button>
+                        </div>
                     </div>
                     <div class="scrape-source-select">
                         <label for="resultsSourceSelect">Select Source:</label>
@@ -1701,6 +1823,7 @@
     <script>
         function showAdminTab(name) {
             document.body.classList.toggle('chat-tab-active', name === 'chat');
+            document.body.classList.toggle('photos-tab-active', name === 'photos');
 
             const tab = ['dates', 'results', 'chat', 'photos'].includes(name) ? name : 'dates';
             document.getElementById('tab-dates').classList.toggle('active', tab === 'dates');
@@ -1740,40 +1863,119 @@
             refreshYearChipSelection();
         }
 
-        function populateResultsYearSelect(years) {
-            const sel = document.getElementById('resultsYearSelect');
-            if (!sel) return;
-            const opts = (years && years.length) ? years : Array.from({ length: 8 }, (_, i) => new Date().getFullYear() - i);
-            const saved = localStorage.getItem('raceResultsYear');
-            sel.innerHTML = opts.map(y => `<option value="${y}">${y}</option>`).join('');
-            if (saved && opts.map(String).includes(String(saved))) sel.value = saved;
-            else if (opts.length) sel.value = String(opts[0]);
+        function resultsYearRange() {
+            const current = new Date().getFullYear();
+            const years = [];
+            for (let y = current; y >= 2020; y--) years.push(y);
+            return years;
         }
 
-        function selectResultsYear(year, source) {
-            const modeSel = document.getElementById('resultsModeSelect');
-            modeSel.value = 'year';
-            onResultsModeChange();
-            const yearSel = document.getElementById('resultsYearSelect');
-            if (yearSel) {
-                if (![...yearSel.options].some(o => o.value === String(year))) {
-                    yearSel.insertAdjacentHTML('afterbegin', `<option value="${year}">${year}</option>`);
+        function readSavedResultsYears() {
+            const current = String(new Date().getFullYear());
+            try {
+                const raw = localStorage.getItem('raceResultsYears');
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed) && parsed.length) {
+                        return parsed.map(y => parseInt(y, 10)).filter(y => Number.isFinite(y));
+                    }
                 }
-                yearSel.value = String(year);
-                localStorage.setItem('raceResultsYear', String(year));
+            } catch (e) { /* ignore bad JSON */ }
+            const legacy = localStorage.getItem('raceResultsYear');
+            if (legacy && /^\d{4}$/.test(legacy)) return [parseInt(legacy, 10)];
+            return [parseInt(current, 10)];
+        }
+
+        function persistResultsYears(years) {
+            const list = (years || []).map(y => parseInt(y, 10)).filter(Number.isFinite);
+            localStorage.setItem('raceResultsYears', JSON.stringify(list));
+            if (list.length === 1) localStorage.setItem('raceResultsYear', String(list[0]));
+        }
+
+        function getSelectedResultsYears() {
+            return [...document.querySelectorAll('#resultsYearSelect .year-chip.selected')]
+                .map(el => parseInt(el.dataset.year, 10))
+                .filter(Number.isFinite)
+                .sort((a, b) => b - a);
+        }
+
+        function setSelectedResultsYears(years) {
+            const set = new Set((years || []).map(String));
+            document.querySelectorAll('#resultsYearSelect .year-chip').forEach(chip => {
+                const on = set.has(String(chip.dataset.year));
+                chip.classList.toggle('selected', on);
+                chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
+            persistResultsYears(getSelectedResultsYears());
+            refreshYearChipSelection();
+        }
+
+        function populateResultsYearSelect(years) {
+            const box = document.getElementById('resultsYearSelect');
+            if (!box) return;
+            const allowed = new Set(resultsYearRange().map(String));
+            const opts = (years && years.length ? years : resultsYearRange())
+                .map(y => parseInt(y, 10))
+                .filter(y => Number.isFinite(y) && allowed.has(String(y)));
+            const unique = [...new Set(opts.length ? opts : resultsYearRange())].sort((a, b) => b - a);
+            // Always include the full 2020–now range even if the snapshot omitted years.
+            resultsYearRange().forEach(y => {
+                if (!unique.includes(y)) unique.push(y);
+            });
+            unique.sort((a, b) => b - a);
+            const saved = readSavedResultsYears().filter(y => unique.includes(y));
+            const selected = saved.length ? saved : [unique[0]];
+            box.innerHTML = unique.map(y => {
+                const on = selected.includes(y);
+                return `<button type="button" class="year-chip${on ? ' selected' : ''}" data-year="${y}" aria-pressed="${on ? 'true' : 'false'}" onclick="toggleResultsYear(${y})">${y}</button>`;
+            }).join('');
+            persistResultsYears(getSelectedResultsYears());
+            refreshYearChipSelection();
+        }
+
+        function toggleResultsYear(year, source) {
+            const modeSel = document.getElementById('resultsModeSelect');
+            if (modeSel && modeSel.value !== 'year') {
+                modeSel.value = 'year';
+                onResultsModeChange();
             }
             if (source === 'clubspot' || source === 'regattanetwork') {
                 document.getElementById('resultsSourceSelect').value = source;
             }
-            refreshYearChipSelection();
+            const current = getSelectedResultsYears();
+            const has = current.includes(year);
+            const next = has ? current.filter(y => y !== year) : current.concat(year);
+            setSelectedResultsYears(next.length ? next : [year]);
+        }
+
+        function selectResultsYear(year, source) {
+            toggleResultsYear(year, source);
+        }
+
+        function selectAllResultsYears() {
+            const modeSel = document.getElementById('resultsModeSelect');
+            if (modeSel) {
+                modeSel.value = 'year';
+                onResultsModeChange();
+            }
+            setSelectedResultsYears(resultsYearRange());
+        }
+
+        function resetResultsYearsToCurrent() {
+            const modeSel = document.getElementById('resultsModeSelect');
+            if (modeSel) {
+                modeSel.value = 'year';
+                onResultsModeChange();
+            }
+            setSelectedResultsYears([new Date().getFullYear()]);
         }
 
         function refreshYearChipSelection() {
             const mode = document.getElementById('resultsModeSelect')?.value;
-            const year = document.getElementById('resultsYearSelect')?.value;
-            document.querySelectorAll('.year-chip').forEach(chip => {
-                const selected = mode === 'year' && String(chip.dataset.year) === String(year);
-                chip.classList.toggle('selected', selected);
+            const selected = new Set(getSelectedResultsYears().map(String));
+            document.querySelectorAll('#resultsScrapeHistory .year-chip').forEach(chip => {
+                const on = mode === 'year' && selected.has(String(chip.dataset.year));
+                chip.classList.toggle('selected', on);
             });
         }
 
@@ -1797,13 +1999,14 @@
                     (info.yearsDone || []).forEach(y => { doneMap[y.year] = y; });
                     const dataMap = {};
                     (info.dataYears || []).forEach(y => { dataMap[y.year] = y; });
-                    const yearSet = new Set([
-                        ...(info.yearsDone || []).map(y => y.year),
-                        ...(info.dataYears || []).map(y => y.year)
-                    ]);
-                    // Always show recent year options so empty history still has clickable years
-                    (data.yearOptions || []).slice(0, 6).forEach(y => yearSet.add(y));
-                    const years = Array.from(yearSet).filter(Boolean).sort((a, b) => b - a);
+                    const yearSet = new Set(resultsYearRange());
+                    (data.yearOptions || []).forEach(y => yearSet.add(y));
+                    (info.yearsDone || []).forEach(y => yearSet.add(y.year));
+                    (info.dataYears || []).forEach(y => yearSet.add(y.year));
+                    const years = Array.from(yearSet)
+                        .map(y => parseInt(y, 10))
+                        .filter(y => Number.isFinite(y) && y >= 2020)
+                        .sort((a, b) => b - a);
 
                     html += `<div class="scrape-history-source"><h4>${src.label}</h4>`;
                     if (!years.length) {
@@ -1817,12 +2020,12 @@
                             if (done) classes.push('done');
                             else if (hasData) classes.push('has-data');
                             const mark = done ? '<span class="chip-mark">✓</span>' : '';
-                            const title = done
+                                const title = done
                                 ? `${year} year scrape completed`
                                 : hasData
-                                    ? `${year} has ${dataMap[year].events} events / ${dataMap[year].rows} rows in DB (year scrape not logged yet)`
+                                    ? `${year} has ${dataMap[year].events} events in DB (year scrape not logged yet)`
                                     : `Select ${year} to scrape`;
-                            html += `<button type="button" class="${classes.join(' ')}" data-year="${year}" title="${escapeHtml(title)}" onclick="selectResultsYear(${year}, '${src.id}')">${mark}${year}</button>`;
+                            html += `<button type="button" class="${classes.join(' ')}" data-year="${year}" title="${escapeHtml(title)}" onclick="toggleResultsYear(${year}, '${src.id}')">${mark}${year}</button>`;
                         });
                         html += '</div>';
                     }
@@ -2604,15 +2807,9 @@
             try {
                 const data = await fetchJsonWithTimeout('/api/race-results/stats', {}, 20000);
                 if (!data.success) throw new Error(data.error || 'Failed');
-                const src = (data.bySource || []).map(s => `${s.source}: ${s.count} rows / ${s.events} events`).join(' · ') || 'No rows yet';
                 const asOf = formatStatsAsOf(data);
                 const asOfLabel = asOf ? `Daily snapshot as of ${asOf}` : 'Daily snapshot pending';
                 box.innerHTML = `
-                    <div class="stat-card clickable" onclick="exportRaceResultsCsv('rows')" title="Download all scraped result rows as CSV">
-                        <h3>Scraped Rows</h3>
-                        <div class="value">${Number(data.total_records || 0).toLocaleString()}</div>
-                        <div class="label">${src}</div>
-                    </div>
                     <div class="stat-card clickable" onclick="exportRaceResultsCsv('sailors')" title="Download distinct sailors as CSV">
                         <h3>Sailors</h3>
                         <div class="value">${Number(data.total_sailors || 0).toLocaleString()}</div>
@@ -2718,8 +2915,12 @@
                 : jobSource === 'clubspot'
                     ? 'ClubSpot only'
                     : 'Both sources';
+            const yearsLabel = Array.isArray(data.years) && data.years.length
+                ? `Years ${data.years.join(', ')}`
+                : (data.year ? `Year ${data.year}` : '');
             const windowLabel = data.windowLabel
-                || (data.year ? `Year ${data.year}` : `Last ${escapeHtml(String(lookback))} days`);
+                || yearsLabel
+                || `Last ${escapeHtml(String(lookback))} days`;
 
             showResultsStatus(
                 `<div class="results-progress-header">
@@ -2768,12 +2969,17 @@
             const source = document.getElementById('resultsSourceSelect').value;
             const mode = document.getElementById('resultsModeSelect').value;
             const lookbackDays = parseInt(document.getElementById('resultsLookbackSelect').value, 10) || 60;
-            const year = parseInt(document.getElementById('resultsYearSelect').value, 10);
+            const years = getSelectedResultsYears();
             const body = { source };
             let windowLabel = `Last ${lookbackDays} days`;
-            if (mode === 'year' && year) {
-                body.year = year;
-                windowLabel = `Year ${year}`;
+            if (mode === 'year') {
+                if (!years.length) {
+                    showResultsStatus('Select at least one year to scrape.', 'error');
+                    return;
+                }
+                body.years = years.slice().sort((a, b) => a - b);
+                if (years.length === 1) body.year = years[0];
+                windowLabel = years.length === 1 ? `Year ${years[0]}` : `Years ${body.years.join(', ')}`;
             } else {
                 body.lookbackDays = lookbackDays;
             }
@@ -2783,6 +2989,7 @@
                     running: true,
                     lookbackDays: body.lookbackDays || null,
                     year: body.year || null,
+                    years: body.years || null,
                     windowLabel,
                     source,
                     stats: {}
@@ -2805,6 +3012,7 @@
                         running: false,
                         lookbackDays: body.lookbackDays || null,
                         year: body.year || null,
+                        years: body.years || null,
                         windowLabel,
                         source,
                         stats: {}
@@ -2876,16 +3084,25 @@
             return d.toISOString().slice(0, 10);
         }
 
+        function oldestDataYear(data) {
+            if (data && data.earliest_year != null && data.earliest_year !== '') {
+                const y = parseInt(data.earliest_year, 10);
+                if (Number.isFinite(y) && y >= 1900 && y <= 2100) return String(y);
+            }
+            const raw = data && data.earliest_date;
+            if (raw == null || raw === '') return null;
+            const match = String(raw).match(/\b((?:19|20)\d{2})\b/);
+            return match ? match[1] : null;
+        }
+
         function formatChatWelcomeHtml(data) {
             const sailors = Number(data && data.total_sailors || 0).toLocaleString();
             const regattas = Number(data && data.total_regattas || 0).toLocaleString();
-            const year = (data && (data.earliest_year || (data.earliest_date && String(data.earliest_date).slice(0, 4)))) || null;
+            const year = oldestDataYear(data);
             const yearBit = year
-                ? `, going as far back as <strong>${escapeHtml(String(year))}</strong>`
+                ? `, going as far back as <strong>${escapeHtml(year)}</strong>`
                 : '';
-            const asOf = formatStatsAsOf(data);
-            const asOfBit = asOf ? ` (as of <strong>${escapeHtml(asOf)}</strong>)` : '';
-            return `Welcome to Love Sailing ChatBot — I have knowledge of <strong>${sailors}</strong> sailors and <strong>${regattas}</strong> regattas${yearBit}${asOfBit}.`;
+            return `Welcome to Love Sailing ChatBot — I have knowledge of <strong>${sailors}</strong> sailors and <strong>${regattas}</strong> regattas${yearBit}.`;
         }
 
         async function ensureChatWelcome() {
@@ -2918,39 +3135,113 @@
                 .replace(/\n/g, '<br>');
         }
 
+        function displayLoc(value) {
+            const t = String(value == null ? '' : value).trim();
+            return t && t !== '—' ? t : '—';
+        }
+
+        function sortPairsFromTable(table) {
+            const tbody = table.tBodies[0];
+            if (!tbody) return [];
+            const pairs = [];
+            Array.from(tbody.children).forEach(tr => {
+                if (tr.classList.contains('detail-row')) {
+                    if (pairs.length) pairs[pairs.length - 1].detail = tr;
+                    return;
+                }
+                pairs.push({ row: tr, detail: null });
+            });
+            return pairs;
+        }
+
+        function compareSortValues(a, b, type) {
+            if (type === 'num') {
+                const an = Number(a);
+                const bn = Number(b);
+                const aOk = Number.isFinite(an);
+                const bOk = Number.isFinite(bn);
+                if (aOk && bOk && an !== bn) return an - bn;
+                if (aOk !== bOk) return aOk ? -1 : 1;
+                return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+            }
+            return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+        }
+
+        function applyTableSort(table, key, dir) {
+            const tbody = table.tBodies[0];
+            if (!tbody) return;
+            const pairs = sortPairsFromTable(table);
+            const type = (table.querySelector(`th[data-sort="${key}"]`) || {}).getAttribute
+                ? (table.querySelector(`th[data-sort="${key}"]`).getAttribute('data-type') || 'text')
+                : 'text';
+            pairs.sort((x, y) => {
+                const av = x.row.getAttribute('data-' + key) || '';
+                const bv = y.row.getAttribute('data-' + key) || '';
+                const cmp = compareSortValues(av, bv, type);
+                return dir === 'desc' ? -cmp : cmp;
+            });
+            pairs.forEach(p => {
+                tbody.appendChild(p.row);
+                if (p.detail) tbody.appendChild(p.detail);
+            });
+            table.querySelectorAll('th.sortable').forEach(th => {
+                th.classList.toggle('sort-asc', th.getAttribute('data-sort') === key && dir === 'asc');
+                th.classList.toggle('sort-desc', th.getAttribute('data-sort') === key && dir === 'desc');
+            });
+            table.dataset.sortKey = key;
+            table.dataset.sortDir = dir;
+        }
+
+        function wireSortableTable(table, defaultKey, defaultDir) {
+            if (!table) return;
+            applyTableSort(table, defaultKey, defaultDir);
+            table.querySelectorAll('th.sortable').forEach(th => {
+                th.addEventListener('click', () => {
+                    const key = th.getAttribute('data-sort');
+                    const same = table.dataset.sortKey === key;
+                    const dir = same && table.dataset.sortDir === 'desc' ? 'asc' : 'desc';
+                    const next = same
+                        ? (table.dataset.sortDir === 'asc' ? 'desc' : 'asc')
+                        : (th.getAttribute('data-default-dir') || 'asc');
+                    applyTableSort(table, key, next);
+                });
+            });
+        }
+
         function renderSailorCard(data) {
             if (!data || data.resultType !== 'sailor_card') return '';
             const sailor = data.sailor || {};
-            const summary = data.summary || {};
             const details = data.details || {};
             let html = '';
+            html += `<h3 class="sailor-title">${escapeHtml(sailor.name || 'Sailor')}</h3>`;
 
-            html += `<div class="section"><h3>Sailor Info</h3><table class="info-table">
-                <tr><td>Name</td><td>${escapeHtml(sailor.name || '—')}</td></tr>
-                <tr><td>Club</td><td>${escapeHtml(sailor.club || 'Unknown')}</td></tr>
-                <tr><td>Regattas</td><td>${escapeHtml(String(summary.totalRegattas ?? '—'))}</td></tr>
-                <tr><td>Best regatta place</td><td>${escapeHtml(summary.bestRegattaPlace != null ? String(summary.bestRegattaPlace) : '—')}</td></tr>
-                <tr><td>Best race place</td><td>${escapeHtml(summary.bestRacePlace != null ? String(summary.bestRacePlace) : '—')}</td></tr>
-            </table></div>`;
-
-            html += '<div class="section"><h3>Regatta Achievements</h3><table class="data"><thead><tr><th>Position</th><th>Regatta Name</th><th>Date</th><th>Class</th></tr></thead><tbody>';
+            html += '<div class="section"><h3>Regatta results</h3><table class="data js-regatta-table"><thead><tr>' +
+                '<th class="sortable" data-sort="sortpos" data-type="num" data-default-dir="asc">Position</th>' +
+                '<th class="sortable" data-sort="sortname" data-type="text" data-default-dir="asc">Regatta Name</th>' +
+                '<th class="sortable" data-sort="sortdate" data-type="text" data-default-dir="desc">Date</th>' +
+                '<th class="sortable" data-sort="sortclass" data-type="text" data-default-dir="asc">Class</th>' +
+                '<th class="sortable" data-sort="sortloc" data-type="text" data-default-dir="asc">Location</th>' +
+                '</tr></thead><tbody>';
             const regattaRows = data.regattaAchievements || [];
             if (regattaRows.length) {
                 regattaRows.forEach(r => {
-                    html += `<tr>
-                        <td><button type="button" class="pos-link" data-detail="${escapeHtml(r.detailId)}">${escapeHtml(String(r.position))}</button></td>
-                        <td>${escapeHtml(r.regatta_name || '')}</td>
+                    const pos = r.position != null ? String(r.position) : '—';
+                    const loc = displayLoc(r.location);
+                    html += `<tr data-sortpos="${escapeHtml(String(r.position ?? ''))}" data-sortname="${escapeHtml((r.regatta_name || '').toLowerCase())}" data-sortdate="${escapeHtml(r.regatta_date_raw || r.regatta_date || '')}" data-sortclass="${escapeHtml((r.category || '').toLowerCase())}" data-sortloc="${escapeHtml(loc.toLowerCase())}">
+                        <td><button type="button" class="pos-link" data-detail="${escapeHtml(r.detailId)}">${escapeHtml(pos)}</button></td>
+                        <td><button type="button" class="name-link" data-regatta-name="${escapeHtml(r.regatta_name || '')}" data-regatta-date="${escapeHtml(r.regatta_date_raw || '')}">${escapeHtml(r.regatta_name || '')}</button></td>
                         <td>${escapeHtml(r.regatta_date || '')}</td>
                         <td>${escapeHtml(r.category || '')}</td>
+                        <td>${escapeHtml(loc)}</td>
                     </tr>
-                    <tr class="detail-row"><td colspan="4"><div class="detail-panel" data-detail-panel="${escapeHtml(r.detailId)}"></div></td></tr>`;
+                    <tr class="detail-row"><td colspan="5"><div class="detail-panel" data-detail-panel="${escapeHtml(r.detailId)}"></div></td></tr>`;
                 });
             } else {
-                html += '<tr><td colspan="4">—</td></tr>';
+                html += '<tr><td colspan="5">—</td></tr>';
             }
             html += '</tbody></table></div>';
 
-            html += '<div class="section"><h3>Race Achievements</h3><table class="data"><thead><tr><th>Race place</th><th>Race #</th><th>Regatta Name</th><th>Date</th></tr></thead><tbody>';
+            html += '<div class="section"><h3>Best Race Achievements</h3><table class="data"><thead><tr><th>Race place</th><th>Race #</th><th>Regatta Name</th><th>Date</th></tr></thead><tbody>';
             const raceRows = data.raceAchievements || [];
             if (raceRows.length) {
                 raceRows.forEach(r => {
@@ -2965,18 +3256,6 @@
             } else {
                 html += '<tr><td colspan="4">No per-race scores available yet.</td></tr>';
             }
-            html += '</tbody></table></div>';
-
-            html += '<div class="section"><h3>Race History</h3><table class="data"><thead><tr><th>Position</th><th>Regatta Name</th><th>Date</th><th>Class</th></tr></thead><tbody>';
-            (data.history || []).forEach(r => {
-                html += `<tr>
-                    <td><button type="button" class="pos-link" data-detail="${escapeHtml(r.detailId)}">${escapeHtml(String(r.position ?? '—'))}</button></td>
-                    <td>${escapeHtml(r.regatta_name || '')}</td>
-                    <td>${escapeHtml(r.regatta_date || '')}</td>
-                    <td>${escapeHtml(r.category || '')}</td>
-                </tr>
-                <tr class="detail-row"><td colspan="4"><div class="detail-panel" data-detail-panel="${escapeHtml(r.detailId)}"></div></td></tr>`;
-            });
             html += '</tbody></table></div>';
 
             html += '<button type="button" class="btn-download js-download-sailor">Download Results</button>';
@@ -3020,7 +3299,6 @@
             cardEl.querySelectorAll('.pos-link').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const id = btn.getAttribute('data-detail');
-                    // Prefer the nearest detail panel under this button's section row
                     let panel = btn.closest('tr')?.nextElementSibling?.querySelector(`.detail-panel[data-detail-panel="${id}"]`);
                     if (!panel) panel = cardEl.querySelector(`.detail-panel[data-detail-panel="${id}"]`);
                     if (!panel) return;
@@ -3036,15 +3314,77 @@
                     }
                 });
             });
+            cardEl.querySelectorAll('.name-link').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    openRegattaEventCard(btn.getAttribute('data-regatta-name'), btn.getAttribute('data-regatta-date'));
+                });
+            });
+            wireSortableTable(cardEl.querySelector('.js-regatta-table'), 'sortdate', 'desc');
             const dl = cardEl.querySelector('.js-download-sailor');
             if (dl) {
                 dl.addEventListener('click', () => downloadSailorCard(data));
             }
         }
 
+        function ensureEventModal() {
+            let modal = document.getElementById('regattaEventModal');
+            if (modal) return modal;
+            modal = document.createElement('div');
+            modal.id = 'regattaEventModal';
+            modal.className = 'event-modal';
+            modal.innerHTML = '<div class="event-modal-card sailor-results-card" role="dialog" aria-modal="true"><button type="button" class="event-modal-close">Close</button><div class="js-event-body"></div></div>';
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.classList.remove('open');
+            });
+            modal.querySelector('.event-modal-close').addEventListener('click', () => modal.classList.remove('open'));
+            document.body.appendChild(modal);
+            return modal;
+        }
+
+        function renderEventResultsHtml(payload) {
+            const rows = (payload && payload.rows) || [];
+            const title = (payload && payload.regattaName) || 'Regatta';
+            const date = formatChatDateLocal(payload && payload.regattaDate);
+            const loc = displayLoc(payload && payload.location);
+            let html = `<h3>${escapeHtml(title)}</h3><p class="event-modal-meta">${escapeHtml(date)} · ${escapeHtml(loc)} · ${rows.length} result${rows.length === 1 ? '' : 's'}</p>`;
+            html += '<table class="data"><thead><tr><th>Position</th><th>Sailor</th><th>Club</th><th>Class</th><th>Sail</th></tr></thead><tbody>';
+            if (!rows.length) {
+                html += '<tr><td colspan="5">No results found for this regatta.</td></tr>';
+            } else {
+                rows.forEach(r => {
+                    html += `<tr>
+                        <td>${escapeHtml(String(r.position ?? '—'))}</td>
+                        <td>${escapeHtml(r.skipper || '')}</td>
+                        <td>${escapeHtml(r.yacht_club || '')}</td>
+                        <td>${escapeHtml(r.category || '')}</td>
+                        <td>${escapeHtml(r.sail_number || '')}</td>
+                    </tr>`;
+                });
+            }
+            html += '</tbody></table>';
+            return html;
+        }
+
+        async function openRegattaEventCard(name, date) {
+            if (!name) return;
+            const modal = ensureEventModal();
+            const body = modal.querySelector('.js-event-body');
+            body.innerHTML = `<h3>${escapeHtml(name)}</h3><p class="event-modal-meta">Loading event results…</p>`;
+            modal.classList.add('open');
+            try {
+                const params = new URLSearchParams({ name });
+                if (date) params.set('date', date);
+                const data = await fetchJsonWithTimeout('/api/race-results/event?' + params.toString(), {}, 20000);
+                if (!data.success) throw new Error(data.error || 'Failed to load event');
+                body.innerHTML = renderEventResultsHtml(data.data || {});
+            } catch (err) {
+                body.innerHTML = `<h3>${escapeHtml(name)}</h3><p class="event-modal-meta">${escapeHtml(err.message || 'Could not load event results.')}</p>`;
+            }
+        }
+
         function downloadSailorCard(data) {
-            const rows = data.history || [];
-            const cols = ['position', 'regatta_name', 'regatta_date', 'category'];
+            const rows = data.regattaAchievements || data.history || [];
+            const cols = ['position', 'regatta_name', 'regatta_date', 'category', 'location'];
             const lines = [cols.join(',')];
             rows.forEach(r => {
                 lines.push(cols.map(c => '"' + String(r[c] ?? '').replace(/"/g, '""') + '"').join(','));
