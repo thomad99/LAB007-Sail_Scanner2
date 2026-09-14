@@ -743,8 +743,7 @@ async function upsertRows(pool, rows) {
         const batch = uniqueRows.slice(i, i + BATCH);
         const values = [];
         const placeholders = batch.map((r, idx) => {
-            const b = idx * 14;
-            values.push(
+            const rowValues = [
                 r.source,
                 r.source_event_id,
                 r.source_url || null,
@@ -760,8 +759,10 @@ async function upsertRows(pool, rows) {
                 r.total_points || null,
                 r.dedupe_key,
                 r.location || null
-            );
-            return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8},$${b + 9},$${b + 10},$${b + 11},$${b + 12},$${b + 13},$${b + 14},$${b + 15})`;
+            ];
+            const b = idx * rowValues.length;
+            values.push(...rowValues);
+            return '(' + rowValues.map((_, j) => `$${b + j + 1}`).join(',') + ')';
         });
         const result = await pool.query(`
             INSERT INTO ${TABLE} (

@@ -1123,16 +1123,25 @@
             const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
             const first = dates.length ? ymdParts(dates[0]) : null;
             const last = dates.length > 1 ? ymdParts(dates[dates.length - 1]) : first;
-            if (!first) return { month: '', day: '—', year: '' };
+            const monthName = first ? monthNames[first.month - 1] : null;
+            if (!first || !monthName) return { month: '', day: '—', year: '' };
             let day = String(first.day);
             if (last && (last.day !== first.day || last.month !== first.month || last.year !== first.year)) {
                 day = `${first.day}–${last.day}`;
             }
             return {
-                month: monthNames[first.month - 1].toUpperCase(),
+                month: monthName.toUpperCase(),
                 day,
                 year: String(first.year)
             };
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
         }
 
         function escapeAttr(value) {
@@ -1470,38 +1479,42 @@
             const visible = sorted.slice(0, visibleCount);
             let html = '';
             visible.forEach(regatta => {
-                const formattedDate = formatEventDates(regatta);
-                const badge = formatDateBadge(regatta);
-                const boatTypes = Array.isArray(regatta.boat_types) ? regatta.boat_types : [];
-                const miles = Number(regatta.distance_miles);
-                let locationLine = '';
-                if (regatta.location) {
-                    const distanceLabel = Number.isFinite(miles) ? ` · ${Math.round(miles)} miles away` : '';
-                    locationLine = `${regatta.location}${distanceLabel}`;
-                } else if (Number.isFinite(miles)) {
-                    locationLine = `${Math.round(miles)} miles away`;
-                }
+                try {
+                    const formattedDate = formatEventDates(regatta);
+                    const badge = formatDateBadge(regatta);
+                    const boatTypes = Array.isArray(regatta.boat_types) ? regatta.boat_types.filter(t => t != null && String(t).trim()) : [];
+                    const miles = Number(regatta.distance_miles);
+                    let locationLine = '';
+                    if (regatta.location) {
+                        const distanceLabel = Number.isFinite(miles) ? ` · ${Math.round(miles)} miles away` : '';
+                        locationLine = `${regatta.location}${distanceLabel}`;
+                    } else if (Number.isFinite(miles)) {
+                        locationLine = `${Math.round(miles)} miles away`;
+                    }
 
-                html += `<article class="regatta-item">`;
-                html += `<div class="date-badge"><div class="month">${escapeHtml(badge.month)}</div><div class="day">${escapeHtml(badge.day)}</div><div class="year">${escapeHtml(badge.year)}</div></div>`;
-                html += `<div class="regatta-body">`;
-                html += `<h3>${escapeHtml(regatta.regatta_name)}</h3>`;
-                html += `<div class="regatta-meta">`;
-                if (locationLine) {
-                    html += `<span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s7-5.3 7-11a7 7 0 1 0-14 0c0 5.7 7 11 7 11z"></path><circle cx="12" cy="10" r="2.5"></circle></svg>${escapeHtml(locationLine)}</span>`;
+                    html += `<article class="regatta-item">`;
+                    html += `<div class="date-badge"><div class="month">${escapeHtml(badge.month)}</div><div class="day">${escapeHtml(badge.day)}</div><div class="year">${escapeHtml(badge.year)}</div></div>`;
+                    html += `<div class="regatta-body">`;
+                    html += `<h3>${escapeHtml(regatta.regatta_name)}</h3>`;
+                    html += `<div class="regatta-meta">`;
+                    if (locationLine) {
+                        html += `<span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s7-5.3 7-11a7 7 0 1 0-14 0c0 5.7 7 11 7 11z"></path><circle cx="12" cy="10" r="2.5"></circle></svg>${escapeHtml(locationLine)}</span>`;
+                    }
+                    if (formattedDate) {
+                        html += `<span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>${escapeHtml(formattedDate)}</span>`;
+                    }
+                    if (typeof regatta.registrant_count === 'number') {
+                        html += `<span>Entrants: ${regatta.registrant_count}</span>`;
+                    }
+                    html += `</div>`;
+                    if (boatTypes.length) {
+                        html += `<div class="boat-types">${boatTypes.map(t => `<span class="boat-chip">${escapeHtml(t)}</span>`).join('')}</div>`;
+                    }
+                    html += `<div class="links">${buildActionLinks(regatta)}</div>`;
+                    html += `</div></article>`;
+                } catch (itemErr) {
+                    console.warn('Skipping regatta card:', itemErr, regatta && regatta.regatta_name);
                 }
-                if (formattedDate) {
-                    html += `<span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>${escapeHtml(formattedDate)}</span>`;
-                }
-                if (typeof regatta.registrant_count === 'number') {
-                    html += `<span>Entrants: ${regatta.registrant_count}</span>`;
-                }
-                html += `</div>`;
-                if (boatTypes.length) {
-                    html += `<div class="boat-types">${boatTypes.map(t => `<span class="boat-chip">${escapeHtml(t)}</span>`).join('')}</div>`;
-                }
-                html += `<div class="links">${buildActionLinks(regatta)}</div>`;
-                html += `</div></article>`;
             });
             resultsContent.innerHTML = html;
             showMore.classList.toggle('visible', sorted.length > visibleCount);
