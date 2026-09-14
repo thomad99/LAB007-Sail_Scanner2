@@ -608,7 +608,10 @@ async function resolveClubspotBoatTypes(axios, boatClassesArray) {
 }
 
 function eventDatesSqlExpr() {
-    return `COALESCE(event_dates, ARRAY[regatta_date]::date[])`;
+    return `CASE
+        WHEN event_dates IS NULL OR cardinality(event_dates) = 0 THEN ARRAY[regatta_date]::date[]
+        ELSE event_dates
+    END`;
 }
 
 async function ensureRegattaExtraColumns(pool) {

@@ -713,9 +713,7 @@
         }
 
         .site-footer {
-            background: #fff;
-            border-top: 1px solid var(--line);
-            padding: 22px 0;
+            display: none;
         }
 
         .footer-inner {
@@ -897,7 +895,6 @@
     <section class="hero">
         <div class="hero-inner">
             <h1>Find your next regatta.</h1>
-            <p>Search events, explore results and follow your favourite fleets.</p>
             <p class="hero-script">More Sailing Together</p>
         </div>
     </section>
@@ -1007,14 +1004,7 @@
         </div>
     </main>
 
-    <footer class="site-footer">
-        <div class="footer-inner">
-            <a class="footer-brand" href="index.html">
-                <img src="/Images/LoveSailing-Left.jpg" alt="Love Sailing">
-            </a>
-            <p>Sailing communities. Brighter days ahead.</p>
-        </div>
-    </footer>
+    <footer class="site-footer"></footer>
 
     <div class="modal-overlay" id="alertModal">
         <div class="modal-card">
@@ -1730,24 +1720,44 @@
                 }
                 const url = '/api/search-regattas?' + params.toString();
                 const response = await fetch(url);
-                const data = await response.json();
+                const data = await response.json().catch(() => ({}));
 
-                if (data.success && data.regattas && data.regattas.length > 0) {
+                if (response.ok && data.success && data.regattas && data.regattas.length > 0) {
                     lastRegattas = data.regattas;
                     lastResultCount = data.count;
                     setResultsVisible(true);
                     renderResultsHeader(data.count);
-                    renderRegattaList();
+                    try {
+                        renderRegattaList();
+                    } catch (renderErr) {
+                        console.error('Render error:', renderErr);
+                        resultsContent.innerHTML = `
+                            <div class="no-results">
+                                <p>Results loaded but could not be displayed. Please try again.</p>
+                            </div>
+                        `;
+                    }
                 } else if (hasSearched) {
                     lastRegattas = [];
                     lastResultCount = 0;
                     setResultsVisible(true);
-                    renderResultsHeader(null);
-                    resultsContent.innerHTML = `
-                        <div class="no-results">
-                            <p>No results found. Try adjusting your date or keywords.</p>
-                        </div>
-                    `;
+                    if (!response.ok || data.error) {
+                        renderResultsHeader(null);
+                        document.getElementById('resultsCount').textContent = 'Search failed';
+                        document.getElementById('resultsHeader').style.display = '';
+                        resultsContent.innerHTML = `
+                            <div class="no-results">
+                                <p>No upcoming regattas could be loaded. Please try again.</p>
+                            </div>
+                        `;
+                    } else {
+                        renderResultsHeader(0);
+                        resultsContent.innerHTML = `
+                            <div class="no-results">
+                                <p>No results found. Try adjusting your date or keywords.</p>
+                            </div>
+                        `;
+                    }
                 }
             } catch (error) {
                 console.error('Search error:', error);

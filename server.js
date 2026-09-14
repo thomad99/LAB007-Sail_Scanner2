@@ -5296,6 +5296,7 @@ async function scrapeClubspot() {
 app.get('/api/search-regattas', async (req, res) => {
     try {
         const { date, startDate, endDate, location, name, q, latitude, longitude, radius, locationName, boatType } = req.query;
+        await ensureRegattaExtraColumns(pool);
         const datesExpr = eventDatesSqlExpr();
         const lat = parseFloat(latitude);
         const lng = parseFloat(longitude);
@@ -5305,7 +5306,6 @@ app.get('/api/search-regattas', async (req, res) => {
             : null;
 
         if (nearbySearch) {
-            await ensureRegattaExtraColumns(pool);
             try {
                 await fillMissingRegattaCoordinates(pool, { limit: 5 });
             } catch (geoErr) {
@@ -5329,25 +5329,35 @@ app.get('/api/search-regattas', async (req, res) => {
             ? `SELECT *, ${distanceSql} AS distance_miles FROM regattas WHERE 1=1`
             : 'SELECT * FROM regattas WHERE 1=1';
 
-        // Match any stored event date, not just the first day
+        // Match any stored event date, not just the first day.
+        // Also match regatta_date so empty event_dates arrays still return future events.
         if (startDate && endDate) {
             paramCount++;
             const startParam = paramCount;
             paramCount++;
             const endParam = paramCount;
-            query += ` AND EXISTS (
-                SELECT 1 FROM unnest(${datesExpr}) AS d
-                WHERE d >= $${startParam}::date AND d <= $${endParam}::date
+            query += ` AND (
+                (regatta_date::date >= $${startParam}::date AND regatta_date::date <= $${endParam}::date)
+                OR EXISTS (
+                    SELECT 1 FROM unnest(${datesExpr}) AS d
+                    WHERE d >= $${startParam}::date AND d <= $${endParam}::date
+                )
             )`;
             params.push(startDate, endDate);
         } else if (date) {
             paramCount++;
-            query += ` AND $${paramCount}::date = ANY(${datesExpr})`;
+            query += ` AND (
+                regatta_date::date = $${paramCount}::date
+                OR $${paramCount}::date = ANY(${datesExpr})
+            )`;
             params.push(date);
         } else {
-            query += ` AND EXISTS (
-                SELECT 1 FROM unnest(${datesExpr}) AS d
-                WHERE d >= CURRENT_DATE
+            query += ` AND (
+                regatta_date::date >= CURRENT_DATE
+                OR EXISTS (
+                    SELECT 1 FROM unnest(${datesExpr}) AS d
+                    WHERE d >= CURRENT_DATE
+                )
             )`;
         }
 
@@ -5429,10 +5439,18 @@ app.get('/api/search-regattas', async (req, res) => {
         query += ' LIMIT 500';
 
         const result = await pool.query(query, params);
+        const regattas = [];
+        for (const row of result.rows) {
+            try {
+                regattas.push(formatEventDatesForApi(row));
+            } catch (rowErr) {
+                console.warn('Skipping regatta row in search:', rowErr.message);
+            }
+        }
         res.json({
             success: true,
-            regattas: result.rows.map(formatEventDatesForApi),
-            count: result.rows.length
+            regattas,
+            count: regattas.length
         });
     } catch (error) {
         console.error('Error searching regattas:', error);
@@ -5444,7 +5462,7 @@ app.get('/api/boat-types', async (req, res) => {
     try {
         const result = await pool.query(`
             SELECT DISTINCT trim(t) AS boat_type
-            FROM regattas, unnest(COALESCE(boat_types, ARRAY[]::text[])) AS t
+            FROM regattas, unnest(COALESCE(NULLIF(boat_types, ARRAY[]::text[]), ARRAY[]::text[])) AS t
             WHERE t IS NOT NULL AND trim(t) <> ''
             ORDER BY boat_type ASC
         `);
@@ -5674,9 +5692,12 @@ app.get('/api/all-regattas', async (req, res) => {
             )`;
             params.push(`%${dateFilter}%`);
         } else {
-            whereClause += ` AND EXISTS (
-                SELECT 1 FROM unnest(${eventDatesSqlExpr()}) AS d
-                WHERE d >= CURRENT_DATE
+            whereClause += ` AND (
+                regatta_date::date >= CURRENT_DATE
+                OR EXISTS (
+                    SELECT 1 FROM unnest(${eventDatesSqlExpr()}) AS d
+                    WHERE d >= CURRENT_DATE
+                )
             )`;
         }
 
