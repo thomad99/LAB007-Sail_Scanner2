@@ -792,6 +792,22 @@
             cursor: pointer;
         }
 
+        @media (max-width: 1024px) {
+            .search-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .search-button {
+                grid-column: 1 / -1;
+            }
+
+            .hero-script {
+                right: 4%;
+                bottom: 30%;
+                font-size: 1.35rem;
+            }
+        }
+
         @media (max-width: 900px) {
             .results-layout.visible {
                 grid-template-columns: 1fr;
@@ -820,6 +836,10 @@
 
             .hero-script {
                 display: none;
+            }
+
+            .hero {
+                padding: 24px 0 72px;
             }
 
             .search-grid {
