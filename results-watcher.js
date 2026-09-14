@@ -89,6 +89,10 @@ function escapeHtml(value) {
         .replace(/"/g, '&quot;');
 }
 
+function watchLogoUrl() {
+    return `${publicBaseUrl()}/Images/LoveSailing-Left.jpg`;
+}
+
 function watchEmailBodies({ title, intro, resultsUrl, stopUrl, extra }) {
     const name = title || 'regatta results';
     const extraText = extra ? `\n${extra}\n` : '';
@@ -104,7 +108,10 @@ function watchEmailBodies({ title, intro, resultsUrl, stopUrl, extra }) {
     ].join('\n');
 
     const html = `
-        <div style="font-family:Arial,sans-serif;color:#111;line-height:1.5">
+        <div style="font-family:Arial,sans-serif;color:#111;line-height:1.5;max-width:560px">
+            <p style="margin:0 0 18px">
+                <img src="${escapeHtml(watchLogoUrl())}" alt="Love Sailing" width="180" style="display:block;width:180px;max-width:100%;height:auto;border:0">
+            </p>
             <p>${escapeHtml(intro)}</p>
             <p><strong>${escapeHtml(name)}</strong></p>
             <p><a href="${escapeHtml(resultsUrl)}" style="background:#0066cc;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">View results</a></p>
@@ -117,13 +124,13 @@ function watchEmailBodies({ title, intro, resultsUrl, stopUrl, extra }) {
     return { text, html };
 }
 
-async function sendWatchEmail(emailTransporter, { to, subject, title, intro, resultsUrl, stopUrl, extra }) {
+async function sendWatchEmail(emailTransporter, { to, title, intro, resultsUrl, stopUrl, extra }) {
     if (!emailTransporter) throw new Error('Email is not configured');
     const bodies = watchEmailBodies({ title, intro, resultsUrl, stopUrl, extra });
     await emailTransporter.sendMail({
         from: mailFrom(),
         to,
-        subject,
+        subject: 'Love Sailing - Alerts',
         text: bodies.text,
         html: bodies.html
     });
@@ -172,7 +179,6 @@ async function pollActiveWatchers({ pool, axios, cheerio, emailTransporter }) {
                 if (changed) {
                     await sendWatchEmail(emailTransporter, {
                         to: watch.email,
-                        subject: `Results updated: ${watch.regatta_name || 'regatta'}`,
                         title: watch.regatta_name || 'Regatta results',
                         intro: 'Scores look like they were updated. Open the results page to see the latest standings.',
                         resultsUrl: watch.results_url,
@@ -253,13 +259,10 @@ function attachResultsWatcher(app, { pool, axios, cheerio, emailTransporter, cro
             try {
                 await sendWatchEmail(emailTransporter, {
                     to: email,
-                    subject: created
-                        ? `Results alerts on: ${regattaName || 'regatta'}`
-                        : `Results alerts restarted: ${regattaName || 'regatta'}`,
                     title: regattaName || 'Regatta results',
                     intro: created
-                        ? 'We will email you when this results page changes. Checks run about every 15 minutes.'
-                        : 'Your results alerts are active again. Checks run about every 15 minutes.',
+                        ? 'We will email you when this results page changes.'
+                        : 'Your results alerts are active again.',
                     resultsUrl,
                     stopUrl,
                     extra: 'You can stop alerts from this email or from the Love Sailing website.'
@@ -407,7 +410,6 @@ function attachResultsWatcher(app, { pool, axios, cheerio, emailTransporter, cro
             try {
                 await sendWatchEmail(emailTransporter, {
                     to: email,
-                    subject: 'Results alert email updated',
                     title: sample && sample.regatta_name ? sample.regatta_name : 'Regatta results',
                     intro: `Future results alerts will be sent to ${email}.`,
                     resultsUrl: (sample && sample.results_url) || publicBaseUrl() + '/Find-regatta.html#alerts',

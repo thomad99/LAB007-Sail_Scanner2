@@ -488,6 +488,10 @@
             display: grid;
         }
 
+        body.tab-alerts .results-layout {
+            display: none !important;
+        }
+
         .results-toolbar {
             display: flex;
             justify-content: space-between;
@@ -1184,6 +1188,7 @@
         let detectedLocationName = null;
         let usingCurrentLocation = false;
         let hasSearched = false;
+        let currentTab = 'search';
         let lastRegattas = [];
         let lastResultCount = 0;
         let visibleCount = 10;
@@ -1259,6 +1264,8 @@
 
         function setActiveTab(tab) {
             const alerts = tab === 'alerts';
+            currentTab = alerts ? 'alerts' : 'search';
+            document.body.classList.toggle('tab-alerts', alerts);
             document.querySelectorAll('[data-tab="search"]').forEach(el => {
                 el.classList.toggle('active', !alerts);
                 if (el.getAttribute('role') === 'tab') el.setAttribute('aria-selected', String(!alerts));
@@ -1270,16 +1277,14 @@
             });
             const searchForm = document.getElementById('searchFormWrap');
             const alertsPanel = document.getElementById('alertsPanel');
-            const results = document.getElementById('results');
             if (searchForm) searchForm.hidden = alerts;
             if (alertsPanel) alertsPanel.hidden = !alerts;
+            setResultsVisible(!alerts && hasSearched);
             if (alerts) {
-                results.classList.remove('visible');
                 document.getElementById('heroTitle').textContent = 'Your results alerts.';
                 if (location.hash !== '#alerts') history.replaceState(null, '', '#alerts');
                 renderAlertsPanel();
             } else {
-                if (hasSearched) results.classList.add('visible');
                 document.getElementById('heroTitle').textContent = 'Find your next regatta.';
                 if (location.hash === '#alerts') history.replaceState(null, '', location.pathname + location.search);
             }
@@ -1396,7 +1401,6 @@
                 updateSidebarAlertsCopy(watches.length);
                 if (!watches.length) {
                     content.innerHTML = `
-                        ${alertsEmailFormHtml()}
                         <div class="alerts-empty">
                             <svg class="bell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
                                 <path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"></path>
@@ -1769,8 +1773,9 @@
 
         function setResultsVisible(visible) {
             const results = document.getElementById('results');
-            results.classList.toggle('visible', visible);
-            results.style.display = visible ? 'grid' : 'none';
+            const show = Boolean(visible) && currentTab !== 'alerts';
+            results.classList.toggle('visible', show);
+            results.style.display = show ? 'grid' : 'none';
         }
 
         function renderFilterChips() {

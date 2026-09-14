@@ -42,30 +42,43 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 10px 22px;
-            background: #fff;
-            border-bottom: 1px solid #e6ecf4;
+            padding: 8px 22px;
+            background: #04102b;
+            border-bottom: 0;
         }
 
         .brand {
             display: flex;
             align-items: center;
+            gap: 10px;
             text-decoration: none;
+            color: #fff;
         }
 
         .brand img {
-            height: 42px;
+            height: 44px;
             width: auto;
-            max-width: 150px;
+            max-width: 48px;
             object-fit: contain;
-            object-position: left center;
+            object-position: center;
+            background: transparent;
+        }
+
+        .brand span {
+            font-size: 0.98rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
         }
 
         .nav-link {
-            color: #3b4b66;
+            color: #dbe4f0;
             text-decoration: none;
             font-size: 0.92rem;
             font-weight: 500;
+        }
+
+        .nav-link:hover {
+            color: #fff;
         }
 
         .page {
@@ -607,8 +620,8 @@
         }
 
         @media (max-width: 768px) {
-            .site-bar { padding: 8px 14px; }
-            .brand img { height: 34px; }
+            .site-bar { padding: 6px 14px; }
+            .brand img { height: 38px; }
             .page { padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px)); }
             .messenger {
                 width: 100%;
@@ -619,12 +632,21 @@
         }
     </style>
     <link rel="stylesheet" href="/fit-screen.css">
+    <style>
+        body.fit-app .brand img {
+            height: 44px;
+            max-height: 44px;
+            max-width: 48px;
+            background: transparent;
+        }
+    </style>
 </head>
 
 <body class="fit-app">
     <header class="site-bar">
         <a class="brand" href="index.html">
-            <img src="/Images/LoveSailing-Left.jpg" alt="Love Sailing">
+            <img src="/Images/Sail_Logo_Trans.PNG" alt="">
+            <span>Love Sailing</span>
         </a>
         <a class="nav-link" href="Find-regatta.html">Regattas</a>
     </header>
