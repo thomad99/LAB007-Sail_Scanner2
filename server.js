@@ -29,7 +29,14 @@ const cron = require('node-cron');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
-const { attachRaceResultsScraper, ensureScrapedResultsTable } = require('./race-results-scraper');
+const {
+    attachRaceResultsScraper,
+    ensureScrapedResultsTable,
+    ensureStatsSnapshotTable,
+    ensureRaceResultsStatsIndexes,
+    refreshRaceResultsStatsSnapshot,
+    refreshRaceResultsStatsIfStale
+} = require('./race-results-scraper');
 const { attachRaceResultsScheduler } = require('./race-results-scheduler');
 const { PARSE_APP_ID, clubspotGet, clubspotConfigSummary } = require('./clubspot-http');
 const {
@@ -44,7 +51,9 @@ const {
     clubspotLocationText,
     attachRegattaCoordinates,
     fillMissingRegattaCoordinates,
-    haversineMilesSql
+    haversineMilesSql,
+    batchUpsertRegattas,
+    dedupeRegattasForUpsert
 } = require('./regatta-scrape-helpers');
 const {
     scrapeRegattaNetworkCalendar,
@@ -5005,6 +5014,24 @@ function setupScheduledScrape() {
 }
 setupScheduledScrape();
 
+function setupDailyRaceResultsStats() {
+    cron.schedule('0 3 * * *', async () => {
+        console.log('[race-results] Daily stats snapshot starting (03:00 UTC)...');
+        try {
+            const snapshot = await refreshRaceResultsStatsSnapshot(pool);
+            console.log(
+                '[race-results] Daily stats snapshot complete:',
+                snapshot && snapshot.total_sailors, 'sailors,',
+                snapshot && snapshot.total_regattas, 'regattas'
+            );
+        } catch (err) {
+            console.error('[race-results] Daily stats snapshot failed:', err.message);
+        }
+    });
+    console.log('[race-results] Daily stats snapshot enabled (03:00 UTC)');
+}
+setupDailyRaceResultsStats();
+
 // Regatta scrape status - last scrape, next scrape, new records per source
 app.get('/api/regatta-scrape-status', async (req, res) => {
     try {
@@ -5132,15 +5159,6 @@ app.post('/api/scrape-regattas', async (req, res) => {
     }
 });
 
-/**
- * Upserts report every touched row. Use RETURNING (xmax = 0) AS was_inserted
- * so scrape_log.regattas_added counts only true inserts, not updates.
- */
-function countTrueInserts(upsertResult) {
-    if (!upsertResult?.rows?.length) return 0;
-    return upsertResult.rows.filter((row) => row.was_inserted === true).length;
-}
-
 // Scrape Regatta Network calendar (upcoming + category tabs)
 async function scrapeRegattaNetwork() {
     return scrapeRegattaNetworkCalendar({ axios, cheerio, pool });
@@ -5234,64 +5252,17 @@ async function scrapeClubspot() {
                 regatta_name: r.name,
                 location,
                 event_website_url: eventWebsiteUrl,
+                source: 'clubspot',
                 source_id: r.objectId
             });
         }
 
-        console.log(`📋 Valid regattas after filtering: ${extractedRegattas.length}`);
-        await attachRegattaCoordinates(pool, extractedRegattas);
+        const uniqueRegattas = dedupeRegattasForUpsert(extractedRegattas, 'clubspot');
+        console.log(`📋 Valid regattas after filtering: ${extractedRegattas.length} (${uniqueRegattas.length} unique name+date)`);
+        await attachRegattaCoordinates(pool, uniqueRegattas);
 
-        // Batch upserts: count only true inserts via xmax = 0
-        let added = 0;
-        let updated = 0;
-        const INSERT_BATCH = 50;
-        const totalBatches = Math.ceil(extractedRegattas.length / INSERT_BATCH);
-        console.log(`💾 Upserting ${extractedRegattas.length} regattas in ${totalBatches} batches...`);
-
-        for (let i = 0; i < extractedRegattas.length; i += INSERT_BATCH) {
-            const batch = extractedRegattas.slice(i, i + INSERT_BATCH);
-            const values = [];
-            const placeholders = batch.map((r, idx) => {
-                const base = idx * 12;
-                values.push(
-                    r.regatta_date,
-                    r.regatta_name,
-                    r.location,
-                    r.event_website_url,
-                    null,
-                    null,
-                    'clubspot',
-                    r.source_id,
-                    r.event_dates,
-                    r.boat_types && r.boat_types.length ? r.boat_types : null,
-                    r.latitude == null ? null : r.latitude,
-                    r.longitude == null ? null : r.longitude
-                );
-                return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},$${base + 7},$${base + 8},$${base + 9}::date[],$${base + 10}::text[],$${base + 11},$${base + 12})`;
-            });
-            try {
-                const result = await pool.query(`
-                    INSERT INTO regattas (regatta_date, regatta_name, location, event_website_url, registrants_url, registrant_count, source, source_id, event_dates, boat_types, latitude, longitude)
-                    VALUES ${placeholders.join(',')}
-                    ON CONFLICT (regatta_name, regatta_date, source)
-                    DO UPDATE SET
-                        location = EXCLUDED.location,
-                        event_website_url = EXCLUDED.event_website_url,
-                        source_id = EXCLUDED.source_id,
-                        event_dates = EXCLUDED.event_dates,
-                        boat_types = COALESCE(EXCLUDED.boat_types, regattas.boat_types),
-                        latitude = COALESCE(EXCLUDED.latitude, regattas.latitude),
-                        longitude = COALESCE(EXCLUDED.longitude, regattas.longitude),
-                        last_updated = CURRENT_TIMESTAMP
-                    RETURNING (xmax = 0) AS was_inserted
-                `, values);
-                const inserted = countTrueInserts(result);
-                added += inserted;
-                updated += (result.rowCount || 0) - inserted;
-            } catch (err) {
-                console.error(`Batch insert error (rows ${i}–${i + batch.length}):`, err.message);
-            }
-        }
+        console.log(`💾 Upserting ${uniqueRegattas.length} Clubspot regattas...`);
+        const { added, updated } = await batchUpsertRegattas(pool, uniqueRegattas);
         console.log(`💾 DB write complete: ${added} newly added, ${updated} updated`);
 
         await pool.query(`
@@ -5861,6 +5832,23 @@ async function initializeServer() {
         await createRegattasTable();
         await ensureRegattaNetworkDataTable();
         await ensureScrapedResultsTable(pool);
+        await ensureStatsSnapshotTable(pool);
+        ensureRaceResultsStatsIndexes(pool)
+            .catch((err) => {
+                console.error('[race-results] startup index create failed:', err.message);
+            })
+            .then(() => refreshRaceResultsStatsIfStale(pool))
+            .then((snapshot) => {
+                if (snapshot && snapshot.computed_at) {
+                    console.log(
+                        '[race-results] stats snapshot ready:',
+                        snapshot.total_sailors, 'sailors,',
+                        snapshot.total_regattas, 'regattas'
+                    );
+                }
+            }).catch((err) => {
+                console.error('[race-results] startup stats snapshot failed:', err.message);
+            });
         await ensureResultsWatchersTable(pool);
         await createTrackerTables();
         await createPiTables();

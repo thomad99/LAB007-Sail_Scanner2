@@ -2605,21 +2605,23 @@
                 const data = await fetchJsonWithTimeout('/api/race-results/stats', {}, 20000);
                 if (!data.success) throw new Error(data.error || 'Failed');
                 const src = (data.bySource || []).map(s => `${s.source}: ${s.count} rows / ${s.events} events`).join(' · ') || 'No rows yet';
+                const asOf = formatStatsAsOf(data);
+                const asOfLabel = asOf ? `Daily snapshot as of ${asOf}` : 'Daily snapshot pending';
                 box.innerHTML = `
                     <div class="stat-card clickable" onclick="exportRaceResultsCsv('rows')" title="Download all scraped result rows as CSV">
                         <h3>Scraped Rows</h3>
-                        <div class="value">${data.total_records || 0}</div>
+                        <div class="value">${Number(data.total_records || 0).toLocaleString()}</div>
                         <div class="label">${src}</div>
                     </div>
                     <div class="stat-card clickable" onclick="exportRaceResultsCsv('sailors')" title="Download distinct sailors as CSV">
                         <h3>Sailors</h3>
-                        <div class="value">${data.total_sailors || 0}</div>
-                        <div class="label">Distinct skippers</div>
+                        <div class="value">${Number(data.total_sailors || 0).toLocaleString()}</div>
+                        <div class="label">Distinct skippers · ${asOfLabel}</div>
                     </div>
                     <div class="stat-card clickable" onclick="exportRaceResultsCsv('regattas')" title="Download distinct regattas as CSV">
                         <h3>Regattas</h3>
-                        <div class="value">${data.total_regattas || 0}</div>
-                        <div class="label">${data.earliest_date || '—'} to ${data.latest_date || '—'}</div>
+                        <div class="value">${Number(data.total_regattas || 0).toLocaleString()}</div>
+                        <div class="label">${data.earliest_date || '—'} to ${data.latest_date || '—'} · ${asOfLabel}</div>
                     </div>
                 `;
             } catch (err) {
@@ -2866,6 +2868,14 @@
             }
         }
 
+        function formatStatsAsOf(data) {
+            const raw = data && data.computed_at;
+            if (!raw) return '';
+            const d = new Date(raw);
+            if (Number.isNaN(d.getTime())) return '';
+            return d.toISOString().slice(0, 10);
+        }
+
         function formatChatWelcomeHtml(data) {
             const sailors = Number(data && data.total_sailors || 0).toLocaleString();
             const regattas = Number(data && data.total_regattas || 0).toLocaleString();
@@ -2873,7 +2883,9 @@
             const yearBit = year
                 ? `, going as far back as <strong>${escapeHtml(String(year))}</strong>`
                 : '';
-            return `Welcome to Love Sailing ChatBot — I have knowledge of <strong>${sailors}</strong> sailors and <strong>${regattas}</strong> regattas${yearBit}.`;
+            const asOf = formatStatsAsOf(data);
+            const asOfBit = asOf ? ` (as of <strong>${escapeHtml(asOf)}</strong>)` : '';
+            return `Welcome to Love Sailing ChatBot — I have knowledge of <strong>${sailors}</strong> sailors and <strong>${regattas}</strong> regattas${yearBit}${asOfBit}.`;
         }
 
         async function ensureChatWelcome() {

@@ -12,7 +12,8 @@ const {
     expandInclusiveDates,
     resolveClubspotBoatTypes,
     ensureRegattaExtraColumns,
-    upsertRegatta,
+    batchUpsertRegattas,
+    dedupeRegattasForUpsert,
     clubspotLocationText
 } = require('./regatta-scrape-helpers');
 const {
@@ -184,27 +185,15 @@ async function scrapeClubspot() {
                 regatta_name: r.name,
                 location,
                 event_website_url: eventWebsiteUrl,
+                source: 'clubspot',
                 source_id: r.objectId
             });
         }
 
-        console.log(`📋 Valid regattas after filtering: ${extractedRegattas.length}`);
+        const uniqueRegattas = dedupeRegattasForUpsert(extractedRegattas, 'clubspot');
+        console.log(`📋 Valid regattas after filtering: ${extractedRegattas.length} (${uniqueRegattas.length} unique name+date)`);
 
-        let added = 0;
-        let updated = 0;
-        for (const regatta of extractedRegattas) {
-            try {
-                await upsertRegatta(pool, {
-                    ...regatta,
-                    source: 'clubspot'
-                });
-                added++;
-            } catch (err) {
-                if (!err.message.includes('duplicate')) {
-                    console.error('Error inserting regatta:', err.message);
-                }
-            }
-        }
+        const { added, updated } = await batchUpsertRegattas(pool, uniqueRegattas);
 
         await pool.query(`
             INSERT INTO scrape_log (source, regattas_found, regattas_added)

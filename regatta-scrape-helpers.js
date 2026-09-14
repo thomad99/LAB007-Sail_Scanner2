@@ -358,9 +358,11 @@ function countTrueInserts(upsertResult) {
 
 async function batchUpsertRegattas(pool, regattas) {
     await ensureRegattaExtraColumns(pool);
-    const rows = (Array.isArray(regattas) ? regattas : [])
-        .map(normalizeRegattaForUpsert)
-        .filter((row) => row.regatta_date && row.regatta_name);
+    const incoming = Array.isArray(regattas) ? regattas : [];
+    const rows = dedupeRegattasForUpsert(incoming);
+    if (incoming.length && rows.length < incoming.length) {
+        console.log(`[regattas] Deduped upsert batch: ${incoming.length} → ${rows.length} unique name+date+source`);
+    }
     let added = 0;
     let updated = 0;
     const INSERT_BATCH = 50;
@@ -812,6 +814,46 @@ function normalizeRegattaForUpsert(regatta) {
     };
 }
 
+function regattaConflictKey(row) {
+    return [
+        String(row.regatta_name || '').trim(),
+        parseYmd(row.regatta_date) || '',
+        String(row.source || '').trim()
+    ].join('|');
+}
+
+function mergeRegattaUpsertRows(prev, next) {
+    return {
+        ...prev,
+        ...next,
+        location: (next.location && String(next.location).trim()) || prev.location || null,
+        event_website_url: (next.event_website_url && String(next.event_website_url).trim()) || prev.event_website_url || null,
+        registrants_url: (next.registrants_url && String(next.registrants_url).trim()) || prev.registrants_url || null,
+        registrant_count: next.registrant_count != null ? next.registrant_count : prev.registrant_count,
+        source_id: (next.source_id && String(next.source_id).trim()) || prev.source_id || null,
+        event_dates: uniqueSortedDates([...(prev.event_dates || []), ...(next.event_dates || [])]),
+        boat_types: mergeBoatTypes(prev.boat_types, next.boat_types),
+        latitude: next.latitude != null ? next.latitude : prev.latitude,
+        longitude: next.longitude != null ? next.longitude : prev.longitude
+    };
+}
+
+/** One row per UNIQUE(regatta_name, regatta_date, source). Last occurrence wins; richer fields merge. */
+function dedupeRegattasForUpsert(regattas, defaultSource) {
+    const byKey = new Map();
+    for (const raw of Array.isArray(regattas) ? regattas : []) {
+        const row = normalizeRegattaForUpsert({
+            ...raw,
+            source: raw.source || defaultSource || null
+        });
+        if (!row.regatta_date || !row.regatta_name) continue;
+        const key = regattaConflictKey(row);
+        const prev = byKey.get(key);
+        byKey.set(key, prev ? mergeRegattaUpsertRows(prev, row) : row);
+    }
+    return Array.from(byKey.values());
+}
+
 async function upsertRegatta(pool, regatta) {
     const row = normalizeRegattaForUpsert(regatta);
     if (!row.regatta_date || !row.regatta_name) return false;
@@ -889,6 +931,7 @@ module.exports = {
     eventDatesSqlExpr,
     ensureRegattaExtraColumns,
     normalizeRegattaForUpsert,
+    dedupeRegattasForUpsert,
     upsertRegatta,
     batchUpsertRegattas,
     countTrueInserts,

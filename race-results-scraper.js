@@ -22,6 +22,9 @@ const HTTP_HEADERS = {
 };
 
 const SCRAPE_LOG_TABLE = 'race_results_scrape_log';
+const STATS_SNAPSHOT_TABLE = 'race_results_stats';
+const STATS_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const STATS_REFRESH_TIMEOUT_MS = 180000;
 
 const job = {
     running: false,
@@ -342,6 +345,263 @@ async function withStatementTimeout(pool, timeoutMs, fn) {
     } finally {
         client.release();
     }
+}
+
+/** Session-level timeout, no transaction — for long background scans and CONCURRENTLY. */
+async function withSessionTimeout(pool, timeoutMs, fn) {
+    const client = await pool.connect();
+    try {
+        await client.query(`SET statement_timeout = ${Math.max(1000, Number(timeoutMs) || 8000)}`);
+        return await fn(client);
+    } finally {
+        try { await client.query('RESET statement_timeout'); } catch (_) { /* ignore */ }
+        client.release();
+    }
+}
+
+function parseJsonArray(value) {
+    let parsed = value;
+    if (typeof parsed === 'string') {
+        try { parsed = JSON.parse(parsed); } catch (_) { return []; }
+    }
+    return Array.isArray(parsed) ? parsed : [];
+}
+
+function emptyStatsSnapshot() {
+    return {
+        success: true,
+        tableName: TABLE,
+        total_records: 0,
+        total_sailors: 0,
+        total_regattas: 0,
+        earliest_date: null,
+        latest_date: null,
+        earliest_year: null,
+        latest_year: null,
+        bySource: [],
+        dataYears: [],
+        recent: [],
+        computed_at: null,
+        snapshot: true
+    };
+}
+
+function formatStatsSnapshot(row) {
+    if (!row) return emptyStatsSnapshot();
+    const earliest = row.earliest_date ? String(row.earliest_date).slice(0, 10) : null;
+    const latest = row.latest_date ? String(row.latest_date).slice(0, 10) : null;
+    const earliestYear = earliest ? parseInt(earliest.slice(0, 4), 10) : null;
+    const latestYear = latest ? parseInt(latest.slice(0, 4), 10) : null;
+    const bySource = parseJsonArray(row.by_source != null ? row.by_source : row.bySource);
+    const dataYears = parseJsonArray(row.data_years != null ? row.data_years : row.dataYears);
+    return {
+        success: true,
+        tableName: TABLE,
+        total_records: Number(row.total_records) || 0,
+        total_sailors: Number(row.total_sailors) || 0,
+        total_regattas: Number(row.total_regattas) || 0,
+        earliest_date: earliest,
+        latest_date: latest,
+        earliest_year: Number.isFinite(earliestYear) ? earliestYear : null,
+        latest_year: Number.isFinite(latestYear) ? latestYear : null,
+        bySource,
+        dataYears,
+        recent: [],
+        computed_at: row.computed_at || null,
+        snapshot: true
+    };
+}
+
+function snapshotIsFresh(snapshot) {
+    if (!snapshot || !snapshot.computed_at) return false;
+    const age = Date.now() - new Date(snapshot.computed_at).getTime();
+    return Number.isFinite(age) && age >= 0 && age < STATS_MAX_AGE_MS;
+}
+
+async function ensureStatsSnapshotTable(pool) {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS ${STATS_SNAPSHOT_TABLE} (
+            id INTEGER PRIMARY KEY DEFAULT 1,
+            total_records INTEGER NOT NULL DEFAULT 0,
+            total_sailors INTEGER NOT NULL DEFAULT 0,
+            total_regattas INTEGER NOT NULL DEFAULT 0,
+            earliest_date DATE,
+            latest_date DATE,
+            by_source JSONB NOT NULL DEFAULT '[]'::jsonb,
+            data_years JSONB NOT NULL DEFAULT '[]'::jsonb,
+            computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            CONSTRAINT race_results_stats_singleton CHECK (id = 1)
+        )
+    `);
+    await pool.query(`
+        ALTER TABLE ${STATS_SNAPSHOT_TABLE}
+        ADD COLUMN IF NOT EXISTS data_years JSONB NOT NULL DEFAULT '[]'::jsonb
+    `);
+}
+
+async function readRaceResultsStatsSnapshot(pool) {
+    await ensureStatsSnapshotTable(pool);
+    const r = await pool.query(`SELECT * FROM ${STATS_SNAPSHOT_TABLE} WHERE id = 1`);
+    return r.rows[0] ? formatStatsSnapshot(r.rows[0]) : null;
+}
+
+let statsRefreshPromise = null;
+let statsIndexPromise = null;
+
+async function ensureRaceResultsStatsIndexes(pool) {
+    if (statsIndexPromise) return statsIndexPromise;
+    statsIndexPromise = (async () => {
+        const statements = [
+            `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_srr_skipper ON ${TABLE}(skipper)`,
+            `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_srr_skipper_trim ON ${TABLE}(TRIM(skipper)) WHERE skipper IS NOT NULL AND TRIM(skipper) <> ''`,
+            `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_srr_regatta ON ${TABLE}(regatta_name)`,
+            `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_srr_date ON ${TABLE}(regatta_date)`,
+            `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_srr_source ON ${TABLE}(source)`
+        ];
+        const client = await pool.connect();
+        try {
+            await client.query('SET statement_timeout = 0');
+            for (const sql of statements) {
+                try {
+                    await client.query(sql);
+                    console.log('[race-results] index ready:', sql.replace(/\s+/g, ' ').slice(0, 90));
+                } catch (err) {
+                    console.warn('[race-results] index skipped:', err.message);
+                }
+            }
+        } finally {
+            try { await client.query('RESET statement_timeout'); } catch (_) { /* ignore */ }
+            client.release();
+        }
+    })().catch((err) => {
+        console.error('[race-results] background index create failed:', err.message);
+        statsIndexPromise = null;
+        return null;
+    });
+    return statsIndexPromise;
+}
+
+async function refreshRaceResultsStatsSnapshot(pool) {
+    if (statsRefreshPromise) return statsRefreshPromise;
+    statsRefreshPromise = (async () => {
+        await ensureScrapedResultsTable(pool);
+        await ensureStatsSnapshotTable(pool);
+        console.log(`[race-results] computing stats snapshot (statement_timeout=${STATS_REFRESH_TIMEOUT_MS}ms)...`);
+        const computed = await withSessionTimeout(pool, STATS_REFRESH_TIMEOUT_MS, async (client) => {
+            const totals = await client.query(`SELECT COUNT(*)::int AS total_records FROM ${TABLE}`);
+            const sailors = await client.query(`
+                SELECT COUNT(*)::int AS total_sailors FROM (
+                    SELECT DISTINCT TRIM(skipper) AS skipper
+                    FROM ${TABLE}
+                    WHERE skipper IS NOT NULL AND TRIM(skipper) <> ''
+                ) s
+            `);
+            const regattas = await client.query(`
+                SELECT COUNT(*)::int AS total_regattas FROM (
+                    SELECT DISTINCT TRIM(regatta_name) AS regatta_name
+                    FROM ${TABLE}
+                    WHERE regatta_name IS NOT NULL AND TRIM(regatta_name) <> ''
+                ) r
+            `);
+            const dates = await client.query(`
+                SELECT MIN(regatta_date)::text AS earliest_date,
+                    MAX(regatta_date)::text AS latest_date
+                FROM ${TABLE}
+            `);
+            const bySource = await client.query(`
+                SELECT source, COUNT(*)::int AS count,
+                    COUNT(DISTINCT source_event_id)::int AS events
+                FROM ${TABLE}
+                GROUP BY source
+                ORDER BY source
+            `);
+            const dataYears = await client.query(`
+                SELECT source, EXTRACT(YEAR FROM regatta_date)::int AS year,
+                    COUNT(*)::int AS rows,
+                    COUNT(DISTINCT source_event_id)::int AS events
+                FROM ${TABLE}
+                WHERE regatta_date IS NOT NULL
+                GROUP BY source, EXTRACT(YEAR FROM regatta_date)
+                ORDER BY source, year DESC
+            `);
+            return {
+                total_records: totals.rows[0] && totals.rows[0].total_records || 0,
+                total_sailors: sailors.rows[0] && sailors.rows[0].total_sailors || 0,
+                total_regattas: regattas.rows[0] && regattas.rows[0].total_regattas || 0,
+                earliest_date: dates.rows[0] && dates.rows[0].earliest_date || null,
+                latest_date: dates.rows[0] && dates.rows[0].latest_date || null,
+                bySource: bySource.rows || [],
+                dataYears: dataYears.rows || []
+            };
+        });
+        await pool.query(
+            `
+            INSERT INTO ${STATS_SNAPSHOT_TABLE} (
+                id, total_records, total_sailors, total_regattas,
+                earliest_date, latest_date, by_source, data_years, computed_at
+            ) VALUES (1, $1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, NOW())
+            ON CONFLICT (id) DO UPDATE SET
+                total_records = EXCLUDED.total_records,
+                total_sailors = EXCLUDED.total_sailors,
+                total_regattas = EXCLUDED.total_regattas,
+                earliest_date = EXCLUDED.earliest_date,
+                latest_date = EXCLUDED.latest_date,
+                by_source = EXCLUDED.by_source,
+                data_years = EXCLUDED.data_years,
+                computed_at = EXCLUDED.computed_at
+            `,
+            [
+                computed.total_records || 0,
+                computed.total_sailors || 0,
+                computed.total_regattas || 0,
+                computed.earliest_date || null,
+                computed.latest_date || null,
+                JSON.stringify(computed.bySource || []),
+                JSON.stringify(computed.dataYears || [])
+            ]
+        );
+        const snapshot = await readRaceResultsStatsSnapshot(pool);
+        console.log(
+            '[race-results] stats snapshot stored:',
+            snapshot.total_sailors, 'sailors,',
+            snapshot.total_regattas, 'regattas,',
+            (snapshot.dataYears || []).length, 'dataYear rows,',
+            'computed_at=', snapshot.computed_at
+        );
+        return snapshot;
+    })().catch((err) => {
+        console.error('[race-results] background stats snapshot failed:', err.message);
+        throw err;
+    }).finally(() => {
+        statsRefreshPromise = null;
+    });
+    return statsRefreshPromise;
+}
+
+async function refreshRaceResultsStatsIfStale(pool) {
+    try {
+        const snapshot = await readRaceResultsStatsSnapshot(pool);
+        if (snapshotIsFresh(snapshot)) {
+            console.log('[race-results] serving stored stats snapshot computed_at=', snapshot.computed_at);
+            return snapshot;
+        }
+        return await refreshRaceResultsStatsSnapshot(pool);
+    } catch (err) {
+        console.error('[race-results] stats snapshot refresh failed:', err.message);
+        return null;
+    }
+}
+
+function kickStaleStatsRefresh(pool, snapshot) {
+    if (snapshotIsFresh(snapshot)) return;
+    if (!snapshot || !snapshot.computed_at) {
+        console.warn('[race-results] stats snapshot missing — serving zeros and starting background refresh');
+    } else {
+        console.log('[race-results] stats snapshot stale (computed_at=', snapshot.computed_at, ') — serving stored snapshot and starting background refresh');
+    }
+    refreshRaceResultsStatsSnapshot(pool).catch((err) => {
+        console.error('[race-results] background stats snapshot failed:', err.message);
+    });
 }
 
 /** Optional heavy cleanup — only after scrapes, never on dashboard reads. */
@@ -1334,53 +1594,20 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
 
     app.get('/api/race-results/stats', async (req, res) => {
         try {
-            await ensureScrapedResultsTable(pool);
-            // Bound query time so the admin UI never spins forever on large tables.
-            const payload = await withStatementTimeout(pool, 8000, async (client) => {
-                // Avoid TRIM() in aggregates so Postgres can use indexes.
-                const r = await client.query(`
-                    SELECT
-                        COUNT(*)::int AS total_records,
-                        COUNT(DISTINCT skipper) FILTER (WHERE skipper IS NOT NULL AND skipper <> '')::int AS total_sailors,
-                        COUNT(DISTINCT regatta_name) FILTER (WHERE regatta_name IS NOT NULL AND regatta_name <> '')::int AS total_regattas,
-                        MIN(regatta_date)::text AS earliest_date,
-                        MAX(regatta_date)::text AS latest_date
-                    FROM ${TABLE}
-                `);
-                const bySource = await client.query(`
-                    SELECT source, COUNT(*)::int AS count,
-                        COUNT(DISTINCT source_event_id)::int AS events
-                    FROM ${TABLE}
-                    GROUP BY source
-                    ORDER BY source
-                `);
-                const recent = await client.query(`
-                    SELECT source, regatta_name, regatta_date::text, category, position, sail_number, skipper, yacht_club, total_points
-                    FROM ${TABLE}
-                    ORDER BY scraped_at DESC NULLS LAST, id DESC
-                    LIMIT 12
-                `);
-                const row = r.rows[0] || {};
-                const earliestYear = row.earliest_date
-                    ? parseInt(String(row.earliest_date).slice(0, 4), 10)
-                    : null;
-                const latestYear = row.latest_date
-                    ? parseInt(String(row.latest_date).slice(0, 4), 10)
-                    : null;
-                return {
-                    success: true,
-                    tableName: TABLE,
-                    ...row,
-                    earliest_year: Number.isFinite(earliestYear) ? earliestYear : null,
-                    latest_year: Number.isFinite(latestYear) ? latestYear : null,
-                    bySource: bySource.rows,
-                    recent: recent.rows
-                };
-            });
-            res.json(payload);
+            const snapshot = await readRaceResultsStatsSnapshot(pool);
+            if (snapshot && snapshot.computed_at) {
+                console.log(
+                    '[race-results] /stats serving snapshot computed_at=',
+                    snapshot.computed_at,
+                    'sailors=', snapshot.total_sailors,
+                    'regattas=', snapshot.total_regattas
+                );
+            }
+            kickStaleStatsRefresh(pool, snapshot);
+            res.json(snapshot || emptyStatsSnapshot());
         } catch (e) {
             console.error('race-results stats error:', e);
-            res.status(500).json({ success: false, error: e.message });
+            res.json(emptyStatsSnapshot());
         }
     });
 
@@ -1498,22 +1725,16 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 LIMIT 40
             `);
 
-            let dataYearsRows = [];
-            try {
-                dataYearsRows = await withStatementTimeout(pool, 6000, async (client) => {
-                    const dataYears = await client.query(`
-                        SELECT source, EXTRACT(YEAR FROM regatta_date)::int AS year,
-                            COUNT(*)::int AS rows,
-                            COUNT(DISTINCT source_event_id)::int AS events
-                        FROM ${TABLE}
-                        WHERE regatta_date IS NOT NULL
-                        GROUP BY source, EXTRACT(YEAR FROM regatta_date)
-                        ORDER BY source, year DESC
-                    `);
-                    return dataYears.rows;
-                });
-            } catch (dataYearsErr) {
-                console.warn('[race-results] dataYears skipped:', dataYearsErr.message);
+            const snapshot = await readRaceResultsStatsSnapshot(pool);
+            kickStaleStatsRefresh(pool, snapshot);
+            const dataYearsRows = (snapshot && snapshot.dataYears) || [];
+            if (snapshot && snapshot.computed_at) {
+                console.log(
+                    '[race-results] scrape-history dataYears from snapshot:',
+                    dataYearsRows.length, 'year-source rows, computed_at=', snapshot.computed_at
+                );
+            } else {
+                console.warn('[race-results] scrape-history dataYears empty — snapshot not ready yet');
             }
 
             const bySource = { clubspot: { yearsDone: [], dataYears: [] }, regattanetwork: { yearsDone: [], dataYears: [] } };
@@ -1620,24 +1841,23 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
             };
 
             if (intent === 'data_summary') {
-                const summary = await withStatementTimeout(pool, 8000, async (client) => {
-                    const r = await client.query(`
-                        SELECT COUNT(*)::int AS total_records,
-                            COUNT(DISTINCT skipper) FILTER (WHERE skipper IS NOT NULL AND skipper <> '')::int AS sailors,
-                            COUNT(DISTINCT regatta_name) FILTER (WHERE regatta_name IS NOT NULL AND regatta_name <> '')::int AS regattas,
-                            MIN(regatta_date)::text AS earliest_date,
-                            MAX(regatta_date)::text AS latest_date
-                        FROM ${TABLE}
-                    `);
-                    const by = await client.query(`SELECT source, COUNT(*)::int AS count FROM ${TABLE} GROUP BY source`);
-                    return { r, by };
-                });
-                const row = summary.r.rows[0];
-                const src = summary.by.rows.map(x => `${x.source}: ${x.count}`).join(', ') || 'none';
+                const snapshot = await readRaceResultsStatsSnapshot(pool);
+                kickStaleStatsRefresh(pool, snapshot);
+                const row = snapshot || emptyStatsSnapshot();
+                const src = (row.bySource || []).map(x => `${x.source}: ${x.count}`).join(', ') || 'none';
                 return ok({
                     success: true,
-                    reply: `Scraped results table **${TABLE}** has **${row.total_records}** rows, **${row.sailors}** sailors, **${row.regattas}** regattas. Dates ${row.earliest_date || '—'} to ${row.latest_date || '—'}. By source: ${src}.`,
-                    data: { resultType: 'summary', ...row, bySource: by.rows }
+                    reply: `Scraped results table **${TABLE}** has **${row.total_records}** rows, **${row.total_sailors}** sailors, **${row.total_regattas}** regattas. Dates ${row.earliest_date || '—'} to ${row.latest_date || '—'}. By source: ${src}.`,
+                    data: {
+                        resultType: 'summary',
+                        total_records: row.total_records,
+                        sailors: row.total_sailors,
+                        regattas: row.total_regattas,
+                        earliest_date: row.earliest_date,
+                        latest_date: row.latest_date,
+                        bySource: row.bySource,
+                        computed_at: row.computed_at
+                    }
                 });
             }
 
@@ -1900,8 +2120,14 @@ module.exports = {
     LOOKBACK_MAX_DAYS,
     TABLE,
     SCRAPE_LOG_TABLE,
+    STATS_SNAPSHOT_TABLE,
     resolveScrapeWindow,
     ensureScrapedResultsTable,
+    ensureStatsSnapshotTable,
+    ensureRaceResultsStatsIndexes,
+    readRaceResultsStatsSnapshot,
+    refreshRaceResultsStatsSnapshot,
+    refreshRaceResultsStatsIfStale,
     startResultsScrapeJob,
     attachRaceResultsScraper,
     parseRnListing,

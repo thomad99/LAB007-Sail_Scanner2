@@ -319,13 +319,23 @@
         const status = document.getElementById('status');
         const welcomeEl = document.getElementById('welcome');
 
+        function formatStatsAsOf(data) {
+            const raw = data && data.computed_at;
+            if (!raw) return '';
+            const d = new Date(raw);
+            if (Number.isNaN(d.getTime())) return '';
+            return d.toISOString().slice(0, 10);
+        }
+
         function formatChatWelcomeHtml(data) {
             const sailors = Number(data && data.total_sailors || 0).toLocaleString();
             const regattas = Number(data && data.total_regattas || 0).toLocaleString();
             const year = (data && (data.earliest_year || (data.earliest_date && String(data.earliest_date).slice(0, 4)))) || null;
             const yearBit = year ? ', going as far back as <strong>' + String(year) + '</strong>' : '';
+            const asOf = formatStatsAsOf(data);
+            const asOfBit = asOf ? ' (as of <strong>' + asOf + '</strong>)' : '';
             return 'Welcome to Love Sailing ChatBot — I have knowledge of <strong>' +
-                sailors + '</strong> sailors and <strong>' + regattas + '</strong> regattas' + yearBit + '.';
+                sailors + '</strong> sailors and <strong>' + regattas + '</strong> regattas' + yearBit + asOfBit + '.';
         }
 
         (async function setWelcome() {
