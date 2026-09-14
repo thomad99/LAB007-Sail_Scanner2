@@ -8,7 +8,7 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <meta property="og:title" content="Find Regatta - Love Sailing">
     <meta property="og:description" content="Search for regattas, events, and sailing results.">
     <meta property="og:type" content="website">
@@ -85,9 +85,10 @@
         }
 
         .brand img {
-            height: 44px;
-            width: 168px;
-            object-fit: cover;
+            height: 56px;
+            width: auto;
+            max-width: 150px;
+            object-fit: contain;
             object-position: left center;
         }
 
@@ -112,12 +113,26 @@
         }
 
         .hero {
+            position: relative;
+            overflow: hidden;
             background:
                 linear-gradient(100deg, rgba(4, 16, 43, 0.94) 0%, rgba(4, 16, 43, 0.72) 42%, rgba(4, 16, 43, 0.28) 100%),
                 url("/Images/Gemini_Generated_Image_8bt7028bt7028bt7.png") right center / cover no-repeat,
                 linear-gradient(180deg, var(--navy-deep), #0b2a5c);
             color: #fff;
             padding: 36px 0 88px;
+        }
+
+        .hero-script {
+            position: absolute;
+            right: 7%;
+            bottom: 34%;
+            margin: 0;
+            font-family: Caveat, "Segoe Script", cursive;
+            font-size: clamp(1.4rem, 2.4vw, 2rem);
+            color: rgba(255, 255, 255, 0.9);
+            transform: rotate(-12deg);
+            pointer-events: none;
         }
 
         .hero-inner h1 {
@@ -187,6 +202,7 @@
             border: 1px solid var(--line);
             border-radius: 12px;
             background: #fff;
+            position: relative;
         }
 
         .field:focus-within {
@@ -219,15 +235,14 @@
         }
 
         .autocomplete-wrapper {
-            position: relative;
             width: 100%;
         }
 
         .autocomplete-dropdown {
             position: absolute;
             top: calc(100% + 8px);
-            left: -42px;
-            right: -14px;
+            left: 0;
+            right: 0;
             background: #fff;
             border: 1px solid var(--line);
             border-radius: 12px;
@@ -716,12 +731,16 @@
             display: flex;
             align-items: center;
             text-decoration: none;
+            background: #04102b;
+            border-radius: 8px;
+            padding: 4px 10px 4px 6px;
         }
 
         .footer-brand img {
-            height: 36px;
-            width: 140px;
-            object-fit: cover;
+            height: 40px;
+            width: auto;
+            max-width: 130px;
+            object-fit: contain;
             object-position: left center;
         }
 
@@ -799,8 +818,8 @@
                 width: min(1120px, calc(100% - 28px));
             }
 
-            .hero {
-                padding: 24px 0 72px;
+            .hero-script {
+                display: none;
             }
 
             .search-grid {
@@ -859,6 +878,7 @@
         <div class="hero-inner">
             <h1>Find your next regatta.</h1>
             <p>Search events, explore results and follow your favourite fleets.</p>
+            <p class="hero-script">More Sailing Together</p>
         </div>
     </section>
 
