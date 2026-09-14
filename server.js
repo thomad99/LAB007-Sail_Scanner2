@@ -43,6 +43,8 @@ const {
     isoDateFromParse,
     extractBoatTypesFromText,
     mergeBoatTypes,
+    knownSailboatClasses,
+    boatClassSearchPattern,
     expandInclusiveDates,
     resolveClubspotBoatTypes,
     ensureRegattaExtraColumns,
@@ -5387,12 +5389,15 @@ app.get('/api/search-regattas', async (req, res) => {
         }
 
         if (boatType && String(boatType).trim()) {
-            paramCount++;
-            query += ` AND EXISTS (
-                SELECT 1 FROM unnest(COALESCE(boat_types, ARRAY[]::text[])) AS t
-                WHERE t ILIKE $${paramCount}
-            )`;
-            params.push(String(boatType).trim());
+            const classPattern = boatClassSearchPattern(boatType);
+            if (classPattern) {
+                paramCount++;
+                query += ` AND EXISTS (
+                    SELECT 1 FROM unnest(COALESCE(boat_types, ARRAY[]::text[])) AS t
+                    WHERE t ~* $${paramCount}
+                )`;
+                params.push(classPattern);
+            }
         }
 
         if (nearbySearch) {
@@ -5470,7 +5475,7 @@ app.get('/api/boat-types', async (req, res) => {
         `);
         res.json({
             success: true,
-            boatTypes: result.rows.map(row => row.boat_type)
+            boatTypes: knownSailboatClasses(result.rows.map(row => row.boat_type))
         });
     } catch (error) {
         console.error('Error fetching boat types:', error);

@@ -7,14 +7,14 @@
     <title>Admin - Love Sailing</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <meta property="og:title" content="Admin - Love Sailing">
-    <meta property="og:description" content="Unified administration dashboard for dates, results, chat, and photos.">
+    <meta property="og:description" content="Unified administration dashboard for dates, results, and photos.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://lovesailing.ai/admin">
     <meta property="og:image" content="https://lovesailing.ai/Images/LOVE%20SAILING%20LOGO.JPEG">
     <meta property="og:image:alt" content="Love Sailing Logo">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Admin - Love Sailing">
-    <meta name="twitter:description" content="Unified administration dashboard for dates, results, chat, and photos.">
+    <meta name="twitter:description" content="Unified administration dashboard for dates, results, and photos.">
     <meta name="twitter:image" content="https://lovesailing.ai/Images/LOVE%20SAILING%20LOGO.JPEG">
     <style>
         body {
@@ -945,358 +945,6 @@
             }
         }
 
-        .results-chat {
-            text-align: left;
-            margin-top: 20px;
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 8px;
-            padding: 16px;
-        }
-
-        .results-chat-log {
-            max-height: 320px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            margin-bottom: 12px;
-        }
-
-        .chatbot-panel {
-            display: flex;
-            flex-direction: column;
-            min-height: calc(100vh - 220px);
-            text-align: left;
-            background: rgba(200, 220, 255, 0.12);
-            border: 1px solid rgba(126, 207, 255, 0.22);
-            border-radius: 12px;
-            padding: 18px;
-            margin-top: 12px;
-        }
-
-        .chatbot-panel h2 {
-            margin: 0 0 6px;
-            color: #7ecfff;
-        }
-
-        .chatbot-panel .chatbot-sub {
-            color: #9aa7b8;
-            margin: 0 0 14px;
-            font-size: 0.95em;
-        }
-
-        .chatbot-panel .results-chat-log {
-            flex: 1;
-            min-height: 420px;
-            max-height: none;
-            background: rgba(200, 220, 255, 0.18);
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 14px;
-        }
-
-        .chatbot-panel .results-chat-msg.user {
-            background: #ffffff;
-            color: #1a1a2e;
-            border-radius: 12px;
-            border-bottom-right-radius: 4px;
-            max-width: 80%;
-        }
-
-        .chatbot-panel .results-chat-msg.bot {
-            background: #a8d8f0;
-            color: #1a1a2e;
-            border-radius: 12px;
-            border-bottom-left-radius: 4px;
-            width: auto;
-            max-width: 95%;
-        }
-
-        .results-chat-msg.bot.pending {
-            opacity: 0.85;
-            font-style: italic;
-        }
-
-        .chatbot-panel .results-chat-row input {
-            background: rgba(255, 255, 255, 0.12);
-            border: 2px solid rgba(168, 216, 240, 0.55);
-            color: #fff;
-        }
-
-        .chatbot-panel .results-chat-row input::placeholder {
-            color: rgba(255, 255, 255, 0.55);
-        }
-
-        .sailor-results-card {
-            margin-top: 14px;
-            background: #fff;
-            border-radius: 10px;
-            padding: 18px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            color: #1a1a2e;
-            text-align: left;
-        }
-
-        .sailor-results-card h3 {
-            margin: 0 0 12px;
-            color: #0066cc;
-            font-size: 1em;
-            text-decoration: underline;
-            text-decoration-color: #0066cc;
-        }
-
-        .sailor-results-card .section {
-            margin-bottom: 18px;
-        }
-
-        .sailor-results-card .section:last-child {
-            margin-bottom: 0;
-        }
-
-        .sailor-results-card .info-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 4px;
-        }
-
-        .sailor-results-card .info-table td {
-            padding: 6px 10px 6px 0;
-            vertical-align: top;
-        }
-
-        .sailor-results-card .info-table td:first-child {
-            font-weight: 600;
-            color: #333;
-            width: 1%;
-            white-space: nowrap;
-        }
-
-        .sailor-results-card table.data {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.9em;
-        }
-
-        .sailor-results-card table.data th,
-        .sailor-results-card table.data td {
-            padding: 8px 10px;
-            text-align: left;
-            border-bottom: 1px solid #e0e0e0;
-        }
-
-        .sailor-results-card table.data th {
-            background: #f0f4ff;
-            color: #0066cc;
-            font-weight: 600;
-        }
-
-        .sailor-results-card table.data th.sortable {
-            cursor: pointer;
-            user-select: none;
-            white-space: nowrap;
-        }
-
-        .sailor-results-card table.data th.sortable:hover {
-            background: #e4edff;
-        }
-
-        .sailor-results-card table.data th.sortable.sort-asc::after,
-        .sailor-results-card table.data th.sortable.sort-desc::after {
-            font-size: 0.75em;
-            margin-left: 4px;
-        }
-
-        .sailor-results-card table.data th.sortable.sort-asc::after {
-            content: '▲';
-        }
-
-        .sailor-results-card table.data th.sortable.sort-desc::after {
-            content: '▼';
-        }
-
-        .sailor-results-card table.data tbody tr:nth-child(even) {
-            background: #f7fbff;
-        }
-
-        .sailor-results-card .pos-link,
-        .sailor-results-card .name-link {
-            background: none;
-            border: none;
-            color: #0066cc;
-            font-weight: 700;
-            cursor: pointer;
-            text-decoration: underline;
-            padding: 0;
-            font-size: inherit;
-            text-align: left;
-        }
-
-        .sailor-results-card .pos-link:hover,
-        .sailor-results-card .name-link:hover {
-            color: #0088ff;
-        }
-
-        .sailor-results-card .sailor-title {
-            margin: 0 0 14px;
-            color: #0066cc;
-            font-size: 1.15em;
-            text-decoration: none;
-        }
-
-        .event-modal {
-            position: fixed;
-            inset: 0;
-            z-index: 80;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            padding: 24px;
-            background: rgba(10, 16, 40, 0.55);
-        }
-
-        .event-modal.open {
-            display: flex;
-        }
-
-        .event-modal-card {
-            width: min(960px, 100%);
-            max-height: 86vh;
-            overflow: auto;
-            background: #fff;
-            border-radius: 12px;
-            padding: 20px 22px;
-            color: #1a1a2e;
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
-        }
-
-        .event-modal-card h3 {
-            margin: 0 0 6px;
-            color: #0066cc;
-        }
-
-        .event-modal-meta {
-            margin: 0 0 14px;
-            color: #445;
-            font-size: 0.9em;
-        }
-
-        .event-modal-close {
-            float: right;
-            border: none;
-            background: #eef3ff;
-            color: #0066cc;
-            border-radius: 8px;
-            padding: 6px 10px;
-            cursor: pointer;
-            font-weight: 600;
-        }
-
-        .event-modal-toolbar {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 10px;
-            margin: 0 0 14px;
-            padding: 12px;
-            background: #f4f7ff;
-            border-radius: 8px;
-        }
-
-        .event-modal-toolbar label {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            font-size: 0.75em;
-            font-weight: 700;
-            color: #0066cc;
-        }
-
-        .event-modal-toolbar select {
-            padding: 7px 8px;
-            border: 1px solid #c9d6ee;
-            border-radius: 6px;
-            background: #fff;
-            color: #1a1a2e;
-            font-size: 0.9em;
-        }
-
-        @media (max-width: 640px) {
-            .event-modal-toolbar {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        .sailor-results-card .detail-panel {
-            display: none;
-            margin: 8px 0 12px;
-            padding: 12px;
-            background: #f4f8ff;
-            border: 1px solid #d5e4ff;
-            border-radius: 8px;
-            font-size: 0.88em;
-        }
-
-        .sailor-results-card .detail-panel.open {
-            display: block;
-        }
-
-        .sailor-results-card tr.detail-row > td {
-            padding: 0;
-            border-bottom: none;
-        }
-
-        .sailor-results-card .detail-panel a {
-            color: #0066cc;
-        }
-
-        .sailor-results-card .race-cells {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            margin-top: 8px;
-        }
-
-        .sailor-results-card .race-cell {
-            background: #e8f1ff;
-            border-radius: 6px;
-            padding: 4px 8px;
-            font-variant-numeric: tabular-nums;
-        }
-
-        .sailor-results-card .race-cell.best {
-            background: #d8ffe8;
-            font-weight: 700;
-        }
-
-        .btn-download {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            margin-top: 14px;
-            padding: 10px 18px;
-            background: #0066cc;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 0.95em;
-            cursor: pointer;
-        }
-
-        .btn-download:hover {
-            background: #0088ff;
-        }
-
-        .chat-name-chip {
-            display: inline-block;
-            margin: 4px 6px 0 0;
-            padding: 6px 10px;
-            border-radius: 999px;
-            background: rgba(0, 102, 204, 0.12);
-            color: #0066cc;
-            border: 1px solid rgba(0, 102, 204, 0.25);
-            cursor: pointer;
-            font-size: 0.9em;
-        }
-
         .scrape-mode-row {
             display: flex;
             flex-wrap: wrap;
@@ -1416,53 +1064,6 @@
             background: #fff;
         }
 
-        .results-chat-msg {
-            padding: 10px 12px;
-            border-radius: 8px;
-            font-size: 0.92em;
-            line-height: 1.4;
-            white-space: pre-wrap;
-        }
-
-        .results-chat-msg.user {
-            background: rgba(0, 136, 255, 0.25);
-            align-self: flex-end;
-            max-width: 85%;
-        }
-
-        .results-chat-msg.bot {
-            background: #a8d8f0;
-            color: #1a1a2e;
-            align-self: flex-start;
-            width: auto;
-            max-width: 95%;
-        }
-
-        .results-chat-row {
-            display: flex;
-            gap: 8px;
-        }
-
-        .results-chat-row input {
-            flex: 1;
-            padding: 10px 12px;
-            border-radius: 6px;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            font-size: 1em;
-        }
-
-        .results-chat-row button {
-            padding: 10px 16px;
-            border: none;
-            border-radius: 6px;
-            background: #0066cc;
-            color: white;
-            cursor: pointer;
-            font-weight: bold;
-        }
-
         .results-mini-table {
             width: 100%;
             border-collapse: collapse;
@@ -1501,8 +1102,9 @@
         .page-top-dashboard .stats-container {
             margin-top: 10px;
         }
-        body.chat-tab-active .page-top-dashboard,
-        body.photos-tab-active .page-top-dashboard {
+        body.photos-tab-active .page-top-dashboard,
+        body:not(.results-tab-active) #resultsDashTile,
+        body:not(.dates-tab-active) #datesDashTile {
             display: none;
         }
 
@@ -1571,65 +1173,7 @@
             display: block;
         }
 
-        body.chat-tab-active {
-            align-items: stretch;
-        }
-        body.chat-tab-active .logo {
-            display: none;
-        }
-        body.chat-tab-active .content {
-            width: 100%;
-            max-width: none;
-            margin-top: 0;
-            padding: 0;
-        }
-        body.chat-tab-active .admin-tabs-wrap {
-            margin: 0;
-        }
-        body.chat-tab-active .admin-tabs {
-            width: 100%;
-            max-width: none;
-            justify-content: stretch;
-            padding: 0 8px;
-        }
-        body.chat-tab-active .admin-tab {
-            flex: 1;
-        }
-        body.chat-tab-active .back-link {
-            display: none;
-        }
-        body.chat-tab-active .chatbot-panel {
-            margin: 0;
-            border-radius: 0;
-            border-left: none;
-            border-right: none;
-            border-bottom: none;
-            min-height: calc(100dvh - 52px);
-            height: calc(100dvh - 52px);
-            max-height: none;
-            padding: 12px 12px 10px;
-            box-sizing: border-box;
-        }
-        body.chat-tab-active .chatbot-panel .results-chat-log {
-            min-height: 0;
-            flex: 1;
-        }
         @media (max-width: 768px) {
-            body.chat-tab-active .chatbot-panel h2 {
-                font-size: 1.15em;
-                margin-bottom: 2px;
-            }
-            body.chat-tab-active .chatbot-panel .chatbot-sub {
-                font-size: 0.85em;
-                margin-bottom: 10px;
-            }
-            body.chat-tab-active .results-chat-row {
-                gap: 8px;
-            }
-            body.chat-tab-active .results-chat-row input,
-            body.chat-tab-active .results-chat-row button {
-                min-height: 44px;
-            }
             .admin-tabs {
                 gap: 4px;
                 padding: 8px 8px 0;
@@ -1650,20 +1194,25 @@
     <link rel="stylesheet" href="/fit-screen.css">
 </head>
 
-<body class="fit-app">
+<body class="fit-app dates-tab-active">
     <img src="/Images/LOVE SAILING LOGO.JPEG" alt="Love Sailing Logo" class="logo">
 
     <div class="admin-tabs-wrap">
         <div class="admin-tabs" role="tablist" aria-label="Admin sections">
             <button type="button" class="admin-tab active" id="tabBtnDates" onclick="showAdminTab('dates')">Regatta Dates</button>
             <button type="button" class="admin-tab" id="tabBtnResults" onclick="showAdminTab('results')">Regatta Results</button>
-            <button type="button" class="admin-tab" id="tabBtnChat" onclick="showAdminTab('chat')">ChatBot</button>
             <button type="button" class="admin-tab" id="tabBtnPhotos" onclick="showAdminTab('photos')">Photo Admin</button>
         </div>
     </div>
 
     <div class="content">
         <h1>Admin Dashboard</h1>
+
+        <section class="admin-tile page-top-dashboard" id="datesDashTile">
+            <h2>Upcoming Regattas</h2>
+            <p class="tile-sub">Future events in the calendar.</p>
+            <div id="statsContainer" class="stats-container"><div class="loading">Loading upcoming total…</div></div>
+        </section>
 
         <section class="admin-tile page-top-dashboard" id="resultsDashTile">
             <h2>Results Dashboard</h2>
@@ -1715,7 +1264,7 @@
             <div id="scheduledScrapeStatusContainer" class="loading">Loading...</div>
         </div>
 
-        <div id="statsContainer" class="loading">Loading statistics...</div>
+        <div id="datesScrapeHistory"></div>
 
         <div id="regattaTableContainer" style="display: none;">
             <div class="regatta-table-container">
@@ -1878,18 +1427,6 @@
         </div>
         </div>
 
-        <div id="tab-chat" class="tab-panel">
-            <div class="chatbot-panel">
-                <h2>Love Sailing ChatBot</h2>
-                <p class="chatbot-sub">Ask about scraped ClubSpot and Regatta Network results — sailors, classes, clubs, and years.</p>
-                <div class="results-chat-log" id="resultsChatLog"></div>
-                <div class="results-chat-row">
-                    <input id="resultsChatInput" type="text" placeholder="e.g. top 5 sailors in C420 in 2025, best club, sail 5462, who won Sunfish">
-                    <button type="button" id="resultsChatSend" onclick="sendResultsChat()">Send</button>
-                </div>
-            </div>
-        </div>
-
         <div id="tab-photos" class="tab-panel">
             <div class="photo-admin-frame-wrap">
                 <iframe
@@ -1925,17 +1462,20 @@
 
     <script>
         function showAdminTab(name) {
-            document.body.classList.toggle('chat-tab-active', name === 'chat');
-            document.body.classList.toggle('photos-tab-active', name === 'photos');
+            if (name === 'chat') {
+                location.replace('Chatbot.html');
+                return;
+            }
+            const tab = ['dates', 'results', 'photos'].includes(name) ? name : 'dates';
+            document.body.classList.toggle('photos-tab-active', tab === 'photos');
+            document.body.classList.toggle('dates-tab-active', tab === 'dates');
+            document.body.classList.toggle('results-tab-active', tab === 'results');
 
-            const tab = ['dates', 'results', 'chat', 'photos'].includes(name) ? name : 'dates';
             document.getElementById('tab-dates').classList.toggle('active', tab === 'dates');
             document.getElementById('tab-results').classList.toggle('active', tab === 'results');
-            document.getElementById('tab-chat').classList.toggle('active', tab === 'chat');
             document.getElementById('tab-photos').classList.toggle('active', tab === 'photos');
             document.getElementById('tabBtnDates').classList.toggle('active', tab === 'dates');
             document.getElementById('tabBtnResults').classList.toggle('active', tab === 'results');
-            document.getElementById('tabBtnChat').classList.toggle('active', tab === 'chat');
             document.getElementById('tabBtnPhotos').classList.toggle('active', tab === 'photos');
             if (location.hash !== '#' + tab) {
                 history.replaceState(null, '', '#' + tab);
@@ -1944,11 +1484,6 @@
                 loadRaceResultsStats();
                 loadResultsScrapeHistory();
                 loadResultsSchedule();
-            }
-            if (tab === 'chat') {
-                ensureChatWelcome();
-                const input = document.getElementById('resultsChatInput');
-                if (input) setTimeout(() => input.focus(), 50);
             }
             if (tab === 'photos') {
                 const frame = document.getElementById('photoAdminFrame');
@@ -2159,69 +1694,41 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    let html = '<div class="stats-container">';
-                    
-                    // Total regattas
-                    html += '<div class="stat-card">';
-                    html += '<h3>Total Regattas</h3>';
-                    html += `<div class="value">${data.totalRegattas}</div>`;
-                    html += '<div class="label">In Database</div>';
-                    html += '</div>';
+                    const upcoming = Number(data.upcomingRegattas || 0).toLocaleString();
+                    container.innerHTML = `
+                        <div class="stat-card">
+                            <div class="value">${upcoming}</div>
+                            <div class="label">Total upcoming</div>
+                        </div>
+                    `;
 
-                    // Upcoming regattas
-                    html += '<div class="stat-card">';
-                    html += '<h3>Upcoming Regattas</h3>';
-                    html += `<div class="value">${data.upcomingRegattas}</div>`;
-                    html += '<div class="label">Future Events</div>';
-                    html += '</div>';
-
-                    // By source
-                    if (data.bySource && data.bySource.length > 0) {
-                        data.bySource.forEach(source => {
-                            html += '<div class="stat-card">';
-                            html += `<h3>${source.source.charAt(0).toUpperCase() + source.source.slice(1)}</h3>`;
-                            html += `<div class="value">${source.count}</div>`;
-                            html += '<div class="label">Regattas</div>';
-                            html += '</div>';
-                        });
-                    }
-
-                    html += '</div>';
-
-                    // Scrape history
-                    if (data.lastScrapes && data.lastScrapes.length > 0) {
-                        html += '<div class="scrape-history">';
-                        html += '<h2>Last Scrape Times</h2>';
-                        
-                        data.lastScrapes.forEach(scrape => {
-                            const lastScrape = new Date(scrape.last_scrape);
-                            const formattedDate = lastScrape.toLocaleString('en-US', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
+                    const history = document.getElementById('datesScrapeHistory');
+                    if (history) {
+                        if (data.lastScrapes && data.lastScrapes.length > 0) {
+                            let html = '<div class="scrape-history"><h2>Last Scrape Times</h2>';
+                            data.lastScrapes.forEach(scrape => {
+                                const lastScrape = new Date(scrape.last_scrape);
+                                const formattedDate = lastScrape.toLocaleString('en-US', {
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                });
+                                html += '<div class="scrape-item">';
+                                html += `<h4>${escapeHtml(String(scrape.source || '').charAt(0).toUpperCase() + String(scrape.source || '').slice(1))}</h4>`;
+                                html += '<div class="details">';
+                                html += `<div class="detail"><strong>Last Scrape:</strong> ${formattedDate}</div>`;
+                                html += `<div class="detail"><strong>Total Found:</strong> ${scrape.total_found || 0}</div>`;
+                                html += `<div class="detail"><strong>Total Added:</strong> ${scrape.total_added || 0}</div>`;
+                                html += '</div></div>';
                             });
-
-                            html += '<div class="scrape-item">';
-                            html += `<h4>${scrape.source.charAt(0).toUpperCase() + scrape.source.slice(1)}</h4>`;
-                            html += '<div class="details">';
-                            html += `<div class="detail"><strong>Last Scrape:</strong> ${formattedDate}</div>`;
-                            html += `<div class="detail"><strong>Total Found:</strong> ${scrape.total_found || 0}</div>`;
-                            html += `<div class="detail"><strong>Total Added:</strong> ${scrape.total_added || 0}</div>`;
                             html += '</div>';
-                            html += '</div>';
-                        });
-
-                        html += '</div>';
-                    } else {
-                        html += '<div class="scrape-history">';
-                        html += '<h2>Scrape History</h2>';
-                        html += '<p style="text-align: center; color: #cccccc;">No scrape history available yet. Run a scrape to see statistics.</p>';
-                        html += '</div>';
+                            history.innerHTML = html;
+                        } else {
+                            history.innerHTML = '<div class="scrape-history"><h2>Scrape History</h2><p style="text-align: center; color: #cccccc;">No scrape history available yet. Run a scrape to see statistics.</p></div>';
+                        }
                     }
-
-                    container.innerHTML = html;
                 } else {
                     throw new Error(data.error || 'Failed to load stats');
                 }
@@ -2779,7 +2286,7 @@
             button.disabled = true;
             button.textContent = 'Loading...';
 
-            await Promise.all([loadStats(), loadRegattas(), loadScrapeStatus(), loadRaceResultsStats(), loadResultsSchedule()]);
+            await Promise.all([loadStats(), loadRegattas(), loadScrapeStatus()]);
 
             button.disabled = false;
             button.textContent = 'Refresh All';
@@ -3138,7 +2645,7 @@
         }
 
         async function clearScrapedResults() {
-            if (!confirm('Delete ALL rows in scraped_race_results? Existing chatbot data is not touched.')) return;
+            if (!confirm('Delete ALL rows in scraped_race_results? Calendar events are not affected.')) return;
             try {
                 const res = await fetch('/api/race-results/clear', { method: 'POST' });
                 const data = await res.json();
@@ -3149,17 +2656,6 @@
             } catch (err) {
                 showResultsStatus('Error: ' + escapeHtml(err.message), 'error');
             }
-        }
-
-        function addResultsChat(role, html) {
-            const log = document.getElementById('resultsChatLog');
-            if (!log) return null;
-            const div = document.createElement('div');
-            div.className = 'results-chat-msg ' + role;
-            div.innerHTML = html;
-            log.appendChild(div);
-            log.scrollTop = log.scrollHeight;
-            return div;
         }
 
         async function fetchJsonWithTimeout(url, options = {}, timeoutMs = 25000) {
@@ -3198,481 +2694,6 @@
             return d.toISOString().slice(0, 10);
         }
 
-        function oldestDataYear(data) {
-            if (data && data.earliest_year != null && data.earliest_year !== '') {
-                const y = parseInt(data.earliest_year, 10);
-                if (Number.isFinite(y) && y >= 1900 && y <= 2100) return String(y);
-            }
-            const raw = data && data.earliest_date;
-            if (raw == null || raw === '') return null;
-            const match = String(raw).match(/\b((?:19|20)\d{2})\b/);
-            return match ? match[1] : null;
-        }
-
-        function formatChatWelcomeHtml(data) {
-            const sailors = Number(data && data.total_sailors || 0).toLocaleString();
-            const regattas = Number(data && data.total_regattas || 0).toLocaleString();
-            const year = oldestDataYear(data);
-            const yearBit = year
-                ? `, going as far back as <strong>${escapeHtml(year)}</strong>`
-                : '';
-            return `Welcome to Love Sailing ChatBot — I have knowledge of <strong>${sailors}</strong> sailors and <strong>${regattas}</strong> regattas${yearBit}.`;
-        }
-
-        async function ensureChatWelcome() {
-            const log = document.getElementById('resultsChatLog');
-            if (!log || log.dataset.welcomed === '1') return;
-            log.dataset.welcomed = '1';
-
-            // Show immediately so a slow/hung stats API cannot leave the tab blank.
-            const bubble = addResultsChat(
-                'bot',
-                'Welcome to Love Sailing ChatBot — loading sailor and regatta counts…'
-            );
-            try {
-                const data = await fetchJsonWithTimeout('/api/race-results/stats', {}, 20000);
-                if (data && data.success && bubble) {
-                    bubble.innerHTML = formatChatWelcomeHtml(data);
-                } else if (bubble) {
-                    bubble.innerHTML = 'Welcome to Love Sailing ChatBot. How can I help?';
-                }
-            } catch (_) {
-                if (bubble) {
-                    bubble.innerHTML = 'Welcome to Love Sailing ChatBot. How can I help?';
-                }
-            }
-        }
-
-        function formatReplyMarkdown(text) {
-            return escapeHtml(text || '')
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\n/g, '<br>');
-        }
-
-        function displayLoc(value) {
-            const t = String(value == null ? '' : value).trim();
-            return t && t !== '—' ? t : '—';
-        }
-
-        function sortPairsFromTable(table) {
-            const tbody = table.tBodies[0];
-            if (!tbody) return [];
-            const pairs = [];
-            Array.from(tbody.children).forEach(tr => {
-                if (tr.classList.contains('detail-row')) {
-                    if (pairs.length) pairs[pairs.length - 1].detail = tr;
-                    return;
-                }
-                pairs.push({ row: tr, detail: null });
-            });
-            return pairs;
-        }
-
-        function compareSortValues(a, b, type) {
-            if (type === 'num') {
-                const an = Number(a);
-                const bn = Number(b);
-                const aOk = Number.isFinite(an);
-                const bOk = Number.isFinite(bn);
-                if (aOk && bOk && an !== bn) return an - bn;
-                if (aOk !== bOk) return aOk ? -1 : 1;
-                return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
-            }
-            return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
-        }
-
-        function applyTableSort(table, key, dir) {
-            const tbody = table.tBodies[0];
-            if (!tbody) return;
-            const pairs = sortPairsFromTable(table);
-            const type = (table.querySelector(`th[data-sort="${key}"]`) || {}).getAttribute
-                ? (table.querySelector(`th[data-sort="${key}"]`).getAttribute('data-type') || 'text')
-                : 'text';
-            pairs.sort((x, y) => {
-                const av = x.row.getAttribute('data-' + key) || '';
-                const bv = y.row.getAttribute('data-' + key) || '';
-                const cmp = compareSortValues(av, bv, type);
-                return dir === 'desc' ? -cmp : cmp;
-            });
-            pairs.forEach(p => {
-                tbody.appendChild(p.row);
-                if (p.detail) tbody.appendChild(p.detail);
-            });
-            table.querySelectorAll('th.sortable').forEach(th => {
-                th.classList.toggle('sort-asc', th.getAttribute('data-sort') === key && dir === 'asc');
-                th.classList.toggle('sort-desc', th.getAttribute('data-sort') === key && dir === 'desc');
-            });
-            table.dataset.sortKey = key;
-            table.dataset.sortDir = dir;
-        }
-
-        function wireSortableTable(table, defaultKey, defaultDir) {
-            if (!table) return;
-            applyTableSort(table, defaultKey, defaultDir);
-            table.querySelectorAll('th.sortable').forEach(th => {
-                th.addEventListener('click', () => {
-                    const key = th.getAttribute('data-sort');
-                    const same = table.dataset.sortKey === key;
-                    const dir = same && table.dataset.sortDir === 'desc' ? 'asc' : 'desc';
-                    const next = same
-                        ? (table.dataset.sortDir === 'asc' ? 'desc' : 'asc')
-                        : (th.getAttribute('data-default-dir') || 'asc');
-                    applyTableSort(table, key, next);
-                });
-            });
-        }
-
-        function renderSailorCard(data) {
-            if (!data || data.resultType !== 'sailor_card') return '';
-            const sailor = data.sailor || {};
-            const details = data.details || {};
-            let html = '';
-            html += `<h3 class="sailor-title">${escapeHtml(sailor.name || 'Sailor')}</h3>`;
-
-            html += '<div class="section"><h3>Regatta results</h3><table class="data js-regatta-table"><thead><tr>' +
-                '<th class="sortable" data-sort="sortpos" data-type="num" data-default-dir="asc">Position</th>' +
-                '<th class="sortable" data-sort="sortname" data-type="text" data-default-dir="asc">Regatta Name</th>' +
-                '<th class="sortable" data-sort="sortdate" data-type="text" data-default-dir="desc">Date</th>' +
-                '<th class="sortable" data-sort="sortclass" data-type="text" data-default-dir="asc">Class</th>' +
-                '<th class="sortable" data-sort="sortloc" data-type="text" data-default-dir="asc">Location</th>' +
-                '</tr></thead><tbody>';
-            const regattaRows = data.regattaAchievements || [];
-            if (regattaRows.length) {
-                regattaRows.forEach(r => {
-                    const pos = r.position != null ? String(r.position) : '—';
-                    const loc = displayLoc(r.location);
-                    html += `<tr data-sortpos="${escapeHtml(String(r.position ?? ''))}" data-sortname="${escapeHtml((r.regatta_name || '').toLowerCase())}" data-sortdate="${escapeHtml(r.regatta_date_raw || r.regatta_date || '')}" data-sortclass="${escapeHtml((r.category || '').toLowerCase())}" data-sortloc="${escapeHtml(loc.toLowerCase())}">
-                        <td><button type="button" class="pos-link" data-detail="${escapeHtml(r.detailId)}">${escapeHtml(pos)}</button></td>
-                        <td><button type="button" class="name-link" data-regatta-name="${escapeHtml(r.regatta_name || '')}" data-regatta-date="${escapeHtml(r.regatta_date_raw || '')}">${escapeHtml(r.regatta_name || '')}</button></td>
-                        <td>${escapeHtml(r.regatta_date || '')}</td>
-                        <td>${escapeHtml(r.category || '')}</td>
-                        <td>${escapeHtml(loc)}</td>
-                    </tr>
-                    <tr class="detail-row"><td colspan="5"><div class="detail-panel" data-detail-panel="${escapeHtml(r.detailId)}"></div></td></tr>`;
-                });
-            } else {
-                html += '<tr><td colspan="5">—</td></tr>';
-            }
-            html += '</tbody></table></div>';
-
-            html += '<div class="section"><h3>Best Race Achievements</h3><table class="data"><thead><tr><th>Race place</th><th>Race #</th><th>Regatta Name</th><th>Date</th></tr></thead><tbody>';
-            const raceRows = data.raceAchievements || [];
-            if (raceRows.length) {
-                raceRows.forEach(r => {
-                    html += `<tr>
-                        <td><button type="button" class="pos-link" data-detail="${escapeHtml(r.detailId)}">${escapeHtml(String(r.racePlace))}</button></td>
-                        <td>${escapeHtml(String(r.raceIndex))}${r.throwout ? ' (TO)' : ''}</td>
-                        <td>${escapeHtml(r.regatta_name || '')}</td>
-                        <td>${escapeHtml(r.regatta_date || '')}</td>
-                    </tr>
-                    <tr class="detail-row"><td colspan="4"><div class="detail-panel" data-detail-panel="${escapeHtml(r.detailId)}"></div></td></tr>`;
-                });
-            } else {
-                html += '<tr><td colspan="4">No per-race scores available yet.</td></tr>';
-            }
-            html += '</tbody></table></div>';
-
-            html += '<button type="button" class="btn-download js-download-sailor">Download Results</button>';
-            return { html, details };
-        }
-
-        function renderDetailHtml(detail) {
-            if (!detail) return '<em>No detail available.</em>';
-            const cells = detail.resultsCells || [];
-            const best = cells.reduce((min, c) => (c.place != null && (min == null || c.place < min) ? c.place : min), null);
-            let html = `<div><strong>${escapeHtml(detail.regatta_name || 'Regatta')}</strong> · ${escapeHtml(formatChatDateLocal(detail.regatta_date))}</div>`;
-            html += `<div style="margin-top:6px;">Class: ${escapeHtml(detail.category || '—')} · Overall place: ${escapeHtml(String(detail.position ?? '—'))} · Points: ${escapeHtml(String(detail.total_points ?? '—'))}</div>`;
-            html += `<div style="margin-top:6px;">Sail: ${escapeHtml(detail.sail_number || '—')} · Boat: ${escapeHtml(detail.boat_name || '—')} · Club: ${escapeHtml(detail.yacht_club || '—')}</div>`;
-            if (cells.length) {
-                html += '<div class="race-cells">';
-                cells.forEach(c => {
-                    const cls = c.place != null && c.place === best ? 'race-cell best' : 'race-cell';
-                    html += `<span class="${cls}">R${c.index}: ${escapeHtml(c.raw)}</span>`;
-                });
-                html += '</div>';
-            } else if (detail.results) {
-                html += `<div style="margin-top:8px;">Race scores: ${escapeHtml(detail.results)}</div>`;
-            }
-            if (detail.source_url) {
-                html += `<div style="margin-top:8px;"><a href="${escapeHtml(detail.source_url)}" target="_blank" rel="noopener">Open source results</a></div>`;
-            }
-            return html;
-        }
-
-        function formatChatDateLocal(isoOrText) {
-            if (!isoOrText) return '—';
-            const s = String(isoOrText).slice(0, 10);
-            const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-            if (!m) return String(isoOrText);
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            return `${parseInt(m[3], 10)} ${months[parseInt(m[2], 10) - 1]} ${m[1]}`;
-        }
-
-        function wireSailorCard(cardEl, data) {
-            const details = data.details || {};
-            cardEl.querySelectorAll('.pos-link').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const id = btn.getAttribute('data-detail');
-                    let panel = btn.closest('tr')?.nextElementSibling?.querySelector(`.detail-panel[data-detail-panel="${id}"]`);
-                    if (!panel) panel = cardEl.querySelector(`.detail-panel[data-detail-panel="${id}"]`);
-                    if (!panel) return;
-                    const opening = !panel.classList.contains('open');
-                    cardEl.querySelectorAll('.detail-panel.open').forEach(p => {
-                        if (p !== panel) p.classList.remove('open');
-                    });
-                    if (opening) {
-                        panel.innerHTML = renderDetailHtml(details[id]);
-                        panel.classList.add('open');
-                    } else {
-                        panel.classList.remove('open');
-                    }
-                });
-            });
-            cardEl.querySelectorAll('.name-link').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    openRegattaEventCard(btn.getAttribute('data-regatta-name'), btn.getAttribute('data-regatta-date'));
-                });
-            });
-            wireSortableTable(cardEl.querySelector('.js-regatta-table'), 'sortdate', 'desc');
-            const dl = cardEl.querySelector('.js-download-sailor');
-            if (dl) {
-                dl.addEventListener('click', () => downloadSailorCard(data));
-            }
-        }
-
-        function ensureEventModal() {
-            let modal = document.getElementById('regattaEventModal');
-            if (modal) return modal;
-            modal = document.createElement('div');
-            modal.id = 'regattaEventModal';
-            modal.className = 'event-modal';
-            modal.innerHTML = '<div class="event-modal-card sailor-results-card" role="dialog" aria-modal="true"><button type="button" class="event-modal-close">Close</button><div class="js-event-body"></div></div>';
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) modal.classList.remove('open');
-            });
-            modal.querySelector('.event-modal-close').addEventListener('click', () => modal.classList.remove('open'));
-            document.body.appendChild(modal);
-            return modal;
-        }
-
-        function uniqueEventOptions(rows, key) {
-            const map = new Map();
-            (rows || []).forEach(r => {
-                const raw = String(r[key] || '').trim();
-                if (!raw) return;
-                const k = raw.toLowerCase();
-                if (!map.has(k)) map.set(k, raw);
-            });
-            return [...map.values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-        }
-
-        function positionSortValue(pos) {
-            const n = parseInt(String(pos ?? '').replace(/[^\d]/g, ''), 10);
-            return Number.isFinite(n) ? n : 99999;
-        }
-
-        function eventResultRowHtml(r) {
-            return `<tr>
-                <td>${escapeHtml(String(r.position ?? '—'))}</td>
-                <td>${escapeHtml(r.skipper || '')}</td>
-                <td>${escapeHtml(r.yacht_club || '')}</td>
-                <td>${escapeHtml(r.category || '')}</td>
-                <td>${escapeHtml(r.sail_number || '')}</td>
-            </tr>`;
-        }
-
-        function renderEventResultsHtml(payload) {
-            const rows = (payload && payload.rows) || [];
-            const title = (payload && payload.regattaName) || 'Regatta';
-            const date = formatChatDateLocal(payload && payload.regattaDate);
-            const loc = displayLoc(payload && payload.location);
-            const classes = uniqueEventOptions(rows, 'category');
-            const clubs = uniqueEventOptions(rows, 'yacht_club');
-            let html = `<h3>${escapeHtml(title)}</h3><p class="event-modal-meta">${escapeHtml(date)} · ${escapeHtml(loc)} · <span class="js-event-count">${rows.length} result${rows.length === 1 ? '' : 's'}</span></p>`;
-            html += `<div class="event-modal-toolbar">
-                <label>Class
-                    <select class="js-event-class">
-                        <option value="">All classes</option>
-                        ${classes.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
-                    </select>
-                </label>
-                <label>Club
-                    <select class="js-event-club">
-                        <option value="">All clubs</option>
-                        ${clubs.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
-                    </select>
-                </label>
-                <label>Sort
-                    <select class="js-event-sort">
-                        <option value="position">Position</option>
-                        <option value="name-asc">Sailor A–Z</option>
-                        <option value="name-desc">Sailor Z–A</option>
-                    </select>
-                </label>
-            </div>`;
-            html += '<table class="data"><thead><tr><th>Position</th><th>Sailor</th><th>Club</th><th>Class</th><th>Sail</th></tr></thead><tbody class="js-event-tbody"></tbody></table>';
-            return html;
-        }
-
-        function wireEventResultsView(body, payload) {
-            const rows = (payload && payload.rows) || [];
-            const classSel = body.querySelector('.js-event-class');
-            const clubSel = body.querySelector('.js-event-club');
-            const sortSel = body.querySelector('.js-event-sort');
-            const tbody = body.querySelector('.js-event-tbody');
-            const countEl = body.querySelector('.js-event-count');
-            if (!tbody) return;
-
-            const apply = () => {
-                const cls = (classSel && classSel.value || '').toLowerCase();
-                const club = (clubSel && clubSel.value || '').toLowerCase();
-                const sort = (sortSel && sortSel.value) || 'position';
-                let list = rows.filter(r => {
-                    if (cls && String(r.category || '').trim().toLowerCase() !== cls) return false;
-                    if (club && String(r.yacht_club || '').trim().toLowerCase() !== club) return false;
-                    return true;
-                });
-                list.sort((a, b) => {
-                    if (sort === 'name-asc' || sort === 'name-desc') {
-                        const cmp = String(a.skipper || '').localeCompare(String(b.skipper || ''), undefined, { sensitivity: 'base' });
-                        return sort === 'name-desc' ? -cmp : cmp;
-                    }
-                    const pos = positionSortValue(a.position) - positionSortValue(b.position);
-                    if (pos !== 0) return pos;
-                    return String(a.skipper || '').localeCompare(String(b.skipper || ''), undefined, { sensitivity: 'base' });
-                });
-                if (!list.length) {
-                    tbody.innerHTML = '<tr><td colspan="5">No results match these filters.</td></tr>';
-                } else {
-                    tbody.innerHTML = list.map(eventResultRowHtml).join('');
-                }
-                if (countEl) {
-                    if (list.length === rows.length) {
-                        countEl.textContent = `${rows.length} result${rows.length === 1 ? '' : 's'}`;
-                    } else {
-                        countEl.textContent = `showing ${list.length} of ${rows.length} results`;
-                    }
-                }
-            };
-
-            if (classSel) classSel.addEventListener('change', apply);
-            if (clubSel) clubSel.addEventListener('change', apply);
-            if (sortSel) sortSel.addEventListener('change', apply);
-            apply();
-        }
-
-        async function openRegattaEventCard(name, date) {
-            if (!name) return;
-            const modal = ensureEventModal();
-            const body = modal.querySelector('.js-event-body');
-            body.innerHTML = `<h3>${escapeHtml(name)}</h3><p class="event-modal-meta">Loading event results…</p>`;
-            modal.classList.add('open');
-            try {
-                const params = new URLSearchParams({ name });
-                if (date) params.set('date', date);
-                const data = await fetchJsonWithTimeout('/api/race-results/event?' + params.toString(), {}, 20000);
-                if (!data.success) throw new Error(data.error || 'Failed to load event');
-                const payload = data.data || {};
-                body.innerHTML = renderEventResultsHtml(payload);
-                wireEventResultsView(body, payload);
-            } catch (err) {
-                body.innerHTML = `<h3>${escapeHtml(name)}</h3><p class="event-modal-meta">${escapeHtml(err.message || 'Could not load event results.')}</p>`;
-            }
-        }
-
-        function downloadSailorCard(data) {
-            const rows = data.regattaAchievements || data.history || [];
-            const cols = ['position', 'regatta_name', 'regatta_date', 'category', 'location'];
-            const lines = [cols.join(',')];
-            rows.forEach(r => {
-                lines.push(cols.map(c => '"' + String(r[c] ?? '').replace(/"/g, '""') + '"').join(','));
-            });
-            const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'sailor-results-' + Date.now() + '.csv';
-            a.click();
-            URL.revokeObjectURL(a.href);
-        }
-
-        function renderSailorsList(data) {
-            const list = data.list || [];
-            let html = `<div class="sailor-results-card"><div class="section"><h3>${escapeHtml(data.subtitle || 'Matching sailors')}</h3>`;
-            list.forEach(item => {
-                html += `<button type="button" class="chat-name-chip" data-name="${escapeHtml(item.name)}">${escapeHtml(item.name)} (${escapeHtml(String(item.count || 0))})</button>`;
-            });
-            html += '</div></div>';
-            return html;
-        }
-
-        async function sendResultsChat(presetText) {
-            const input = document.getElementById('resultsChatInput');
-            const text = (presetText || (input && input.value) || '').trim();
-            if (!text) return;
-            if (input) input.value = '';
-            addResultsChat('user', escapeHtml(text));
-            const btn = document.getElementById('resultsChatSend');
-            if (btn) btn.disabled = true;
-            const pending = addResultsChat('bot', 'Thinking…');
-            if (pending) pending.classList.add('pending');
-            try {
-                const data = await fetchJsonWithTimeout('/api/race-results/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text })
-                }, 45000);
-                if (!data.success) throw new Error(data.error || 'Chat failed');
-
-                let html = formatReplyMarkdown(data.reply || '');
-                const payload = data.data || null;
-                if (pending) {
-                    pending.classList.remove('pending');
-                    pending.innerHTML = html;
-                }
-                const bot = pending || addResultsChat('bot', html);
-
-                if (payload && payload.resultType === 'sailor_card') {
-                    const rendered = renderSailorCard(payload);
-                    if (rendered && rendered.html) {
-                        const card = document.createElement('div');
-                        card.className = 'sailor-results-card';
-                        card.innerHTML = rendered.html;
-                        bot.appendChild(card);
-                        wireSailorCard(card, payload);
-                    }
-                } else if (payload && payload.resultType === 'sailors_list') {
-                    bot.insertAdjacentHTML('beforeend', renderSailorsList(payload));
-                    bot.querySelectorAll('.chat-name-chip').forEach(chip => {
-                        chip.addEventListener('click', () => sendResultsChat(chip.getAttribute('data-name')));
-                    });
-                } else if (payload && payload.resultType === 'list' && payload.rows && payload.rows.length) {
-                    bot.insertAdjacentHTML('beforeend', renderResultsMiniTable(payload.rows));
-                } else if (payload && payload.rows && payload.rows.length) {
-                    bot.insertAdjacentHTML('beforeend', renderResultsMiniTable(payload.rows));
-                }
-
-                const via = { rules: 'local rules', openai: 'OpenAI', cache: 'cached', fallback: 'rules fallback' }[data.parser] || data.parser;
-                if (via) {
-                    const note = document.createElement('div');
-                    note.style.cssText = 'margin-top:8px;color:#335;font-size:0.75em;opacity:0.75;';
-                    note.textContent = 'Interpreted via ' + via;
-                    bot.appendChild(note);
-                }
-            } catch (err) {
-                const msg = err.name === 'AbortError'
-                    ? 'Error: Chat timed out. Please try again.'
-                    : ('Error: ' + escapeHtml(err.message));
-                if (pending) {
-                    pending.classList.remove('pending');
-                    pending.innerHTML = msg;
-                } else {
-                    addResultsChat('bot', msg);
-                }
-            } finally {
-                if (btn) btn.disabled = false;
-            }
-        }
-
         // Load stats and regattas on page load
         window.addEventListener('DOMContentLoaded', () => {
             const savedLookback = localStorage.getItem('raceResultsLookbackDays');
@@ -3689,10 +2710,10 @@
             onResultsModeChange();
 
             const hash = (location.hash || '').replace('#', '');
-            showAdminTab(['dates', 'results', 'chat', 'photos'].includes(hash) ? hash : 'dates');
+            showAdminTab(hash || 'dates');
             window.addEventListener('hashchange', () => {
                 const h = (location.hash || '').replace('#', '');
-                showAdminTab(['dates', 'results', 'chat', 'photos'].includes(h) ? h : 'dates');
+                showAdminTab(h || 'dates');
             });
 
             loadAll();
@@ -3714,12 +2735,6 @@
                 dateFilterInput.addEventListener('change', applyFilters);
             }
 
-            const chatInput = document.getElementById('resultsChatInput');
-            if (chatInput) {
-                chatInput.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') sendResultsChat();
-                });
-            }
             pollResultsScrape(true);
         });
     </script>

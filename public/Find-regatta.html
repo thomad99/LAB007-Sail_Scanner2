@@ -81,15 +81,24 @@
         .brand {
             display: flex;
             align-items: center;
+            gap: 10px;
             text-decoration: none;
+            color: #fff;
         }
 
         .brand img {
-            height: 56px;
+            height: 48px;
             width: auto;
-            max-width: 150px;
+            max-width: 52px;
             object-fit: contain;
-            object-position: left center;
+            object-position: center;
+            background: transparent;
+        }
+
+        .brand span {
+            font-size: 0.98rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
         }
 
         .desktop-nav {
@@ -146,7 +155,7 @@
             font-size: clamp(2rem, 5vw, 3.4rem);
             font-weight: 700;
             letter-spacing: -0.03em;
-            max-width: 14ch;
+            max-width: 18ch;
             line-height: 1.1;
         }
 
@@ -1019,13 +1028,22 @@
         }
     </style>
     <link rel="stylesheet" href="/fit-screen.css">
+    <style>
+        body.fit-app .brand img {
+            height: 48px;
+            max-height: 48px;
+            max-width: 52px;
+            background: transparent;
+        }
+    </style>
 </head>
 
 <body class="fit-app">
     <header class="site-header">
         <div class="header-inner">
             <a class="brand" href="index.html">
-                <img src="/Images/LoveSailing-Left.jpg" alt="Love Sailing">
+                <img src="/Images/Sail_Logo_Trans.PNG" alt="">
+                <span>Love Sailing</span>
             </a>
             <nav class="desktop-nav page-tabs" aria-label="Find regatta sections">
                 <button type="button" class="tab-link active" data-tab="search">Find regattas</button>
@@ -1041,7 +1059,7 @@
 
     <section class="hero">
         <div class="hero-inner">
-            <h1 id="heroTitle">Find your next regatta.</h1>
+            <h1 id="heroTitle">Regatta Search</h1>
             <p class="hero-script">More Sailing Together</p>
         </div>
     </section>
@@ -1285,7 +1303,7 @@
                 if (location.hash !== '#alerts') history.replaceState(null, '', '#alerts');
                 renderAlertsPanel();
             } else {
-                document.getElementById('heroTitle').textContent = 'Find your next regatta.';
+                document.getElementById('heroTitle').textContent = 'Regatta Search';
                 if (location.hash === '#alerts') history.replaceState(null, '', location.pathname + location.search);
             }
         }

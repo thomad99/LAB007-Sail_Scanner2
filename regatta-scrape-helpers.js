@@ -25,79 +25,172 @@ const MONTHS = {
 };
 
 const BOAT_CLASS_DEFS = [
-    { name: 'Optimist', pattern: /\b(?:optimists?|optis?|ioda)\b/i },
-    { name: '420', pattern: /\b(?:c-?420|i-?420|club\s*420|420s?)\b/i },
+    { name: 'Optimist', pattern: /\b(?:optimists?|optis?|oppi|ioda)\b/i },
+    { name: '420', pattern: /\b(?:c-?420|i-?420|e420|club\s*420|420s?)\b/i },
+    { name: '470', pattern: /\b470s?\b/i },
     { name: '29er', pattern: /\b29ers?\b/i },
     { name: '49erFX', pattern: /\b49er\s*fx\b/i },
     { name: '49er', pattern: /\b49ers?\b/i },
-    { name: 'Nacra 17', pattern: /\bnacra\s*17\b/i },
+    { name: 'Nacra 17', pattern: /\bnacra\s*17s?\b/i },
+    { name: 'Nacra 15', pattern: /\bnacra\s*15s?\b/i },
     { name: 'ILCA 4', pattern: /\b(?:ilca\s*4|laser\s*4\.7)\b/i },
     { name: 'ILCA 6', pattern: /\b(?:ilca\s*6|laser\s*radial)\b/i },
-    { name: 'ILCA 7', pattern: /\b(?:ilca\s*7|laser\s*std|laser\s*standard)\b/i },
+    { name: 'ILCA 7', pattern: /\b(?:ilca\s*7|laser\s*(?:std|standard))\b/i },
     { name: 'ILCA', pattern: /\b(?:ilcas?|lasers?)\b/i },
     { name: 'Finn', pattern: /\bfinns?\b/i },
-    { name: 'Europe', pattern: /\beurope\s*(?:class|dinghy)?\b/i },
+    { name: 'Europe', pattern: /\beurope\s*(?:class|dinghy)\b/i },
+    { name: '2.4mR', pattern: /\b(?:2\.4(?:\s*mR|\s*mr)?|us\s*2\.4m(?:r)?(?:\s*class)?)\b/i },
+    { name: '8 Metre', pattern: /\b8\s*metres?\b/i },
     { name: 'RS Feva', pattern: /\brs\s*fevas?\b/i },
-    { name: 'RS Tera', pattern: /\brs\s*teras?\b/i },
-    { name: 'RS Aero', pattern: /\brs\s*aeros?\b/i },
+    { name: 'RS Tera', pattern: /\b(?:rs\s*)?teras?(?:\s*sport|\s*pro)?\b/i },
+    { name: 'RS Aero', pattern: /\b(?:rs\s*)?aeros?\b/i },
     { name: 'RS21', pattern: /\brs\s*21s?\b/i },
     { name: 'RS200', pattern: /\brs\s*200s?\b/i },
     { name: 'RS400', pattern: /\brs\s*400s?\b/i },
     { name: 'RS500', pattern: /\brs\s*500s?\b/i },
     { name: 'RS800', pattern: /\brs\s*800s?\b/i },
-    { name: 'Melges 15', pattern: /\bmelges\s*15s?\b/i },
-    { name: 'Melges 24', pattern: /\bmelges\s*24s?\b/i },
+    { name: 'RS Quest', pattern: /\brs\s*quests?\b/i },
+    { name: 'Melges 14', pattern: /\bmelges\s*14s?\b/i },
+    { name: 'Melges 15', pattern: /\b(?:melges\s*15|m[-\s]?15)s?\b/i },
+    { name: 'Melges 17', pattern: /\bmelges\s*17s?\b/i },
+    { name: 'Melges 20', pattern: /\bmelges\s*20s?\b/i },
+    { name: 'Melges 24', pattern: /\b(?:melges\s*24|m24)s?\b/i },
     { name: 'Melges 32', pattern: /\bmelges\s*32s?\b/i },
-    { name: 'J/22', pattern: /\bj\/?22s?\b/i },
-    { name: 'J/24', pattern: /\bj\/?24s?\b/i },
-    { name: 'J/70', pattern: /\bj\/?70s?\b/i },
-    { name: 'J/80', pattern: /\bj\/?80s?\b/i },
-    { name: 'J/88', pattern: /\bj\/?88s?\b/i },
-    { name: 'J/105', pattern: /\bj\/?105s?\b/i },
-    { name: 'J/111', pattern: /\bj\/?111s?\b/i },
+    { name: 'J/22', pattern: /\bj[\s\/-]?22s?\b/i },
+    { name: 'J/24', pattern: /\bj[\s\/-]?24s?\b/i },
+    { name: 'J/27', pattern: /\bj[\s\/-]?27s?\b/i },
+    { name: 'J/29', pattern: /\bj[\s\/-]?29s?\b/i },
+    { name: 'J/30', pattern: /\bj[\s\/-]?30s?\b/i },
+    { name: 'J/35', pattern: /\bj[\s\/-]?35s?\b/i },
+    { name: 'J/70', pattern: /\bj[\s\/-]?70s?\b/i },
+    { name: 'J/80', pattern: /\bj[\s\/-]?80s?\b/i },
+    { name: 'J/88', pattern: /\bj[\s\/-]?88s?\b/i },
+    { name: 'J/99', pattern: /\bj[\s\/-]?99s?\b/i },
+    { name: 'J/105', pattern: /\bj[\s\/-]?105s?\b/i },
+    { name: 'J/109', pattern: /\bj[\s\/-]?109s?\b/i },
+    { name: 'J/111', pattern: /\bj[\s\/-]?111s?\b/i },
+    { name: 'J/112', pattern: /\bj[\s\/-]?112s?\b/i },
+    { name: 'J/120', pattern: /\bj[\s\/-]?120s?\b/i },
+    { name: 'J/7', pattern: /\bj[\s\/-]?7s?\b/i },
     { name: 'Flying Scot', pattern: /\bflying\s*scots?\b/i },
     { name: 'Lightning', pattern: /\blightnings?\b/i },
     { name: 'Thistle', pattern: /\bthistles?\b/i },
     { name: 'Snipe', pattern: /\bsnipes?\b/i },
-    { name: 'Star', pattern: /\bstars?\b/i },
+    { name: 'Star', pattern: /\b(?:stars?|starboats?)\b/i },
     { name: 'Etchells', pattern: /\betchells\b/i },
-    { name: 'Hobie 16', pattern: /\bhobie\s*16s?\b/i },
+    { name: 'Soling', pattern: /\bsolings?\b/i },
+    { name: 'Dragon', pattern: /\bdragons?\b/i },
+    { name: 'Yngling', pattern: /\bynglings?\b/i },
+    { name: 'Hobie 14', pattern: /\bhobie\s*14s?\b/i },
+    { name: 'Hobie 16', pattern: /\bhobie[\s-]*16s?\b/i },
     { name: 'Hobie 18', pattern: /\bhobie\s*18s?\b/i },
+    { name: 'Hobie 20', pattern: /\bhobie\s*20s?\b/i },
     { name: 'Hobie Wave', pattern: /\bhobie\s*waves?\b/i },
     { name: 'Formula 18', pattern: /\b(?:formula\s*18|f18s?)\b/i },
-    { name: 'A-Class', pattern: /\ba-?class(?:es)?\b/i },
+    { name: 'A-Class', pattern: /\ba[-\s]?class(?:es)?\b|\ba[-\s]?cats?\b/i },
     { name: 'Nacra', pattern: /\bnacras?\b/i },
     { name: 'Sunfish', pattern: /\bsunfish(?:es)?\b/i },
-    { name: 'FJ', pattern: /\b(?:fjs?|flying\s*juniors?)\b/i },
+    { name: 'FJ', pattern: /\b(?:cfjs?|fjs?|flying\s*juniors?)\b/i },
     { name: 'Waszp', pattern: /\bwaszps?\b/i },
     { name: 'Moth', pattern: /\bmoths?\b/i },
     { name: 'iQFoil', pattern: /\biq\s*foils?\b/i },
     { name: 'Windsurfer', pattern: /\bwindsurf(?:er|ing)?s?\b/i },
     { name: 'VX One', pattern: /\bvx\s*ones?\b/i },
-    { name: 'Viper 640', pattern: /\bviper\s*640s?\b/i },
+    { name: 'Viper 640', pattern: /\b(?:viper\s*640s?|vipers?)\b/i },
     { name: 'Ensign', pattern: /\bensigns?\b/i },
     { name: 'Rhodes 19', pattern: /\brhodes\s*19s?\b/i },
     { name: 'Sonar', pattern: /\bsonars?\b/i },
     { name: 'Ideal 18', pattern: /\bideal\s*18s?\b/i },
     { name: 'Harbor 20', pattern: /\bharbor\s*20s?\b/i },
+    { name: 'Express 27', pattern: /\bexpress\s*27s?\b/i },
     { name: 'Express 37', pattern: /\bexpress\s*37s?\b/i },
     { name: 'Santa Cruz 27', pattern: /\bsanta\s*cruz\s*27s?\b/i },
     { name: 'Ultimate 20', pattern: /\bultimate\s*20s?\b/i },
     { name: '505', pattern: /\b(?:505|5o5)s?\b/i },
     { name: 'C&C 30', pattern: /\bc\s*&\s*c\s*30s?\b/i },
+    { name: 'Farr 30', pattern: /\bfarr\s*30s?\b/i },
     { name: 'Farr 40', pattern: /\bfarr\s*40s?\b/i },
     { name: 'TP52', pattern: /\btp\s*52s?\b/i },
+    { name: 'Fireball', pattern: /\bfireballs?\b/i },
+    { name: 'I-14', pattern: /\b(?:i-?14|international\s*14)s?\b/i },
+    { name: 'Tasar', pattern: /\btasars?\b/i },
+    { name: 'El Toro', pattern: /\bel\s*toros?\b/i },
+    { name: 'Naples Sabot', pattern: /\b(?:naples\s*)?sabots?\b/i },
+    { name: 'Penguin', pattern: /\bpenguins?\b/i },
+    { name: 'Butterfly', pattern: /\bbutterflys?\b/i },
+    { name: 'Comet', pattern: /\bcomet(?:\s*class)?s?\b/i },
+    { name: 'Day Sailer', pattern: /\bday\s*sailers?\b/i },
+    { name: 'Sneakbox', pattern: /\bsneakbox(?:es)?\b/i },
+    { name: "O'pen Skiff", pattern: /\bo'?pens?\s*skiffs?\b/i },
+    { name: 'Buccaneer 18', pattern: /\bbuccaneer\s*18s?\b/i },
+    { name: 'Highlander', pattern: /\bhighlanders?\b/i },
+    { name: 'Interlake', pattern: /\binterlakes?\b/i },
+    { name: 'JY15', pattern: /\bjy\s*15s?\b/i },
+    { name: 'Lido 14', pattern: /\blido\s*14s?\b/i },
+    { name: 'Wayfarer', pattern: /\bwayfarers?\b/i },
+    { name: 'Weta', pattern: /\bwetas?\b/i },
+    { name: 'Kona', pattern: /\bkonas?\b/i },
+    { name: 'E-Scow', pattern: /\be[-\s]?scows?\b/i },
+    { name: 'C-Scow', pattern: /\bc[-\s]?scows?\b/i },
+    { name: 'MC Scow', pattern: /\b(?:mc[-\s]?scows?|mc\s*class|mcs?)\b/i },
+    { name: 'A Scow', pattern: /\ba[-\s]?scows?\b/i },
+    { name: 'X-Boat', pattern: /\bx-?boats?\b/i },
+    { name: 'C-Boat', pattern: /\bc-?boats?\b/i },
+    { name: 'IOD', pattern: /\b(?:iods?|international\s*one\s*designs?)\b/i },
+    { name: 'Shields', pattern: /\bshields?\b/i },
+    { name: 'Knarr', pattern: /\bknarrs?\b/i },
+    { name: 'Folkboat', pattern: /\bfolkboats?\b/i },
+    { name: 'Alerion 28', pattern: /\balerion(?:\s*express)?\s*28s?\b/i },
+    { name: 'Cal 20', pattern: /\bcal\s*20s?\b/i },
+    { name: 'Cal 25', pattern: /\bcal\s*25s?\b/i },
+    { name: 'Catalina 22', pattern: /\b(?:catalina\s*22|c22)s?\b/i },
+    { name: 'Catalina 37', pattern: /\bcatalina\s*37s?\b/i },
+    { name: 'Santana 20', pattern: /\bsantana\s*20s?\b/i },
+    { name: 'Santana 22', pattern: /\bsantana\s*22s?\b/i },
+    { name: 'Moore 24', pattern: /\bmoore\s*24s?\b/i },
+    { name: 'Schock 35', pattern: /\bschock\s*35s?\b/i },
+    { name: 'Pearson 26', pattern: /\b(?:pearson\s*26|p26)s?\b/i },
+    { name: 'Niagara 26', pattern: /\bniag(?:ara|ra)\s*26s?\b/i },
+    { name: 'Nonsuch 30', pattern: /\bnonsuch\s*30s?\b/i },
+    { name: "O'Day Mariner", pattern: /\bo'?\s*day\s*mariners?\b/i },
+    { name: 'Colgate 26', pattern: /\bcolgates?\b/i },
+    { name: 'Martin 16', pattern: /\bmartin\s*16s?\b/i },
+    { name: 'Luders 16', pattern: /\bluders\s*16s?\b/i },
+    { name: 'Bullseye', pattern: /\bbullseyes?\b/i },
+    { name: 'Bluenose', pattern: /\bbluenoses?\b/i },
+    { name: 'Mercury', pattern: /\bmercurys?\b/i },
+    { name: 'Illusion', pattern: /\billusions?\b/i },
+    { name: 'Herreshoff 12½', pattern: /\b(?:h12|herreshoff\s*12|doughdish)\b/i },
+    { name: 'Sanderling', pattern: /\bsanderlings?\b/i },
+    { name: 'Sandpiper', pattern: /\bsandpipers?\b/i },
+    { name: 'San Juan 24', pattern: /\bsan\s*juan\s*24s?\b/i },
+    { name: 'Wavelength 24', pattern: /\bwavelength\s*24s?\b/i },
+    { name: 'IC-24', pattern: /\bic[-\s]?24s?\b/i },
+    { name: 'Beneteau 36.7', pattern: /\b(?:beneteau\s*)?36\.7s?\b/i },
+    { name: 'Diam 24', pattern: /\bdiam[-\s]?24s?\b/i },
+    { name: 'Elliott 6m', pattern: /\belliott\s*6m?s?\b/i },
+    { name: 'Capri 14', pattern: /\b(?:capri(?:\s*14(?:\.2)?)?|c-?14)s?\b/i },
+    { name: 'Olson 25', pattern: /\bolson\s*25s?\b/i },
+    { name: 'Catboat', pattern: /\bcatboats?\b/i },
+    { name: 'Log Canoe', pattern: /\blog\s*canoes?\b/i },
+    { name: 'Watch Hill 15', pattern: /\bwatch\s*hill\s*15s?\b/i },
+    { name: 'Storm 18', pattern: /\bstorm\s*18s?\b/i },
+    { name: 'Victory', pattern: /\bvictorys?\b/i },
+    { name: 'Viking 28', pattern: /\bviking\s*28s?\b/i },
+    { name: 'Farallon Clipper', pattern: /\bfarallon\s*clippers?\b/i },
+    { name: 'Dyer 10', pattern: /\bdyer\s*10s?\b/i },
+    { name: 'Duckboat', pattern: /\bduckboats?\b/i },
     { name: 'ORC', pattern: /\borc\b/i },
     { name: 'PHRF', pattern: /\bphrf\b/i },
     { name: 'ORR', pattern: /\borr\b/i },
     { name: 'Cruising', pattern: /\bcruis(?:ing|er)s?\b/i },
-    { name: 'One-Design', pattern: /\b(?:one[-\s]?design|od)\b/i },
-    { name: 'Keelboat', pattern: /\bkeelboats?\b/i },
+    { name: 'One-Design', pattern: /\b(?:one[-\s]?design)\b/i },
+    { name: 'Keelboat', pattern: /\bkeel\s*boats?\b/i },
     { name: 'Dinghy', pattern: /\bdingh(?:y|ies)\b/i },
     { name: 'Multihull', pattern: /\bmultihulls?\b/i },
     { name: 'Catamaran', pattern: /\bcatamarans?\b/i },
     { name: 'Foiling', pattern: /\bfoil(?:ing|er)s?\b/i },
-    { name: 'Kite', pattern: /\bkite(?:board(?:ing|er)?s?|foil)?\b/i },
+    { name: 'Kite', pattern: /\bkite(?:board(?:ing|er)?s?|foil)s?\b/i },
     { name: 'Match Race', pattern: /\bmatch\s*rac(?:e|ing)\b/i },
     { name: 'Team Race', pattern: /\bteam\s*rac(?:e|ing)\b/i },
     { name: 'Youth', pattern: /\byouth\b/i },
@@ -465,35 +558,29 @@ function isoDateFromParse(value) {
 function canonicalizeBoatType(raw) {
     const original = String(raw || '').replace(/\s+/g, ' ').trim();
     if (!original) return null;
-    const lower = original.toLowerCase();
-
-    if (/\b(?:optimist|opti|ioda)\b/.test(lower)) return 'Optimist';
-    if (/\b(?:c-?420|i-?420|club\s*420|420)\b/.test(lower) && !/\b(?:29er|49er)\b/.test(lower)) return '420';
-    if (/\b29er\b/.test(lower)) return '29er';
-    if (/\b49er\s*fx\b/.test(lower)) return '49erFX';
-    if (/\b49er\b/.test(lower)) return '49er';
-    if (/\bilca\s*4\b|\blaser\s*4\.7\b/.test(lower)) return 'ILCA 4';
-    if (/\bilca\s*6\b|\blaser\s*radial\b/.test(lower)) return 'ILCA 6';
-    if (/\bilca\s*7\b|\blaser\s*(?:std|standard)\b/.test(lower)) return 'ILCA 7';
-    if (/\bilca\b|\blaser\b/.test(lower)) return 'ILCA';
-    if (/\bj\/?22\b/.test(lower)) return 'J/22';
-    if (/\bj\/?24\b/.test(lower)) return 'J/24';
-    if (/\bj\/?70\b/.test(lower)) return 'J/70';
-    if (/\bsunfish\b/.test(lower)) return 'Sunfish';
-    if (/\bflying\s*scot\b/.test(lower)) return 'Flying Scot';
-    if (/\bmelges\s*15\b/.test(lower)) return 'Melges 15';
-    if (/\bformula\s*18\b|\bf18\b/.test(lower)) return 'Formula 18';
-    if (/\bhobie\s*16\b/.test(lower)) return 'Hobie 16';
-    if (/\b(?:505|5o5)\b/.test(lower)) return '505';
-    if (/\bfj\b|\bflying\s*junior\b/.test(lower)) return 'FJ';
 
     for (const def of BOAT_CLASS_DEFS) {
         if (def.pattern.test(original)) return def.name;
     }
+    return null;
+}
 
-    if (original.length < 2 || original.length > 40) return null;
-    if (/^(class|fleet|open|race|regatta|series)$/i.test(original)) return null;
-    return original;
+function isGenericBoatType(name) {
+    return GENERIC_BOAT_TYPES.has(String(name || '').toLowerCase());
+}
+
+function knownSailboatClasses(types) {
+    return uniqueBoatTypes(types)
+        .filter(name => !isGenericBoatType(name))
+        .sort((a, b) => a.localeCompare(b, 'en', { numeric: true, sensitivity: 'base' }));
+}
+
+function boatClassSearchPattern(selected) {
+    const canonical = canonicalizeBoatType(selected) || String(selected || '').trim();
+    if (!canonical) return null;
+    const def = BOAT_CLASS_DEFS.find(item => item.name.toLowerCase() === canonical.toLowerCase());
+    const source = def ? def.pattern.source : canonical.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return source.replace(/\\b/g, '\\y');
 }
 
 function extractBoatTypesFromText(...parts) {
@@ -912,7 +999,7 @@ function formatEventDatesForApi(row) {
         ...row,
         regatta_date: parseYmd(row.regatta_date),
         event_dates: dates,
-        boat_types: Array.isArray(row.boat_types) ? row.boat_types : []
+        boat_types: knownSailboatClasses(Array.isArray(row.boat_types) ? row.boat_types : [])
     };
 }
 
@@ -930,6 +1017,8 @@ module.exports = {
     uniqueBoatTypes,
     mergeBoatTypes,
     canonicalizeBoatType,
+    knownSailboatClasses,
+    boatClassSearchPattern,
     resolveClubspotBoatTypes,
     eventDatesSqlExpr,
     ensureRegattaExtraColumns,
