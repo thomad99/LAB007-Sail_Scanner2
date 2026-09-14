@@ -20,6 +20,12 @@ function normalizeUrl(url) {
     return String(url || '').trim();
 }
 
+function parseTokens(raw) {
+    const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+    const tokens = [...new Set(list.map(value => String(value || '').trim()).filter(value => value && value.length <= 128))];
+    return tokens.slice(0, 50);
+}
+
 function isValidHttpUrl(url) {
     try {
         const parsed = new URL(url);
@@ -311,8 +317,7 @@ function attachResultsWatcher(app, { pool, axios, cheerio, emailTransporter, cro
         try {
             await ensureResultsWatchersTable(pool);
             const token = String((req.body && req.body.token) || req.query.token || '').trim();
-            const email = normalizeEmail(req.body && req.body.email);
-            const resultsUrl = normalizeUrl(req.body && (req.body.resultsUrl || req.body.websiteUrl));
+            const tokens = parseTokens(req.body && req.body.tokens);
 
             if (token) {
                 const stopped = await stopByToken(token);
@@ -322,37 +327,108 @@ function attachResultsWatcher(app, { pool, axios, cheerio, emailTransporter, cro
                 return res.json({ success: true, message: 'Alerts stopped.', watch: stopped });
             }
 
-            if (EMAIL_RE.test(email) && resultsUrl) {
+            if (tokens.length) {
                 const result = await pool.query(`
                     UPDATE results_watchers
                     SET active = FALSE
-                    WHERE email = $1 AND results_url = $2 AND active = TRUE
-                    RETURNING token, regatta_name
-                `, [email, resultsUrl]);
-                if (!result.rows.length) {
-                    return res.status(404).json({ success: false, error: 'No active alert found for that email and results page.' });
-                }
-                return res.json({ success: true, message: 'Alerts stopped.', watch: result.rows[0] });
-            }
-
-            if (EMAIL_RE.test(email) && req.body && req.body.stopAll) {
-                const result = await pool.query(`
-                    UPDATE results_watchers
-                    SET active = FALSE
-                    WHERE email = $1 AND active = TRUE
-                    RETURNING token, results_url, regatta_name
-                `, [email]);
+                    WHERE token = ANY($1::text[]) AND active = TRUE
+                    RETURNING results_url, regatta_name
+                `, [tokens]);
                 return res.json({
                     success: true,
-                    message: result.rowCount ? `Stopped ${result.rowCount} alert(s).` : 'No active alerts for that email.',
+                    message: result.rowCount ? `Stopped ${result.rowCount} alert(s).` : 'No matching alerts to stop.',
                     count: result.rowCount
                 });
             }
 
-            return res.status(400).json({ success: false, error: 'Provide a stop token, or an email and results URL.' });
+            return res.status(400).json({ success: false, error: 'Provide a stop token.' });
         } catch (err) {
             console.error('[Results Watcher] Stop failed:', err);
             res.status(500).json({ success: false, error: 'Could not stop alerts.' });
+        }
+    });
+
+    app.post('/api/results-watch/mine', async (req, res) => {
+        try {
+            await ensureResultsWatchersTable(pool);
+            const tokens = parseTokens(req.body && req.body.tokens);
+            if (!tokens.length) {
+                return res.json({ success: true, watches: [] });
+            }
+            const result = await pool.query(`
+                SELECT token, active, email, regatta_name, results_url, created_at, last_checked, last_changed, expires_at
+                FROM results_watchers
+                WHERE token = ANY($1::text[])
+                ORDER BY created_at DESC
+            `, [tokens]);
+            res.json({ success: true, watches: result.rows });
+        } catch (err) {
+            console.error('[Results Watcher] Mine failed:', err);
+            res.status(500).json({ success: false, error: 'Could not load alerts.' });
+        }
+    });
+
+    app.post('/api/results-watch/email', async (req, res) => {
+        try {
+            await ensureResultsWatchersTable(pool);
+            const email = normalizeEmail(req.body && req.body.email);
+            const tokens = parseTokens(req.body && req.body.tokens);
+            if (!EMAIL_RE.test(email)) {
+                return res.status(400).json({ success: false, error: 'Please enter a valid email address.' });
+            }
+            if (!tokens.length) {
+                return res.status(400).json({ success: false, error: 'No alerts to update on this device.' });
+            }
+
+            const existing = await pool.query(`
+                SELECT id, token, results_url, regatta_name, active
+                FROM results_watchers
+                WHERE token = ANY($1::text[])
+            `, [tokens]);
+            if (!existing.rows.length) {
+                return res.status(404).json({ success: false, error: 'No matching alerts were found for this device.' });
+            }
+
+            let updated = 0;
+            for (const watch of existing.rows) {
+                if (!watch.active) continue;
+                const conflict = await pool.query(
+                    `SELECT id FROM results_watchers WHERE email = $1 AND results_url = $2 AND token <> $3`,
+                    [email, watch.results_url, watch.token]
+                );
+                if (conflict.rows.length) {
+                    await pool.query(`UPDATE results_watchers SET active = FALSE WHERE id = $1`, [conflict.rows[0].id]);
+                }
+                await pool.query(`UPDATE results_watchers SET email = $1 WHERE id = $2`, [email, watch.id]);
+                updated += 1;
+            }
+
+            const sample = existing.rows.find(row => row.active) || existing.rows[0];
+            try {
+                await sendWatchEmail(emailTransporter, {
+                    to: email,
+                    subject: 'Results alert email updated',
+                    title: sample && sample.regatta_name ? sample.regatta_name : 'Regatta results',
+                    intro: `Future results alerts will be sent to ${email}.`,
+                    resultsUrl: (sample && sample.results_url) || publicBaseUrl() + '/Find-regatta.html#alerts',
+                    stopUrl: sample ? stopUrlForToken(sample.token) : publicBaseUrl() + '/Find-regatta.html#alerts',
+                    extra: updated > 1 ? `${updated} alerts on this device now use this email.` : 'This alert on this device now uses this email.'
+                });
+            } catch (mailErr) {
+                console.error('[Results Watcher] Email update notice failed:', mailErr.message);
+            }
+
+            res.json({
+                success: true,
+                email,
+                updated,
+                message: updated
+                    ? `Alert email updated to ${email}.`
+                    : 'No active alerts to update.'
+            });
+        } catch (err) {
+            console.error('[Results Watcher] Email update failed:', err);
+            res.status(500).json({ success: false, error: 'Could not update alert email.' });
         }
     });
 
@@ -360,7 +436,6 @@ function attachResultsWatcher(app, { pool, axios, cheerio, emailTransporter, cro
         try {
             await ensureResultsWatchersTable(pool);
             const token = String(req.query.token || '').trim();
-            const email = normalizeEmail(req.query.email);
             if (token) {
                 const result = await pool.query(`
                     SELECT active, regatta_name, results_url, created_at, last_checked, last_changed, expires_at
@@ -369,17 +444,7 @@ function attachResultsWatcher(app, { pool, axios, cheerio, emailTransporter, cro
                 if (!result.rows.length) return res.status(404).json({ success: false, error: 'Alert not found.' });
                 return res.json({ success: true, watch: result.rows[0] });
             }
-            if (EMAIL_RE.test(email)) {
-                const result = await pool.query(`
-                    SELECT token, active, regatta_name, results_url, created_at, last_checked, last_changed, expires_at
-                    FROM results_watchers
-                    WHERE email = $1
-                    ORDER BY created_at DESC
-                    LIMIT 50
-                `, [email]);
-                return res.json({ success: true, watches: result.rows });
-            }
-            return res.status(400).json({ success: false, error: 'Provide a token or email.' });
+            return res.status(400).json({ success: false, error: 'Provide a stop token.' });
         } catch (err) {
             console.error('[Results Watcher] Status failed:', err);
             res.status(500).json({ success: false, error: 'Could not load alerts.' });

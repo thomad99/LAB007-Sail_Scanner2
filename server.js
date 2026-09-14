@@ -5428,12 +5428,14 @@ app.get('/api/search-regattas', async (req, res) => {
             params.push(`%${locationName}%`);
         }
 
+        const nextDateSql = `(SELECT MIN(d) FROM unnest(${datesExpr}) AS d WHERE d >= CURRENT_DATE)`;
+
         if (nearbySearch) {
-            query += ' ORDER BY distance_miles ASC NULLS LAST, (SELECT MIN(d) FROM unnest(' + datesExpr + ') d) ASC, regatta_name ASC';
+            query += ` ORDER BY distance_miles ASC NULLS LAST, ${nextDateSql} ASC NULLS LAST, regatta_name ASC`;
         } else if (date && !startDate && !endDate) {
             query += ' ORDER BY regatta_name ASC';
         } else {
-            query += ' ORDER BY (SELECT MIN(d) FROM unnest(' + datesExpr + ') d) ASC, regatta_name ASC';
+            query += ` ORDER BY ${nextDateSql} ASC NULLS LAST, regatta_name ASC`;
         }
 
         query += ' LIMIT 500';

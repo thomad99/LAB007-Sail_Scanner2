@@ -25,56 +25,87 @@
     <meta name="twitter:description" content="Access USA sailboat race data, sail number scanner, sailing chatbot, AI tools, and live/historic regatta results.">
     <meta name="twitter:image" content="https://lovesailing.ai/Images/LOVE%20SAILING%20LOGO.JPEG">
     <style>
-        body {
+        * { box-sizing: border-box; }
+
+        html, body {
+            height: 100%;
+            height: 100dvh;
             margin: 0;
             padding: 0;
+            overflow: hidden;
+        }
+
+        body {
             background-color: #020053;
             color: white;
             font-family: Arial, sans-serif;
+        }
+
+        .home-shell {
+            height: 100%;
+            height: 100dvh;
+            width: 100%;
             display: flex;
             flex-direction: column;
             align-items: center;
-            min-height: 100vh;
+            justify-content: center;
+            gap: clamp(8px, 3.2vh, 32px);
+            padding: clamp(8px, 2.4vh, 28px) clamp(16px, 4vw, 48px);
+            overflow: hidden;
         }
 
         .logo {
-            margin-top: 50px;
-            max-width: 600px;
-            width: 90%;
+            margin: 0;
+            width: auto;
+            height: auto;
+            max-width: min(46vw, 360px);
+            max-height: min(38vh, 280px);
+            object-fit: contain;
+            flex: 0 1 auto;
         }
 
         .navigation {
-            display: flex;
-            justify-content: center;
-            gap: 50px;
-            margin-top: 50px;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            justify-items: center;
+            align-items: start;
+            gap: clamp(8px, 2vw, 28px);
+            width: min(100%, 960px);
+            margin-top: 0;
+            flex: 0 1 auto;
+            min-height: 0;
         }
 
         .nav-item {
             text-align: center;
             text-decoration: none;
             color: white;
+            width: 100%;
+            max-width: 140px;
         }
 
         .nav-item img {
-            width: 200px;
+            width: min(100%, 18vw, 22vh, 140px);
             height: auto;
+            max-height: min(22vh, 140px);
+            object-fit: contain;
             display: block;
+            margin: 0 auto;
             transition: transform 0.3s ease;
         }
 
         .nav-item img:hover {
-            transform: scale(1.1);
+            transform: scale(1.06);
         }
 
         .nav-label {
             display: block;
-            margin-top: 10px;
-            font-size: 1.05rem;
+            margin-top: 0.45em;
+            font-size: clamp(0.72rem, 1.15vw, 1.02rem);
             font-weight: bold;
             letter-spacing: 0.4px;
             color: white;
+            white-space: nowrap;
         }
 
         /* Icon card for pages without a custom image */
@@ -180,9 +211,7 @@
         .nav-sub-btn .sub-icon { font-size: 2.8rem; line-height: 1; }
 
         .tagline {
-            margin-top: 50px;
-            font-size: 1em;
-            color: white;
+            display: none;
         }
 
         /* Mobile menu styling */
@@ -315,8 +344,43 @@
             cursor: pointer;
         }
 
+        @media (max-height: 760px) {
+            .logo {
+                max-width: min(40vw, 280px);
+                max-height: min(32vh, 220px);
+            }
+
+            .nav-item img {
+                width: min(100%, 16vw, 18vh, 110px);
+                max-height: min(18vh, 110px);
+            }
+        }
+
+        @media (max-width: 900px) and (min-width: 769px) {
+            .navigation {
+                gap: clamp(8px, 1.6vw, 18px);
+            }
+
+            .nav-label {
+                font-size: clamp(0.68rem, 1.4vw, 0.9rem);
+            }
+        }
+
         /* Responsive styles */
         @media (max-width: 768px) {
+            html, body {
+                overflow: auto;
+                height: auto;
+            }
+
+            .home-shell {
+                height: auto;
+                min-height: 100dvh;
+                justify-content: flex-start;
+                padding-top: 12vh;
+                overflow: visible;
+            }
+
             .navigation {
                 display: none;
             }
@@ -326,20 +390,15 @@
             }
 
             .logo {
-                margin-top: 30px;
-                max-width: 80%;
-            }
-
-            .tagline {
-                margin-top: 30px;
-                text-align: center;
-                padding: 0 20px;
+                width: min(72vw, 38vh, 280px);
             }
         }
     </style>
+    <link rel="stylesheet" href="/fit-screen.css">
 </head>
 
 <body>
+    <div class="home-shell">
     <img src="/Images/LOVE%20SAILING%20LOGO.JPEG?v=3" alt="Love Sailing Logo" class="logo">
 
     <div class="navigation">
@@ -364,9 +423,6 @@
             <span class="nav-label">Shopping</span>
         </a>
     </div>
-
-    <div class="tagline">
-
     </div>
 
     <!-- Tracker submenu overlay -->

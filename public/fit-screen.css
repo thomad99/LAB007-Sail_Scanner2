@@ -1,0 +1,205 @@
+/* Keep Love Sailing pages inside the browser window.
+   Landing pages (.fit-fill) center and do not page-scroll.
+   App pages (.fit-app) pin the header/hero and scroll only the main pane. */
+
+html {
+    height: 100%;
+    height: 100dvh;
+}
+
+.home-shell .logo {
+    max-height: min(38vh, 280px) !important;
+    max-width: min(46vw, 360px) !important;
+    width: auto !important;
+}
+
+img.logo,
+.logo-container img.logo {
+    max-height: min(26vh, 200px);
+    max-width: min(48vw, 280px);
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    margin-top: clamp(4px, 1.2vh, 16px);
+    margin-bottom: clamp(4px, 1vh, 12px);
+}
+
+.brand img {
+    height: clamp(32px, 5.4vh, 48px);
+    max-height: 48px;
+    max-width: 150px;
+    width: auto;
+    object-fit: contain;
+}
+
+.topbar-logo {
+    height: clamp(28px, 4.8vh, 36px);
+    width: auto;
+}
+
+.header-inner {
+    min-height: clamp(52px, 7vh, 72px);
+}
+
+.site-bar {
+    padding-top: clamp(6px, 1.2vh, 10px);
+    padding-bottom: clamp(6px, 1.2vh, 10px);
+}
+
+.hero {
+    padding-top: clamp(10px, 2.2vh, 28px) !important;
+    padding-bottom: clamp(40px, 7vh, 72px) !important;
+}
+
+.hero-inner h1 {
+    font-size: clamp(1.45rem, 4.2vh, 2.6rem) !important;
+}
+
+.hero-script {
+    font-size: clamp(1rem, 2.2vh, 1.6rem) !important;
+}
+
+@media (max-height: 760px) {
+    .hero-script {
+        display: none !important;
+    }
+
+    .hero {
+        padding-bottom: clamp(36px, 8vh, 56px) !important;
+    }
+
+    img.logo,
+    .logo-container img.logo {
+        max-height: min(22vh, 160px);
+    }
+}
+
+body.fit-fill {
+    min-height: 100dvh;
+    height: 100dvh;
+    overflow: auto;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(4px, 1vh, 12px) clamp(12px, 3vw, 32px);
+    box-sizing: border-box;
+}
+
+body.fit-fill .card {
+    padding: clamp(10px, 1.6vh, 18px);
+    margin-bottom: clamp(8px, 1.2vh, 14px);
+    width: min(92%, 460px);
+}
+
+body.fit-fill > .content,
+body.fit-fill > .logo-container,
+body.fit-fill > img.logo {
+    flex-shrink: 1;
+    min-height: 0;
+}
+
+body.fit-fill > .content {
+    margin-top: 0 !important;
+    overflow: visible;
+    max-height: none;
+    width: min(100%, 800px);
+}
+
+body.fit-fill p {
+    margin: 0.35em 0;
+}
+
+body.fit-fill h3 {
+    margin: 0.4em 0 0.5em !important;
+}
+
+body.fit-fill li {
+    margin-bottom: 6px !important;
+}
+
+body.fit-app {
+    min-height: 100dvh;
+    height: 100dvh;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+body.fit-app > .site-header,
+body.fit-app > .site-bar,
+body.fit-app > .hero,
+body.fit-app > .topbar,
+body.fit-app > img.logo,
+body.fit-app > a > img.logo {
+    flex-shrink: 0;
+}
+
+body.fit-app > main,
+body.fit-app > .page,
+body.fit-app > .content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+}
+
+body.fit-app > main.page {
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 12px;
+    min-height: 0;
+    overflow: hidden;
+}
+
+body.fit-app > main.page > .messenger {
+    margin: 0 auto;
+    height: 100%;
+    min-height: 0;
+}
+
+body.fit-app .page-inner {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+body.fit-app .search-card {
+    flex-shrink: 0;
+}
+
+body.fit-app .results-layout.visible {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+}
+
+.search-card {
+    margin-top: clamp(-48px, -6vh, -36px);
+}
+
+.scan-button {
+    min-height: 0 !important;
+    padding: clamp(10px, 2vh, 18px) 20px !important;
+    font-size: clamp(1rem, 2.4vh, 1.45rem) !important;
+}
+
+.shop-image {
+    max-width: min(22vw, 16vh, 110px);
+    height: auto;
+}
+
+.shop-button {
+    margin-top: clamp(8px, 1.6vh, 16px) !important;
+    padding: clamp(10px, 1.8vh, 14px) 24px !important;
+}
+
+@media (max-width: 768px) {
+    html,
+    body,
+    body.fit-fill,
+    body.fit-app {
+        height: auto;
+        min-height: 100dvh;
+        overflow: auto !important;
+    }

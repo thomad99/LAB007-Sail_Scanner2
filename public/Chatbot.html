@@ -4,56 +4,148 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>LoveSailing.AI ChatBot – Regatta Results</title>
+    <title>SailBot – Love Sailing</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <meta property="og:title" content="LoveSailing.AI ChatBot – Regatta Results">
-    <meta property="og:description" content="Ask about scraped ClubSpot and Regatta Network race results — sailors, classes, clubs, and years.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <meta property="og:title" content="SailBot – Love Sailing">
+    <meta property="og:description" content="Ask about ClubSpot and Regatta Network race results.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://lovesailing.ai/Chatbot.html">
-    <meta property="og:image" content="https://lovesailing.ai/Images/LOVE%20SAILING%20LOGO.JPEG">
+    <meta property="og:image" content="https://lovesailing.ai/Images/LoveSailing-Left.jpg">
     <meta property="og:image:alt" content="Love Sailing Logo">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="LoveSailing.AI ChatBot – Regatta Results">
-    <meta name="twitter:description" content="Ask about scraped ClubSpot and Regatta Network race results — sailors, classes, clubs, and years.">
-    <meta name="twitter:image" content="https://lovesailing.ai/Images/LOVE%20SAILING%20LOGO.JPEG">
+    <meta name="twitter:title" content="SailBot – Love Sailing">
+    <meta name="twitter:description" content="Ask about ClubSpot and Regatta Network race results.">
+    <meta name="twitter:image" content="https://lovesailing.ai/Images/LoveSailing-Left.jpg">
     <style>
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
-        html,
-        body {
+        html, body {
             height: 100%;
             margin: 0;
             padding: 0;
-            overflow: hidden;
         }
 
         body {
-            background: linear-gradient(180deg, #020053 0%, #0a0a6e 100%);
-            color: #1a1a2e;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            min-height: 100dvh;
+            background: #eaf0f8;
+            color: #152033;
+            font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             display: flex;
             flex-direction: column;
-            align-items: center;
         }
 
-        .logo {
+        .site-bar {
             flex-shrink: 0;
-            margin-top: 12px;
-            max-width: 200px;
-            width: 36%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 22px;
+            background: #fff;
+            border-bottom: 1px solid #e6ecf4;
         }
 
-        .chat-container {
+        .brand {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+        }
+
+        .brand img {
+            height: 42px;
+            width: auto;
+            max-width: 150px;
+            object-fit: contain;
+            object-position: left center;
+        }
+
+        .nav-link {
+            color: #3b4b66;
+            text-decoration: none;
+            font-size: 0.92rem;
+            font-weight: 500;
+        }
+
+        .page {
             flex: 1;
             min-height: 0;
-            width: 75%;
-            max-width: 75%;
+            display: flex;
+            justify-content: center;
+            padding: clamp(8px, 1.6vh, 16px) 16px;
+        }
+
+        .messenger {
+            width: min(560px, 100%);
+            height: 100%;
+            max-height: none;
+            background: #fff;
+            border-radius: 22px;
+            box-shadow: 0 18px 50px rgba(21, 40, 80, 0.12);
             display: flex;
             flex-direction: column;
-            padding: 12px 16px 0;
+            overflow: hidden;
         }
+
+        .bot-bar {
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 16px;
+            background: #0d3b8e;
+            color: #fff;
+        }
+
+        .bot-id {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .bot-avatar {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: #fff;
+            display: grid;
+            place-items: center;
+            flex-shrink: 0;
+        }
+
+        .bot-avatar svg { width: 26px; height: 26px; }
+
+        .bot-id strong {
+            display: block;
+            font-size: 1.05rem;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .bot-id span {
+            display: block;
+            font-size: 0.78rem;
+            opacity: 0.82;
+            font-weight: 400;
+        }
+
+        .icon-btn {
+            width: 36px;
+            height: 36px;
+            border: none;
+            background: transparent;
+            color: #fff;
+            border-radius: 10px;
+            cursor: pointer;
+            display: grid;
+            place-items: center;
+        }
+
+        .icon-btn:hover { background: rgba(255,255,255,0.12); }
+        .icon-btn svg { width: 18px; height: 18px; }
 
         .chat-pane {
             flex: 1;
@@ -61,43 +153,142 @@
             overflow-y: auto;
             scroll-behavior: smooth;
             -webkit-overflow-scrolling: touch;
-            background: rgba(200, 220, 255, 0.25);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 18px 16px 8px;
+            background: #fff;
         }
 
         .msg {
-            max-width: 85%;
-            margin-bottom: 14px;
-            padding: 12px 16px;
-            border-radius: 12px;
-            line-height: 1.4;
-            font-size: 0.95em;
+            max-width: 86%;
+            padding: 10px 14px;
+            border-radius: 16px;
+            line-height: 1.45;
+            font-size: 0.94rem;
         }
 
         .msg.bot {
-            background: #a8d8f0;
-            color: #1a1a2e;
+            background: #eef2f6;
+            color: #1b2433;
             align-self: flex-start;
-            border-bottom-left-radius: 4px;
+            border-bottom-left-radius: 6px;
         }
 
         .msg.user {
-            background: #fff;
-            color: #1a1a2e;
-            margin-left: auto;
-            border-bottom-right-radius: 4px;
+            background: #2f6bff;
+            color: #fff;
+            align-self: flex-end;
+            border-bottom-right-radius: 6px;
         }
 
-        .msg.bot .results-card {
-            margin-top: 14px;
+        .chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            border: 1px solid #d5deea;
             background: #fff;
-            border-radius: 10px;
-            padding: 18px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            color: #35507a;
+            border-radius: 999px;
+            padding: 7px 12px;
+            font-size: 0.82rem;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .chip:hover { border-color: #2f6bff; color: #2f6bff; }
+
+        .msg.bot .results-card {
+            margin-top: 10px;
+            background: #eef3f8;
+            border-radius: 14px;
+            padding: 14px 15px 12px;
             color: #1a1a2e;
             text-align: left;
+        }
+
+        .sailor-preview-name {
+            margin: 0;
+            font-size: 1.02rem;
+            font-weight: 700;
+            color: #152033;
+        }
+
+        .sailor-preview-club {
+            margin: 2px 0 10px;
+            color: #66758c;
+            font-size: 0.86rem;
+        }
+
+        .sailor-preview-stats {
+            display: grid;
+            gap: 3px;
+            font-size: 0.92rem;
+            color: #243044;
+            margin-bottom: 12px;
+        }
+
+        .sailor-preview-best {
+            padding-top: 8px;
+            border-top: 1px solid #d9e3ee;
+        }
+
+        .sailor-preview-best .label {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #3d4d66;
+            margin-bottom: 4px;
+        }
+
+        .sailor-preview-best .name-link {
+            color: #152033;
+            font-weight: 700;
+            text-decoration: none;
+            font-size: 0.95rem;
+        }
+
+        .sailor-full {
+            margin-top: 12px;
+            overflow-x: auto;
+        }
+
+        .sailor-full.hidden {
+            display: none;
+        }
+
+        .view-full {
+            margin-top: 10px;
+            border: none;
+            background: none;
+            color: #2f6bff;
+            font-weight: 600;
+            font-size: 0.88rem;
+            padding: 0;
+            cursor: pointer;
+        }
+
+        .msg.wide {
+            max-width: 100%;
+            padding: 0;
+            background: transparent;
+        }
+
+        .msg.wide .results-card {
+            margin-top: 0;
+            width: 100%;
+        }
+
+        .results-card .sailor-preview-best .name-link {
+            color: #152033;
+            font-weight: 700;
+            text-decoration: none;
         }
 
         .results-card h3 {
@@ -348,67 +539,63 @@
             height: 18px;
         }
 
-        .input-wrap {
+        .composer {
             flex-shrink: 0;
-            width: 100%;
-            padding: 0 0 16px;
-        }
-
-        .input-row {
             display: flex;
-            gap: 10px;
-            width: 100%;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px 6px;
         }
 
-        .input-row input {
+        .composer input {
             flex: 1;
-            padding: 14px 18px;
-            border-radius: 10px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            background: rgba(255, 255, 255, 0.15);
-            color: #fff;
-            font-size: 1em;
+            border: 1px solid #d7e0ea;
+            background: #f7f9fc;
+            border-radius: 999px;
+            padding: 12px 16px;
+            font-size: 0.95rem;
+            color: #152033;
         }
 
-        .input-row input::placeholder {
-            color: rgba(255, 255, 255, 0.6);
-        }
-
-        .input-row input:focus {
+        .composer input::placeholder { color: #8b97a8; }
+        .composer input:focus {
             outline: none;
-            border-color: #0088ff;
-            background: rgba(255, 255, 255, 0.2);
+            border-color: #2f6bff;
+            background: #fff;
         }
 
-        .input-row button {
-            padding: 14px 24px;
-            border-radius: 10px;
+        .send-btn {
+            width: 42px;
+            height: 42px;
             border: none;
-            background: #0066cc;
-            color: white;
-            font-size: 1em;
-            font-weight: 600;
+            border-radius: 50%;
+            background: #2f6bff;
+            color: #fff;
             cursor: pointer;
-            transition: background 0.2s;
+            display: grid;
+            place-items: center;
+            flex-shrink: 0;
         }
 
-        .input-row button:hover:not(:disabled) {
-            background: #0088ff;
-        }
-
-        .input-row button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
+        .send-btn:hover:not(:disabled) { background: #1f58e6; }
+        .send-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+        .send-btn svg { width: 18px; height: 18px; }
 
         .status {
-            font-size: 0.9em;
-            color: #aaa;
-            margin-top: 6px;
+            min-height: 16px;
+            font-size: 0.75rem;
+            color: #7b8798;
+            text-align: center;
+            padding: 0 14px;
         }
 
-        .status.err {
-            color: #ff8888;
+        .status.err { color: #c0392b; }
+
+        .sources {
+            margin: 0 0 12px;
+            text-align: center;
+            font-size: 0.72rem;
+            color: #9aa6b5;
         }
 
         .markdown {
@@ -420,118 +607,90 @@
         }
 
         @media (max-width: 768px) {
-
-            html,
-            body {
-                height: 100dvh;
-                min-height: 100vh;
-            }
-
-            .logo {
-                max-width: 100px;
-                width: 28%;
-                margin-top: 8px;
-            }
-
-            .chat-container {
+            .site-bar { padding: 8px 14px; }
+            .brand img { height: 34px; }
+            .page { padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px)); }
+            .messenger {
                 width: 100%;
-                max-width: 100%;
-                padding: 8px 8px 0;
-                flex: 1;
-                min-height: 0;
+                height: calc(100dvh - 68px);
+                border-radius: 18px;
             }
-
-            .chat-pane {
-                padding: 12px;
-                margin-bottom: 8px;
-            }
-
-            .input-wrap {
-                padding: 0 0 calc(12px + env(safe-area-inset-bottom, 0px));
-            }
-            .chat-container {
-                padding-left: max(8px, env(safe-area-inset-left, 0px));
-                padding-right: max(8px, env(safe-area-inset-right, 0px));
-            }
-
-            .msg {
-                max-width: 92%;
-                padding: 10px 12px;
-                font-size: 0.9em;
-            }
-
-            .input-row input,
-            .input-row button {
-                padding: 12px 14px;
-            }
+            .msg { max-width: 92%; }
         }
     </style>
+    <link rel="stylesheet" href="/fit-screen.css">
 </head>
 
-<body>
-    <img src="/Images/LOVE SAILING LOGO.JPEG" alt="Love Sailing" class="logo">
-    <div class="chat-container">
-        <div class="chat-pane" id="chatPane">
-            <div class="msg bot" id="welcome">Loading…</div>
-        </div>
-        <div class="input-wrap">
-            <div class="input-row">
-                <input type="text" id="input" placeholder="Ask me about sailing competitions..." autocomplete="off">
-                <button type="button" id="sendBtn">Send</button>
+<body class="fit-app">
+    <header class="site-bar">
+        <a class="brand" href="index.html">
+            <img src="/Images/LoveSailing-Left.jpg" alt="Love Sailing">
+        </a>
+        <a class="nav-link" href="Find-regatta.html">Regattas</a>
+    </header>
+    <main class="page">
+        <section class="messenger">
+            <header class="bot-bar">
+                <div class="bot-id">
+                    <div class="bot-avatar" aria-hidden="true">
+                        <svg viewBox="0 0 32 32" fill="none">
+                            <path d="M6 20c0-6 4.5-11 10-11s10 5 10 11H6z" fill="#0d3b8e"/>
+                            <path d="M16 7l3.2 8H12.8L16 7z" fill="#2f6bff"/>
+                            <path d="M8 22h16" stroke="#0d3b8e" stroke-width="2" stroke-linecap="round"/>
+                            <circle cx="22" cy="11" r="3.2" fill="#e8f1ff" stroke="#0d3b8e" stroke-width="1.4"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <strong>SailBot</strong>
+                        <span>Love Sailing assistant</span>
+                    </div>
+                </div>
+                <button type="button" class="icon-btn" id="newChatBtn" title="New chat" aria-label="New chat">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="5" y="4" width="14" height="16" rx="2"></rect>
+                        <path d="M9 9h6M9 13h4"></path>
+                    </svg>
+                </button>
+            </header>
+            <div class="chat-pane" id="chatPane"></div>
+            <div class="composer">
+                <input type="text" id="input" placeholder="Type your question..." autocomplete="off">
+                <button type="button" class="send-btn" id="sendBtn" aria-label="Send">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 2 11 13"></path>
+                        <path d="M22 2 15 22l-4-9-9-4 20-7z"></path>
+                    </svg>
+                </button>
             </div>
             <div class="status" id="status"></div>
-        </div>
-    </div>
+            <p class="sources">ClubSpot · Regatta Network</p>
+        </section>
+    </main>
 
     <script>
         const chatPane = document.getElementById('chatPane');
         const input = document.getElementById('input');
         const sendBtn = document.getElementById('sendBtn');
         const status = document.getElementById('status');
-        const welcomeEl = document.getElementById('welcome');
 
-        function formatStatsAsOf(data) {
-            const raw = data && data.computed_at;
-            if (!raw) return '';
-            const d = new Date(raw);
-            if (Number.isNaN(d.getTime())) return '';
-            return d.toISOString().slice(0, 10);
+        function welcomeHtml() {
+            return '<div class="msg bot" id="welcome">' +
+                'Hi! What would you like to explore?' +
+                '<div class="chips">' +
+                '<button type="button" class="chip" data-prompt="show sailor results">Sailor results</button>' +
+                '<a class="chip" href="Find-regatta.html">Find a regatta</a>' +
+                '</div></div>';
         }
 
-        function oldestDataYear(data) {
-            if (data && data.earliest_year != null && data.earliest_year !== '') {
-                const y = parseInt(data.earliest_year, 10);
-                if (Number.isFinite(y) && y >= 1900 && y <= 2100) return String(y);
-            }
-            const raw = data && data.earliest_date;
-            if (raw == null || raw === '') return null;
-            const match = String(raw).match(/\b((?:19|20)\d{2})\b/);
-            return match ? match[1] : null;
+        function resetChat() {
+            chatPane.innerHTML = welcomeHtml();
+            status.textContent = '';
+            status.className = 'status';
+            input.value = '';
+            input.focus();
         }
 
-        function formatChatWelcomeHtml(data) {
-            const sailors = Number(data && data.total_sailors || 0).toLocaleString();
-            const regattas = Number(data && data.total_regattas || 0).toLocaleString();
-            const year = oldestDataYear(data);
-            const yearBit = year ? ', going as far back as <strong>' + year + '</strong>' : '';
-            return 'Welcome to Love Sailing ChatBot — I have knowledge of <strong>' +
-                sailors + '</strong> sailors and <strong>' + regattas + '</strong> regattas' + yearBit + '.';
-        }
-
-        (async function setWelcome() {
-            welcomeEl.textContent = 'Welcome to Love Sailing ChatBot — loading sailor and regatta counts…';
-            try {
-                const r = await fetch('/api/race-results/stats');
-                const d = await r.json();
-                if (!d.success) {
-                    welcomeEl.textContent = 'Welcome to Love Sailing ChatBot. How can I help?';
-                    return;
-                }
-                welcomeEl.innerHTML = formatChatWelcomeHtml(d);
-            } catch (_) {
-                welcomeEl.textContent = 'Welcome to Love Sailing ChatBot. How can I help?';
-            }
-        })();
+        resetChat();
 
         function addMsg(content, isUser) {
             const div = document.createElement('div');
@@ -650,9 +809,51 @@
             return html;
         }
 
+        function ordinal(n) {
+            const num = parseInt(n, 10);
+            if (!Number.isFinite(num)) return '—';
+            const v = Math.abs(num) % 100;
+            const d = Math.abs(num) % 10;
+            const suf = (v > 10 && v < 14) ? 'th' : (d === 1 ? 'st' : d === 2 ? 'nd' : d === 3 ? 'rd' : 'th');
+            return num + suf;
+        }
+
+        function bestRegattaRow(data) {
+            const rows = data.regattaAchievements || [];
+            const best = data.summary && data.summary.bestRegattaPlace;
+            const scored = rows.filter(r => /^\d+$/.test(String(r.position || '').trim()));
+            scored.sort((a, b) => parseInt(a.position, 10) - parseInt(b.position, 10));
+            if (best != null) {
+                const match = scored.find(r => parseInt(r.position, 10) === Number(best));
+                if (match) return match;
+            }
+            return scored[0] || rows[0] || null;
+        }
+
         function renderSailorCardHtml(data) {
             const sailor = data.sailor || {};
-            let html = '<h3 class="sailor-title">' + escapeHtml(sailor.name || 'Sailor') + '</h3>';
+            const summary = data.summary || {};
+            const best = bestRegattaRow(data);
+            let html = '<div class="sailor-preview">';
+            html += '<p class="sailor-preview-name">' + escapeHtml(sailor.name || 'Sailor') + '</p>';
+            html += '<p class="sailor-preview-club">' + escapeHtml(sailor.club || '') + '</p>';
+            html += '<div class="sailor-preview-stats">';
+            html += '<div>Regattas: ' + escapeHtml(String(summary.totalRegattas ?? 0)) + '</div>';
+            html += '<div>Best overall finish: ' + escapeHtml(ordinal(summary.bestRegattaPlace)) + '</div>';
+            html += '<div>Best race finish: ' + escapeHtml(ordinal(summary.bestRacePlace)) + '</div>';
+            html += '</div>';
+            if (best) {
+                html += '<div class="sailor-preview-best"><div class="label">Best result</div>';
+                html += '<button type="button" class="name-link" data-regatta-name="' + escapeHtml(best.regatta_name || '') +
+                    '" data-regatta-date="' + escapeHtml(best.regatta_date_raw || '') + '">' +
+                    escapeHtml(best.regatta_name || '') + '</button>';
+                html += '<div class="meta">' + escapeHtml(best.regatta_date || '') +
+                    (best.category ? ' · ' + escapeHtml(best.category) : '') + '</div></div>';
+            }
+            html += '<button type="button" class="view-full js-view-full">View full results →</button>';
+            html += '</div>';
+
+            html += '<div class="sailor-full hidden">';
             html += '<div class="section"><h3>Regatta results</h3><table class="data js-regatta-table"><thead><tr>' +
                 '<th class="sortable" data-sort="sortpos" data-type="num" data-default-dir="asc">Position</th>' +
                 '<th class="sortable" data-sort="sortname" data-type="text" data-default-dir="asc">Regatta Name</th>' +
@@ -696,6 +897,7 @@
                 html += '<tr><td colspan="4">No per-race scores available yet.</td></tr>';
             }
             html += '</tbody></table></div>';
+            html += '<button type="button" class="view-full js-download-results">Download</button></div>';
             return html;
         }
 
@@ -727,6 +929,14 @@
                 });
             });
             wireSortableTable(cardEl.querySelector('.js-regatta-table'), 'sortdate', 'desc');
+            const viewBtn = cardEl.querySelector('.js-view-full');
+            const full = cardEl.querySelector('.sailor-full');
+            if (viewBtn && full) {
+                viewBtn.addEventListener('click', () => {
+                    const open = full.classList.toggle('hidden') === false;
+                    viewBtn.textContent = open ? 'Hide full results' : 'View full results →';
+                });
+            }
         }
 
         function ensureEventModal() {
@@ -881,7 +1091,7 @@
                 });
                 html += '</tbody></table></div>';
             } else if (rt === 'sailor_card' && data.sailor) {
-                html += renderSailorCardHtml(data);
+                return renderSailorCardHtml(data);
             } else if (rt === 'rows' && hasRows) {
                 html += '<div class="section"><table class="data"><thead><tr><th>Pos</th><th>Sailor</th><th>Regatta</th><th>Date</th></tr></thead><tbody>';
                 data.rows.slice(0, 20).forEach(r => {
@@ -943,7 +1153,7 @@
             } else {
                 return '';
             }
-            html += '<button type="button" class="btn-download js-download-results"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>Download Results</button>';
+            html += '<button type="button" class="view-full js-download-results">Download</button>';
             return html;
         }
 
@@ -997,10 +1207,6 @@
         function addBotMsg(reply, data) {
             const div = document.createElement('div');
             div.className = 'msg bot';
-            const md = document.createElement('div');
-            md.className = 'markdown';
-            md.innerHTML = simpleMarkdown(reply);
-            div.appendChild(md);
             const showCard = data && (
                 (data.list && data.list.length) ||
                 (data.rows && data.rows.length) ||
@@ -1010,6 +1216,14 @@
                 data.resultType === 'rows' ||
                 (data.resultType === 'regatta_summary' && (data.dates?.length || data.sailorCount != null || (data.byClass && data.byClass.length)))
             );
+            const skipReply = data && data.resultType === 'sailor_card';
+            if (skipReply) div.classList.add('wide');
+            if (!skipReply && reply) {
+                const md = document.createElement('div');
+                md.className = 'markdown';
+                md.innerHTML = simpleMarkdown(reply);
+                div.appendChild(md);
+            }
             if (showCard) {
                 const cardHtml = renderResultsCard(data);
                 if (cardHtml) {
@@ -1021,6 +1235,9 @@
                     if (data.resultType === 'sailor_card') wireSailorCard(card, data);
                     div.appendChild(card);
                 }
+            }
+            if (!div.childNodes.length) {
+                div.textContent = reply || "I didn't find anything.";
             }
             chatPane.appendChild(div);
             chatPane.scrollTop = chatPane.scrollHeight;
@@ -1059,6 +1276,19 @@
 
         sendBtn.addEventListener('click', send);
         input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+        document.getElementById('newChatBtn').addEventListener('click', resetChat);
+        chatPane.addEventListener('click', (e) => {
+            const chip = e.target.closest('[data-prompt]');
+            if (!chip) return;
+            const prompt = chip.getAttribute('data-prompt');
+            if (prompt === 'show sailor results') {
+                addBotMsg('Type a sailor name.');
+                input.focus();
+                return;
+            }
+            input.value = prompt;
+            send();
+        });
     </script>
 </body>
 

@@ -98,16 +98,22 @@
             gap: 28px;
         }
 
-        .desktop-nav a {
+        .desktop-nav a,
+        .desktop-nav button.tab-link {
             color: #dbe4f0;
             text-decoration: none;
             font-size: 0.95rem;
             font-weight: 500;
             padding: 8px 0;
+            border: 0;
             border-bottom: 2px solid transparent;
+            background: none;
+            cursor: pointer;
+            font-family: inherit;
         }
 
-        .desktop-nav a.active {
+        .desktop-nav a.active,
+        .desktop-nav button.tab-link.active {
             color: #fff;
             border-bottom-color: #60a5fa;
         }
@@ -165,6 +171,136 @@
             border-radius: var(--radius);
             box-shadow: var(--card-shadow);
             padding: 22px 22px 16px;
+        }
+
+        .card-tabs {
+            display: flex;
+            gap: 4px;
+            margin: -6px 0 18px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .card-tab {
+            border: 0;
+            background: none;
+            padding: 10px 16px 12px;
+            margin-bottom: -1px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--muted);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }
+
+        .card-tab.active {
+            color: var(--blue);
+            border-bottom-color: var(--blue);
+        }
+
+        .alerts-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            min-height: 180px;
+        }
+
+        .alerts-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .alerts-toolbar h2 {
+            margin: 0;
+            font-size: 1.05rem;
+        }
+
+        .alerts-toolbar .muted {
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+
+        .alerts-manage {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .alerts-manage p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.9rem;
+            line-height: 1.45;
+        }
+
+        .alerts-email-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
+            align-items: end;
+        }
+
+        .alerts-email-row .search-button {
+            min-height: 50px;
+        }
+
+        .alerts-empty {
+            text-align: center;
+            padding: 28px 16px 20px;
+            color: var(--muted);
+        }
+
+        .alerts-empty .bell-icon {
+            margin-bottom: 10px;
+        }
+
+        .alerts-empty h2 {
+            margin: 0 0 8px;
+            color: var(--ink);
+            font-size: 1.25rem;
+        }
+
+        .alerts-empty p {
+            margin: 0 auto 18px;
+            max-width: 28rem;
+            line-height: 1.5;
+        }
+
+        .alerts-status {
+            display: none;
+            padding: 10px 12px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .alerts-status.active {
+            display: block;
+        }
+
+        .alerts-status.ok {
+            background: #ecfdf5;
+            color: #166534;
+        }
+
+        .alerts-status.err {
+            background: #fef2f2;
+            color: #991b1b;
+        }
+
+        .alerts-panel .muted {
+            color: var(--muted);
+            text-align: center;
+            padding: 20px 8px;
+        }
+
+        .search-form[hidden],
+        .alerts-panel[hidden] {
+            display: none !important;
         }
 
         .search-form {
@@ -632,6 +768,8 @@
             color: var(--blue);
             text-decoration: none;
             font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
         }
 
         .no-results {
@@ -817,12 +955,16 @@
         }
 
         @media (max-width: 768px) {
-            .desktop-nav {
+            .hamburger-menu {
+                display: block;
+            }
+
+            .page-tabs {
                 display: none;
             }
 
-            .hamburger-menu {
-                display: block;
+            .alerts-email-row {
+                grid-template-columns: 1fr;
             }
 
             .header-inner,
@@ -872,17 +1014,18 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="/fit-screen.css">
 </head>
 
-<body>
+<body class="fit-app">
     <header class="site-header">
         <div class="header-inner">
             <a class="brand" href="index.html">
                 <img src="/Images/LoveSailing-Left.jpg" alt="Love Sailing">
             </a>
-            <nav class="desktop-nav" aria-label="Primary">
-                <a href="Find-regatta.html" class="active">Find regattas</a>
-                <a href="stop-alerts.html">Results alerts</a>
+            <nav class="desktop-nav page-tabs" aria-label="Find regatta sections">
+                <button type="button" class="tab-link active" data-tab="search">Find regattas</button>
+                <button type="button" class="tab-link" data-tab="alerts">Alerts</button>
             </nav>
             <div class="hamburger-menu" onclick="toggleMenu()" aria-label="Open menu">
                 <span></span>
@@ -894,7 +1037,7 @@
 
     <section class="hero">
         <div class="hero-inner">
-            <h1>Find your next regatta.</h1>
+            <h1 id="heroTitle">Find your next regatta.</h1>
             <p class="hero-script">More Sailing Together</p>
         </div>
     </section>
@@ -902,7 +1045,11 @@
     <main class="page">
         <div class="page-inner">
             <section class="search-card">
-                <form class="search-form" onsubmit="searchRegattas(event)">
+                <div class="card-tabs" role="tablist" aria-label="Find regatta sections">
+                    <button type="button" class="card-tab active" id="tabSearch" data-tab="search" role="tab" aria-selected="true">Find regattas</button>
+                    <button type="button" class="card-tab" id="tabAlerts" data-tab="alerts" role="tab" aria-selected="false">Alerts</button>
+                </div>
+                <form class="search-form" id="searchFormWrap" onsubmit="searchRegattas(event)">
                     <div class="search-grid">
                         <div class="form-group">
                             <label for="locationInput">Regatta or location</label>
@@ -959,6 +1106,11 @@
                     </div>
                     <div class="location-status" id="locationStatus"></div>
                 </form>
+
+                <div class="alerts-panel" id="alertsPanel" hidden>
+                    <div class="alerts-status" id="alertsStatus"></div>
+                    <div id="alertsContent"></div>
+                </div>
             </section>
 
             <div class="results-layout" id="results">
@@ -990,15 +1142,11 @@
                         <path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"></path>
                         <path d="M13.7 21a2 2 0 0 1-3.4 0"></path>
                     </svg>
-                    <h2>Stay in the loop</h2>
-                    <p>Get notified when race results are published.</p>
-                    <a class="sidebar-button" href="stop-alerts.html">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                            <circle cx="12" cy="12" r="3"></circle>
-                            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9c.3.7.9 1.2 1.6 1.3H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path>
-                        </svg>
-                        Manage results alerts
-                    </a>
+                    <h2>Alerts</h2>
+                    <p id="sidebarAlertsCopy">Set an alert from search to get an email when results change.</p>
+                    <button type="button" class="sidebar-button" data-tab="alerts">
+                        View alerts
+                    </button>
                 </aside>
             </div>
         </div>
@@ -1025,6 +1173,7 @@
         <a href="Chatbot.html">SailBot</a>
         <a href="SailScan.html">Photos</a>
         <a href="Find-regatta.html">Regatta Search</a>
+        <a href="#alerts" data-tab="alerts" onclick="toggleMenu()">Alerts</a>
         <a href="Tracker.html">Tracker</a>
         <a href="Shop.html">Shopping</a>
     </div>
@@ -1057,14 +1206,20 @@
 
         function storedWatchToken(url) {
             const state = loadWatchState();
-            return state.items && state.items[url] ? state.items[url] : null;
+            const item = state.items && state.items[url];
+            if (!item) return null;
+            return typeof item === 'string' ? item : item.token;
         }
 
-        function rememberWatch(email, url, token) {
+        function rememberWatch(email, url, token, name) {
             const state = loadWatchState();
             state.email = email;
             state.items = state.items || {};
-            if (token) state.items[url] = token;
+            if (token) {
+                const prev = state.items[url];
+                const prevName = prev && typeof prev === 'object' ? prev.name : '';
+                state.items[url] = { token, name: name || prevName || '' };
+            }
             saveWatchState(state);
         }
 
@@ -1072,6 +1227,218 @@
             const state = loadWatchState();
             if (state.items) delete state.items[url];
             saveWatchState(state);
+        }
+
+        function forgetAllWatches() {
+            const state = loadWatchState();
+            state.items = {};
+            saveWatchState(state);
+        }
+
+        function listLocalWatches() {
+            const state = loadWatchState();
+            return Object.entries(state.items || {}).map(([url, val]) => ({
+                results_url: url,
+                token: typeof val === 'string' ? val : val.token,
+                regatta_name: typeof val === 'string' ? '' : (val.name || ''),
+                active: true
+            })).filter(watch => watch.token);
+        }
+
+        function setAlertsStatus(message, ok) {
+            const el = document.getElementById('alertsStatus');
+            if (!el) return;
+            if (!message) {
+                el.className = 'alerts-status';
+                el.textContent = '';
+                return;
+            }
+            el.textContent = message;
+            el.className = 'alerts-status active ' + (ok ? 'ok' : 'err');
+        }
+
+        function setActiveTab(tab) {
+            const alerts = tab === 'alerts';
+            document.querySelectorAll('[data-tab="search"]').forEach(el => {
+                el.classList.toggle('active', !alerts);
+                if (el.getAttribute('role') === 'tab') el.setAttribute('aria-selected', String(!alerts));
+            });
+            document.querySelectorAll('[data-tab="alerts"]').forEach(el => {
+                if (el.classList.contains('sidebar-button')) return;
+                el.classList.toggle('active', alerts);
+                if (el.getAttribute('role') === 'tab') el.setAttribute('aria-selected', String(alerts));
+            });
+            const searchForm = document.getElementById('searchFormWrap');
+            const alertsPanel = document.getElementById('alertsPanel');
+            const results = document.getElementById('results');
+            if (searchForm) searchForm.hidden = alerts;
+            if (alertsPanel) alertsPanel.hidden = !alerts;
+            if (alerts) {
+                results.classList.remove('visible');
+                document.getElementById('heroTitle').textContent = 'Your results alerts.';
+                if (location.hash !== '#alerts') history.replaceState(null, '', '#alerts');
+                renderAlertsPanel();
+            } else {
+                if (hasSearched) results.classList.add('visible');
+                document.getElementById('heroTitle').textContent = 'Find your next regatta.';
+                if (location.hash === '#alerts') history.replaceState(null, '', location.pathname + location.search);
+            }
+        }
+
+        function updateSidebarAlertsCopy(count) {
+            const el = document.getElementById('sidebarAlertsCopy');
+            if (!el) return;
+            if (count > 0) {
+                el.textContent = count === 1
+                    ? 'You have 1 alert set.'
+                    : `You have ${count} alerts set.`;
+            } else {
+                el.textContent = 'No alerts set. Choose Get alerts on a regatta to start.';
+            }
+        }
+
+        function listLocalTokens() {
+            return listLocalWatches().map(watch => watch.token).filter(Boolean);
+        }
+
+        function setStoredEmail(email) {
+            const state = loadWatchState();
+            state.email = email;
+            saveWatchState(state);
+        }
+
+        function alertsEmailFormHtml() {
+            const email = loadWatchState().email || '';
+            return `<div class="alerts-manage">
+                <div class="alerts-email-row">
+                    <div class="form-group">
+                        <label for="manageAlertEmail">Alert email</label>
+                        <div class="field">
+                            <input type="email" id="manageAlertEmail" value="${escapeAttr(email)}" placeholder="you@email.com" autocomplete="email">
+                        </div>
+                    </div>
+                    <button type="button" class="search-button" id="saveAlertEmailButton">Save email</button>
+                </div>
+                <p>These alerts stay on this browser only. Other people cannot see or manage them.</p>
+            </div>`;
+        }
+
+        async function fetchWatchesForTokens(tokens) {
+            if (!tokens.length) return [];
+            const response = await fetch('/api/results-watch/mine', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tokens })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || data.error) {
+                throw new Error(data.error || 'Could not load alerts.');
+            }
+            return data.watches || [];
+        }
+
+        async function loadAlertWatches() {
+            const local = listLocalWatches();
+            if (!local.length) return [];
+            try {
+                const remote = await fetchWatchesForTokens(local.map(watch => watch.token));
+                const byToken = new Map(remote.map(watch => [watch.token, watch]));
+                const merged = [];
+                local.forEach(watch => {
+                    const match = byToken.get(watch.token);
+                    if (!match || match.active === false) {
+                        forgetWatch(watch.results_url);
+                        return;
+                    }
+                    merged.push({
+                        token: watch.token,
+                        results_url: match.results_url || watch.results_url,
+                        regatta_name: match.regatta_name || watch.regatta_name,
+                        active: true
+                    });
+                });
+                return merged;
+            } catch (_err) {
+                return local;
+            }
+        }
+
+        async function saveManagedAlertEmail() {
+            const input = document.getElementById('manageAlertEmail');
+            const email = (input && input.value || '').trim().toLowerCase();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                setAlertsStatus('Please enter a valid email address.', false);
+                return;
+            }
+            const tokens = listLocalTokens();
+            setStoredEmail(email);
+            if (!tokens.length) {
+                setAlertsStatus('Email saved on this device for new alerts.', true);
+                return;
+            }
+            const response = await fetch('/api/results-watch/email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, tokens })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || data.error) {
+                throw new Error(data.error || 'Could not update alert email.');
+            }
+            setAlertsStatus(data.message || `Alert email updated to ${email}.`, true);
+        }
+
+        function renderAlertsPanel() {
+            const content = document.getElementById('alertsContent');
+            if (!content) return;
+            content.innerHTML = '<p class="muted">Loading alerts…</p>';
+            loadAlertWatches().then(watches => {
+                updateSidebarAlertsCopy(watches.length);
+                if (!watches.length) {
+                    content.innerHTML = `
+                        ${alertsEmailFormHtml()}
+                        <div class="alerts-empty">
+                            <svg class="bell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                                <path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"></path>
+                                <path d="M13.7 21a2 2 0 0 1-3.4 0"></path>
+                            </svg>
+                            <h2>No alerts set</h2>
+                            <p>Select a regatta on Find regattas and choose Get alerts to be emailed when results change.</p>
+                            <button type="button" class="search-button" data-tab="search">Find regattas</button>
+                        </div>
+                    `;
+                    return;
+                }
+                let html = alertsEmailFormHtml();
+                html += `<div class="alerts-toolbar">
+                    <h2>${watches.length === 1 ? '1 alert set' : watches.length + ' alerts set'}</h2>
+                    <button type="button" class="text-link" id="stopAllAlertsButton">Stop all</button>
+                </div>`;
+                watches.forEach(watch => {
+                    const name = watch.regatta_name || 'Regatta results';
+                    const url = watch.results_url || '';
+                    html += `<article class="regatta-item">
+                        <div class="date-badge">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                                <path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"></path>
+                                <path d="M13.7 21a2 2 0 0 1-3.4 0"></path>
+                            </svg>
+                        </div>
+                        <div class="regatta-body">
+                            <h3>${escapeHtml(name)}</h3>
+                            <div class="regatta-meta"><span>Results alerts are on</span></div>
+                            <div class="links">
+                                ${url ? `<a class="primary" href="${escapeAttr(url)}" target="_blank" rel="noopener">Open results</a>` : ''}
+                                <button type="button" class="link-btn stop" data-results-url="${escapeAttr(url)}" data-regatta-name="${escapeAttr(name)}">${alertButtonMarkup(true)}</button>
+                            </div>
+                        </div>
+                    </article>`;
+                });
+                content.innerHTML = html;
+            }).catch(err => {
+                updateSidebarAlertsCopy(listLocalWatches().length);
+                content.innerHTML = `${alertsEmailFormHtml()}<div class="alerts-empty"><h2>No alerts set</h2><p>${escapeHtml(err.message || 'Could not load alerts.')}</p></div>`;
+            });
         }
 
         function ymdParts(value) {
@@ -1091,14 +1458,27 @@
             return `${prefix}${monthNames[parts.month - 1]} ${parts.day}, ${parts.year}`;
         }
 
+        function todayYmd() {
+            const now = new Date();
+            return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        }
+
         function getRegattaDates(regatta) {
             return (Array.isArray(regatta.event_dates) && regatta.event_dates.length)
-                ? regatta.event_dates.map(d => String(d).slice(0, 10))
+                ? regatta.event_dates.map(d => String(d).slice(0, 10)).filter(Boolean)
                 : [String(regatta.regatta_date || '').slice(0, 10)].filter(Boolean);
         }
 
-        function formatEventDates(regatta) {
+        function displayDates(regatta) {
             const dates = getRegattaDates(regatta);
+            const picked = document.getElementById('dateInput') && document.getElementById('dateInput').value;
+            if (picked) return dates.filter(d => d === picked).length ? [picked] : dates;
+            const upcoming = dates.filter(d => d >= todayYmd());
+            return upcoming.length ? upcoming : dates;
+        }
+
+        function formatEventDates(regatta) {
+            const dates = displayDates(regatta);
             if (!dates.length) return '';
             if (dates.length === 1) return formatOneDate(dates[0]);
 
@@ -1119,19 +1499,14 @@
         }
 
         function formatDateBadge(regatta) {
-            const dates = getRegattaDates(regatta);
+            const dates = displayDates(regatta);
             const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
             const first = dates.length ? ymdParts(dates[0]) : null;
-            const last = dates.length > 1 ? ymdParts(dates[dates.length - 1]) : first;
             const monthName = first ? monthNames[first.month - 1] : null;
             if (!first || !monthName) return { month: '', day: '—', year: '' };
-            let day = String(first.day);
-            if (last && (last.day !== first.day || last.month !== first.month || last.year !== first.year)) {
-                day = `${first.day}–${last.day}`;
-            }
             return {
                 month: monthName.toUpperCase(),
-                day,
+                day: String(first.day),
                 year: String(first.year)
             };
         }
@@ -1188,14 +1563,21 @@
 
         async function stopWatch(url, button) {
             const token = storedWatchToken(url);
-            const state = loadWatchState();
-            const body = token
-                ? { token }
-                : { email: state.email, resultsUrl: url };
+            if (!token) {
+                forgetWatch(url);
+                if (button) {
+                    button.innerHTML = alertButtonMarkup(false);
+                    button.classList.remove('stop');
+                    button.style.backgroundColor = '';
+                    button.disabled = false;
+                }
+                updateSidebarAlertsCopy(listLocalWatches().length);
+                return;
+            }
             const response = await fetch('/api/results-watch/stop', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
+                body: JSON.stringify({ token })
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok || data.error) {
@@ -1207,6 +1589,10 @@
                 button.classList.remove('stop');
                 button.style.backgroundColor = '';
                 button.disabled = false;
+            }
+            updateSidebarAlertsCopy(listLocalWatches().length);
+            if (document.getElementById('alertsPanel') && !document.getElementById('alertsPanel').hidden) {
+                renderAlertsPanel();
             }
         }
 
@@ -1224,13 +1610,14 @@
             if (!response.ok || data.error) {
                 throw new Error(data.error || 'Could not set up alerts.');
             }
-            rememberWatch(email, url, data.token);
+            rememberWatch(email, url, data.token, name);
             if (button) {
                 button.innerHTML = alertButtonMarkup(true);
                 button.classList.add('stop');
                 button.style.backgroundColor = '#b91c1c';
                 button.disabled = false;
             }
+            updateSidebarAlertsCopy(listLocalWatches().length);
             return data;
         }
 
@@ -1420,8 +1807,8 @@
         function sortRegattas(regattas) {
             const latest = document.getElementById('sortSelect').value === 'latest';
             return [...regattas].sort((a, b) => {
-                const da = getRegattaDates(a)[0] || '';
-                const db = getRegattaDates(b)[0] || '';
+                const da = displayDates(a)[0] || '';
+                const db = displayDates(b)[0] || '';
                 if (da === db) return 0;
                 if (latest) return da < db ? 1 : -1;
                 return da < db ? -1 : 1;
@@ -1475,7 +1862,14 @@
         function renderRegattaList() {
             const resultsContent = document.getElementById('resultsContent');
             const showMore = document.getElementById('showMoreButton');
-            const sorted = sortRegattas(lastRegattas);
+            const pickedDate = document.getElementById('dateInput').value;
+            const today = todayYmd();
+            const upcomingOnly = lastRegattas.filter(regatta => {
+                const dates = getRegattaDates(regatta);
+                if (pickedDate) return dates.some(d => d === pickedDate) || String(regatta.regatta_date || '').slice(0, 10) === pickedDate;
+                return dates.some(d => d >= today);
+            });
+            const sorted = sortRegattas(upcomingOnly);
             const visible = sorted.slice(0, visibleCount);
             let html = '';
             visible.forEach(regatta => {
@@ -1516,6 +1910,16 @@
                     console.warn('Skipping regatta card:', itemErr, regatta && regatta.regatta_name);
                 }
             });
+            renderResultsHeader(sorted.length);
+            if (!sorted.length) {
+                resultsContent.innerHTML = `
+                    <div class="no-results">
+                        <p>No upcoming regattas found. Try another date or keyword.</p>
+                    </div>
+                `;
+                showMore.classList.remove('visible');
+                return;
+            }
             resultsContent.innerHTML = html;
             showMore.classList.toggle('visible', sorted.length > visibleCount);
         }
@@ -1523,6 +1927,86 @@
         window.addEventListener('DOMContentLoaded', async () => {
             setupAutocomplete('locationInput', 'locationAutocomplete', 'location-or-name');
             loadBoatTypes();
+            updateSidebarAlertsCopy(listLocalWatches().length);
+
+            document.body.addEventListener('click', (e) => {
+                const tabBtn = e.target.closest('[data-tab]');
+                if (!tabBtn) return;
+                const tab = tabBtn.getAttribute('data-tab');
+                if (tab !== 'search' && tab !== 'alerts') return;
+                if (tabBtn.tagName === 'A') e.preventDefault();
+                setActiveTab(tab);
+            });
+
+            document.getElementById('alertsContent').addEventListener('click', async (e) => {
+                if (e.target.closest('#saveAlertEmailButton')) {
+                    const btn = e.target.closest('#saveAlertEmailButton');
+                    btn.disabled = true;
+                    const original = btn.textContent;
+                    btn.textContent = 'Saving…';
+                    try {
+                        await saveManagedAlertEmail();
+                    } catch (err) {
+                        setAlertsStatus(err.message || 'Could not update alert email.', false);
+                    } finally {
+                        btn.disabled = false;
+                        btn.textContent = original;
+                    }
+                    return;
+                }
+                if (e.target.closest('#stopAllAlertsButton')) {
+                    const tokens = listLocalTokens();
+                    if (!tokens.length) {
+                        setAlertsStatus('No alerts set on this device.', false);
+                        return;
+                    }
+                    if (!confirm('Stop every results alert on this device?')) return;
+                    try {
+                        const response = await fetch('/api/results-watch/stop', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ tokens })
+                        });
+                        const data = await response.json().catch(() => ({}));
+                        if (!response.ok || data.error) throw new Error(data.error || 'Could not stop alerts.');
+                        forgetAllWatches();
+                        if (hasSearched) renderRegattaList();
+                        setAlertsStatus(data.message || 'All alerts stopped.', true);
+                        renderAlertsPanel();
+                    } catch (err) {
+                        setAlertsStatus(err.message || 'Could not stop alerts.', false);
+                    }
+                    return;
+                }
+                const btn = e.target.closest('button.link-btn[data-results-url]');
+                if (!btn) return;
+                const url = btn.getAttribute('data-results-url');
+                if (!url) return;
+                if (!confirm('Stop results alerts for this race?')) return;
+                btn.disabled = true;
+                btn.textContent = 'Stopping…';
+                try {
+                    await stopWatch(url, btn);
+                    setAlertsStatus('Alert stopped.', true);
+                    if (hasSearched) renderRegattaList();
+                } catch (err) {
+                    btn.disabled = false;
+                    btn.innerHTML = alertButtonMarkup(true);
+                    setAlertsStatus(err.message || 'Could not stop alerts.', false);
+                }
+            });
+
+            document.getElementById('alertsContent').addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter' || e.target.id !== 'manageAlertEmail') return;
+                e.preventDefault();
+                const btn = document.getElementById('saveAlertEmailButton');
+                if (btn) btn.click();
+            });
+
+            window.addEventListener('hashchange', () => {
+                setActiveTab(location.hash === '#alerts' ? 'alerts' : 'search');
+            });
+            if (location.hash === '#alerts') setActiveTab('alerts');
 
             document.getElementById('alertCancelButton').addEventListener('click', closeAlertModal);
             document.getElementById('alertModal').addEventListener('click', (e) => {
@@ -1546,7 +2030,8 @@
                 try {
                     await startWatch(email, url, name, button);
                     closeAlertModal();
-                    alert('Alerts are on. Check your email for a stop link.');
+                    setActiveTab('alerts');
+                    setAlertsStatus('Alerts are on. Check your email for a stop link.', true);
                 } catch (err) {
                     if (button) {
                         button.disabled = false;
