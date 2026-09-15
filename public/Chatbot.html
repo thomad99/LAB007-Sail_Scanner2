@@ -263,62 +263,296 @@
             text-align: left;
         }
 
-        .sailor-preview-name {
+        .msg.wide .results-card.sailor-card {
+            background: #fff;
+            padding: 16px 16px 14px;
+            box-shadow: 0 8px 24px rgba(21, 40, 80, 0.08);
+        }
+
+        .sailor-profile-name {
             margin: 0;
-            font-size: 1.02rem;
-            font-weight: 700;
-            color: #152033;
+            font-size: 1.35rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            color: #14213d;
         }
 
-        .sailor-preview-club {
-            margin: 2px 0 10px;
-            color: #66758c;
-            font-size: 0.86rem;
-        }
-
-        .sailor-preview-stats {
-            display: grid;
-            gap: 3px;
+        .sailor-profile-club {
+            margin: 2px 0 14px;
+            color: #7a879a;
             font-size: 0.92rem;
-            color: #243044;
+        }
+
+        .sailor-highlights {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
             margin-bottom: 12px;
         }
 
-        .sailor-preview-best {
-            padding-top: 8px;
-            border-top: 1px solid #d9e3ee;
+        .sailor-highlight {
+            background: #fff;
+            border: 1px solid #e6edf5;
+            border-radius: 12px;
+            padding: 10px 6px 9px;
+            text-align: center;
         }
 
-        .sailor-preview-best .label {
-            font-size: 0.78rem;
-            font-weight: 700;
-            color: #3d4d66;
-            margin-bottom: 4px;
+        .sailor-highlight strong {
+            display: block;
+            font-size: 1.22rem;
+            font-weight: 800;
+            color: #163a8a;
+            letter-spacing: -0.03em;
+            line-height: 1.1;
         }
 
-        .sailor-preview-best .name-link {
-            color: #152033;
+        .sailor-highlight span {
+            display: block;
+            margin-top: 4px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: #8a96a8;
+        }
+
+        .sailor-tile {
+            background: #f4f8ff;
+            border-radius: 12px;
+            padding: 12px 14px 13px;
+            margin-bottom: 12px;
+        }
+
+        .sailor-tile-kicker {
+            margin: 0 0 8px;
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #8a96a8;
+        }
+
+        .podium-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 88px;
+            gap: 10px;
+            align-items: center;
+            margin-top: 8px;
+        }
+
+        .podium-row .podium-label {
+            font-size: 0.82rem;
+            color: #5b6b80;
+        }
+
+        .podium-row .podium-count {
+            font-size: 0.82rem;
             font-weight: 700;
+            color: #1d2b44;
+            text-align: right;
+        }
+
+        .podium-track {
+            grid-column: 1 / -1;
+            height: 5px;
+            background: #dce6f4;
+            border-radius: 99px;
+            overflow: hidden;
+            margin-top: -4px;
+        }
+
+        .podium-track span {
+            display: block;
+            height: 100%;
+            border-radius: 99px;
+            background: #1d3b8f;
+        }
+
+        .podium-track.gold span { background: #d4a017; }
+        .podium-track.silver span { background: #9aa4b2; }
+        .podium-track.bronze span { background: #c07a3a; }
+
+        .podium-note {
+            margin: 8px 0 0;
+            font-size: 0.72rem;
+            color: #93a0b3;
+        }
+
+        .best-result-tile {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .best-result-place {
+            min-width: 52px;
+            text-align: center;
+        }
+
+        .best-result-place .kicker {
+            display: block;
+            font-size: 0.62rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #8a96a8;
+            margin-bottom: 2px;
+        }
+
+        .best-result-place strong {
+            font-size: 1.45rem;
+            font-weight: 800;
+            color: #d4a017;
+            letter-spacing: -0.03em;
+        }
+
+        .best-result-copy .name-link {
+            color: #163a8a;
+            font-weight: 800;
             text-decoration: none;
-            font-size: 0.95rem;
+            font-size: 0.98rem;
+            text-align: left;
         }
 
-        .sailor-full {
-            margin-top: 12px;
-            overflow-x: auto;
+        .best-result-copy .meta {
+            margin-top: 2px;
+            color: #7a879a;
+            font-size: 0.82rem;
         }
 
-        .sailor-full.hidden {
+        .sailor-results-head {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 8px;
+            margin: 4px 2px 6px;
+        }
+
+        .sailor-results-head h3 {
+            margin: 0;
+            font-size: 1.02rem;
+            color: #163a8a;
+            text-decoration: none;
+        }
+
+        .sailor-results-head .sort-note {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #3b82f6;
+        }
+
+        .sailor-event-list {
+            border-top: 1px solid #edf1f6;
+        }
+
+        .sailor-event {
+            display: grid;
+            grid-template-columns: 58px minmax(0, 1fr) auto;
+            gap: 8px;
+            align-items: start;
+            padding: 11px 2px;
+            border-bottom: 1px solid #edf1f6;
+        }
+
+        .sailor-event.hidden-event {
             display: none;
         }
 
-        .view-full {
+        .sailor-event-list.expanded .sailor-event.hidden-event {
+            display: grid;
+        }
+
+        .sailor-event-place {
+            font-size: 0.98rem;
+            font-weight: 800;
+            color: #163a8a;
+            padding-top: 1px;
+            text-decoration: none;
+            background: none;
+            border: none;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .sailor-event-place.gold { color: #d4a017; }
+        .sailor-event-place.silver { color: #8b95a3; }
+        .sailor-event-place.bronze { color: #c07a3a; }
+
+        .sailor-event-name {
+            font-weight: 800;
+            color: #163a8a;
+            font-size: 0.92rem;
+            text-align: left;
+            text-decoration: none;
+            background: none;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+        }
+
+        .sailor-event-meta {
+            margin-top: 2px;
+            color: #7a879a;
+            font-size: 0.78rem;
+            line-height: 1.35;
+        }
+
+        .sailor-event-photos {
+            align-self: center;
+        }
+
+        .photo-link.labeled {
+            width: auto;
+            height: auto;
+            padding: 4px 2px;
+            gap: 4px;
+            color: #5b6b80;
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
+
+        .photo-link.labeled span {
+            display: none;
+        }
+
+        @media (min-width: 420px) {
+            .photo-link.labeled span {
+                display: inline;
+            }
+        }
+
+        .sailor-event-detail {
+            display: none;
+            grid-column: 1 / -1;
+            margin: 4px 0 2px;
+            padding: 10px 12px;
+            background: #f4f8ff;
+            border: 1px solid #d5e4ff;
+            border-radius: 8px;
+            font-size: 0.88em;
+        }
+
+        .sailor-event-detail.open {
+            display: block;
+        }
+
+        .sailor-results-foot {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
             margin-top: 10px;
+            color: #8a96a8;
+            font-size: 0.78rem;
+        }
+
+        .sailor-results-foot .js-show-more,
+        .sailor-results-foot .js-download-results {
             border: none;
             background: none;
-            color: #2f6bff;
-            font-weight: 600;
-            font-size: 0.88rem;
+            color: #3b82f6;
+            font-weight: 700;
+            font-size: 0.82rem;
             padding: 0;
             cursor: pointer;
         }
@@ -334,18 +568,19 @@
             width: 100%;
         }
 
-        .results-card .sailor-preview-best .name-link {
-            color: #152033;
-            font-weight: 700;
-            text-decoration: none;
-        }
-
         .results-card h3 {
             margin: 0 0 12px;
             color: #0066cc;
             font-size: 1em;
             text-decoration: underline;
             text-decoration-color: #0066cc;
+        }
+
+        .results-card .sailor-results-head h3 {
+            margin: 0;
+            color: #163a8a;
+            font-size: 1.02rem;
+            text-decoration: none;
         }
 
         .results-card .basic-info table {
@@ -422,6 +657,22 @@
             padding: 0;
             font-size: inherit;
             text-align: left;
+        }
+
+        .results-card .sailor-event-place {
+            color: #163a8a;
+            text-decoration: none;
+            font-weight: 800;
+        }
+
+        .results-card .sailor-event-place.gold { color: #d4a017; }
+        .results-card .sailor-event-place.silver { color: #8b95a3; }
+        .results-card .sailor-event-place.bronze { color: #c07a3a; }
+
+        .results-card .sailor-event-name {
+            color: #163a8a;
+            text-decoration: none;
+            font-weight: 800;
         }
 
         .results-card .pos-link:hover,
@@ -815,13 +1066,14 @@
             return 'PhotoSearch.html?' + new URLSearchParams({ regatta_name: name }).toString();
         }
 
-        function photoLinkHtml(name) {
+        function photoLinkHtml(name, _date, labeled) {
             const href = photoSearchHref(name);
             if (!href) return '';
-            return '<a class="photo-link" href="' + href + '" target="_blank" rel="noopener" title="Photos from this regatta" aria-label="Photos from ' +
+            return '<a class="photo-link' + (labeled ? ' labeled' : '') + '" href="' + href + '" target="_blank" rel="noopener" title="Photos from this regatta" aria-label="Photos from ' +
                 escapeHtml(name) + '">' +
                 '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">' +
-                '<path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg></a>';
+                '<path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>' +
+                (labeled ? '<span>Photos</span>' : '') + '</a>';
         }
 
         function displayLoc(value) {
@@ -948,76 +1200,97 @@
             return scored[0] || rows[0] || null;
         }
 
+        function placeTone(n) {
+            if (n === 1) return 'gold';
+            if (n === 2) return 'silver';
+            if (n === 3) return 'bronze';
+            return '';
+        }
+
+        function podiumBarPct(count, total) {
+            const max = Math.max(Number(total) || 0, Number(count) || 0, 1);
+            return Math.max(8, Math.round((Number(count) || 0) / max * 100));
+        }
+
         function renderSailorCardHtml(data) {
             const sailor = data.sailor || {};
             const summary = data.summary || {};
+            const podiums = summary.podiums || {};
             const best = bestRegattaRow(data);
-            let html = '<div class="sailor-preview">';
-            html += '<p class="sailor-preview-name">' + escapeHtml(sailor.name || 'Sailor') + '</p>';
-            html += '<p class="sailor-preview-club">' + escapeHtml(sailor.club || '') + '</p>';
-            html += '<div class="sailor-preview-stats">';
-            html += '<div>Regattas: ' + escapeHtml(String(summary.totalRegattas ?? 0)) + '</div>';
-            html += '<div>Best overall finish: ' + escapeHtml(ordinal(summary.bestRegattaPlace)) + '</div>';
-            html += '<div>Best race finish: ' + escapeHtml(ordinal(summary.bestRacePlace)) + '</div>';
-            html += '</div>';
-            if (best) {
-                html += '<div class="sailor-preview-best"><div class="label">Best result</div>';
-                html += '<button type="button" class="name-link" data-regatta-name="' + escapeHtml(best.regatta_name || '') +
-                    '" data-regatta-date="' + escapeHtml(best.regatta_date_raw || '') + '">' +
-                    escapeHtml(best.regatta_name || '') + '</button>' +
-                    photoLinkHtml(best.regatta_name, best.regatta_date_raw);
-                html += '<div class="meta">' + escapeHtml(best.regatta_date || '') +
-                    (best.category ? ' · ' + escapeHtml(best.category) : '') + '</div></div>';
-            }
-            html += '<button type="button" class="view-full js-view-full">View full results →</button>';
+            const regattaRows = data.regattaAchievements || [];
+            const shown = 6;
+            const total = regattaRows.length;
+            const totalRegattas = Number(summary.totalRegattas ?? total);
+            const top3 = Number(podiums.top3 || 0);
+            const firsts = Number(podiums.first || 0);
+            const seconds = Number(podiums.second || 0);
+            const thirds = Number(podiums.third || 0);
+
+            let html = '<div class="sailor-profile">';
+            html += '<p class="sailor-profile-name">' + escapeHtml(sailor.name || 'Sailor') + '</p>';
+            html += '<p class="sailor-profile-club">' + escapeHtml(sailor.club || '') + '</p>';
+            html += '<div class="sailor-highlights">';
+            html += '<div class="sailor-highlight"><strong>' + escapeHtml(String(totalRegattas)) + '</strong><span>Regattas</span></div>';
+            html += '<div class="sailor-highlight"><strong>' + escapeHtml(ordinal(summary.bestRegattaPlace)) + '</strong><span>Best overall</span></div>';
+            html += '<div class="sailor-highlight"><strong>' + escapeHtml(ordinal(summary.bestRacePlace)) + '</strong><span>Best race</span></div>';
             html += '</div>';
 
-            html += '<div class="sailor-full hidden">';
-            html += '<div class="section"><h3>Regatta results</h3><table class="data js-regatta-table"><thead><tr>' +
-                '<th class="sortable" data-sort="sortpos" data-type="num" data-default-dir="asc">Position</th>' +
-                '<th class="sortable" data-sort="sortname" data-type="text" data-default-dir="asc">Regatta Name</th>' +
-                '<th class="sortable" data-sort="sortdate" data-type="text" data-default-dir="desc">Date</th>' +
-                '<th class="sortable" data-sort="sortclass" data-type="text" data-default-dir="asc">Class</th>' +
-                '<th class="sortable" data-sort="sortloc" data-type="text" data-default-dir="asc">Location</th>' +
-                '</tr></thead><tbody>';
-            const regattaRows = data.regattaAchievements || [];
+            html += '<div class="sailor-tile">';
+            html += '<p class="sailor-tile-kicker">Regatta podiums</p>';
+            html += '<div class="podium-row"><span class="podium-label">Top-3 finishes</span><span class="podium-count">' + escapeHtml(String(top3)) + '</span>';
+            html += '<div class="podium-track"><span style="width:' + podiumBarPct(top3, totalRegattas) + '%"></span></div></div>';
+            html += '<div class="podium-row"><span class="podium-label">1st place</span><span class="podium-count">' + escapeHtml(String(firsts)) + '</span>';
+            html += '<div class="podium-track gold"><span style="width:' + podiumBarPct(firsts, totalRegattas) + '%"></span></div></div>';
+            html += '<div class="podium-row"><span class="podium-label">2nd place</span><span class="podium-count">' + escapeHtml(String(seconds)) + '</span>';
+            html += '<div class="podium-track silver"><span style="width:' + podiumBarPct(seconds, totalRegattas) + '%"></span></div></div>';
+            html += '<div class="podium-row"><span class="podium-label">3rd place</span><span class="podium-count">' + escapeHtml(String(thirds)) + '</span>';
+            html += '<div class="podium-track bronze"><span style="width:' + podiumBarPct(thirds, totalRegattas) + '%"></span></div></div>';
+            if (Number(podiums.missing || 0) > 0) {
+                html += '<p class="podium-note">Counts pending complete results</p>';
+            }
+            html += '</div>';
+
+            if (best) {
+                const bestPlace = parseInt(best.position, 10);
+                html += '<div class="sailor-tile best-result-tile">';
+                html += '<div class="best-result-place"><span class="kicker">Best result</span><strong>' + escapeHtml(ordinal(bestPlace)) + '</strong></div>';
+                html += '<div class="best-result-copy"><button type="button" class="name-link" data-regatta-name="' + escapeHtml(best.regatta_name || '') +
+                    '" data-regatta-date="' + escapeHtml(best.regatta_date_raw || '') + '">' +
+                    escapeHtml(best.regatta_name || '') + '</button>';
+                html += '<div class="meta">' + escapeHtml(best.regatta_date || '') +
+                    (best.category ? ' · ' + escapeHtml(best.category) : '') + '</div></div></div>';
+            }
+
+            html += '<div class="sailor-results-head"><h3>Regatta results</h3><span class="sort-note">Newest first</span></div>';
+            html += '<div class="sailor-event-list js-event-list">';
             if (regattaRows.length) {
-                regattaRows.forEach(r => {
-                    const pos = r.position != null ? String(r.position) : '—';
+                regattaRows.forEach((r, idx) => {
+                    const placeNum = parseInt(String(r.position || '').replace(/[^\d]/g, ''), 10);
+                    const tone = placeTone(placeNum);
                     const loc = displayLoc(r.location);
-                    html += '<tr data-sortpos="' + escapeHtml(String(r.position ?? '')) +
-                        '" data-sortname="' + escapeHtml((r.regatta_name || '').toLowerCase()) +
-                        '" data-sortdate="' + escapeHtml(r.regatta_date_raw || r.regatta_date || '') +
-                        '" data-sortclass="' + escapeHtml((r.category || '').toLowerCase()) +
-                        '" data-sortloc="' + escapeHtml(loc.toLowerCase()) + '">' +
-                        '<td><button type="button" class="pos-link" data-detail="' + escapeHtml(r.detailId) + '">' + escapeHtml(pos) + '</button></td>' +
-                        '<td><button type="button" class="name-link" data-regatta-name="' + escapeHtml(r.regatta_name || '') + '" data-regatta-date="' + escapeHtml(r.regatta_date_raw || '') + '">' + escapeHtml(r.regatta_name || '') + '</button>' +
-                        photoLinkHtml(r.regatta_name, r.regatta_date_raw) + '</td>' +
-                        '<td>' + escapeHtml(r.regatta_date || '') + '</td>' +
-                        '<td>' + escapeHtml(r.category || '') + '</td>' +
-                        '<td>' + escapeHtml(loc) + '</td></tr>' +
-                        '<tr class="detail-row"><td colspan="5"><div class="detail-panel" data-detail-panel="' + escapeHtml(r.detailId) + '"></div></td></tr>';
+                    html += '<div class="sailor-event' + (idx >= shown ? ' hidden-event' : '') + '">';
+                    html += '<button type="button" class="pos-link sailor-event-place' + (tone ? ' ' + tone : '') + '" data-detail="' + escapeHtml(r.detailId) + '">' +
+                        escapeHtml(ordinal(placeNum)) + '</button>';
+                    html += '<div><button type="button" class="sailor-event-name name-link" data-regatta-name="' + escapeHtml(r.regatta_name || '') +
+                        '" data-regatta-date="' + escapeHtml(r.regatta_date_raw || '') + '">' + escapeHtml(r.regatta_name || '') + '</button>';
+                    html += '<div class="sailor-event-meta">' + escapeHtml(r.regatta_date || '') +
+                        (r.category ? ' · ' + escapeHtml(r.category) : '') +
+                        (loc ? '<br>' + escapeHtml(loc) : '') + '</div></div>';
+                    html += '<div class="sailor-event-photos">' + photoLinkHtml(r.regatta_name, r.regatta_date_raw, true) + '</div>';
+                    html += '<div class="sailor-event-detail detail-panel" data-detail-panel="' + escapeHtml(r.detailId) + '"></div>';
+                    html += '</div>';
                 });
             } else {
-                html += '<tr><td colspan="5">—</td></tr>';
+                html += '<div class="sailor-event"><div class="sailor-event-meta">No regatta results yet.</div></div>';
             }
-            html += '</tbody></table></div>';
-            html += '<div class="section"><h3>Best Race Achievements</h3><table class="data"><thead><tr><th>Race place</th><th>Race #</th><th>Regatta Name</th><th>Date</th></tr></thead><tbody>';
-            const raceRows = data.raceAchievements || [];
-            if (raceRows.length) {
-                raceRows.forEach(r => {
-                    html += '<tr>' +
-                        '<td><button type="button" class="pos-link" data-detail="' + escapeHtml(r.detailId) + '">' + escapeHtml(String(r.racePlace)) + '</button></td>' +
-                        '<td>' + escapeHtml(String(r.raceIndex)) + (r.throwout ? ' (TO)' : '') + '</td>' +
-                        '<td>' + escapeHtml(r.regatta_name || '') + photoLinkHtml(r.regatta_name, r.regatta_date_raw) + '</td>' +
-                        '<td>' + escapeHtml(r.regatta_date || '') + '</td></tr>' +
-                        '<tr class="detail-row"><td colspan="4"><div class="detail-panel" data-detail-panel="' + escapeHtml(r.detailId) + '"></div></td></tr>';
-                });
+            html += '</div>';
+            html += '<div class="sailor-results-foot"><span>Showing ' + Math.min(shown, total) + ' of ' + total + ' regattas</span>';
+            if (total > shown) {
+                html += '<button type="button" class="js-show-more">Show more</button>';
             } else {
-                html += '<tr><td colspan="4">No per-race scores available yet.</td></tr>';
+                html += '<button type="button" class="js-download-results">Download</button>';
             }
-            html += '</tbody></table></div>';
-            html += '<button type="button" class="view-full js-download-results">Download</button></div>';
+            html += '</div></div>';
             return html;
         }
 
@@ -1026,9 +1299,8 @@
             cardEl.querySelectorAll('.pos-link').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const id = btn.getAttribute('data-detail');
-                    let panel = btn.closest('tr') && btn.closest('tr').nextElementSibling
-                        ? btn.closest('tr').nextElementSibling.querySelector('.detail-panel[data-detail-panel="' + id + '"]')
-                        : null;
+                    const row = btn.closest('.sailor-event');
+                    let panel = row ? row.querySelector('.detail-panel[data-detail-panel="' + id + '"]') : null;
                     if (!panel) panel = cardEl.querySelector('.detail-panel[data-detail-panel="' + id + '"]');
                     if (!panel) return;
                     const opening = !panel.classList.contains('open');
@@ -1048,13 +1320,17 @@
                     openRegattaEventCard(btn.getAttribute('data-regatta-name'), btn.getAttribute('data-regatta-date'));
                 });
             });
-            wireSortableTable(cardEl.querySelector('.js-regatta-table'), 'sortdate', 'desc');
-            const viewBtn = cardEl.querySelector('.js-view-full');
-            const full = cardEl.querySelector('.sailor-full');
-            if (viewBtn && full) {
-                viewBtn.addEventListener('click', () => {
-                    const open = full.classList.toggle('hidden') === false;
-                    viewBtn.textContent = open ? 'Hide full results' : 'View full results →';
+            const list = cardEl.querySelector('.js-event-list');
+            const moreBtn = cardEl.querySelector('.js-show-more');
+            const foot = cardEl.querySelector('.sailor-results-foot span');
+            const total = (data.regattaAchievements || []).length;
+            if (moreBtn && list) {
+                moreBtn.addEventListener('click', () => {
+                    const open = list.classList.toggle('expanded');
+                    moreBtn.textContent = open ? 'Show less' : 'Show more';
+                    if (foot) foot.textContent = open
+                        ? ('Showing ' + total + ' of ' + total + ' regattas')
+                        : ('Showing ' + Math.min(6, total) + ' of ' + total + ' regattas');
                 });
             }
         }
@@ -1352,6 +1628,7 @@
                 if (cardHtml) {
                     const card = document.createElement('div');
                     card.className = 'results-card';
+                    if (data.resultType === 'sailor_card') card.classList.add('sailor-card');
                     card.innerHTML = cardHtml;
                     const btn = card.querySelector('.js-download-results');
                     if (btn) btn.addEventListener('click', () => doDownload(data));

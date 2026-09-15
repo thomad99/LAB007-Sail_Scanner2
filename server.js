@@ -38,6 +38,7 @@ const {
     refreshRaceResultsStatsIfStale
 } = require('./race-results-scraper');
 const { attachRaceResultsScheduler } = require('./race-results-scheduler');
+const { attachRegattaDatesScheduler, getDatesScheduleStatus } = require('./regatta-dates-scheduler');
 const { PARSE_APP_ID, clubspotGet, clubspotConfigSummary } = require('./clubspot-http');
 const {
     isoDateFromParse,
@@ -3803,7 +3804,7 @@ app.get('/api/sailbot/stats', async (req, res) => {
         const r = await pool.query(`
             SELECT
                 COUNT(*)::int AS total_records,
-                COUNT(DISTINCT TRIM(skipper)) FILTER (WHERE skipper IS NOT NULL AND TRIM(skipper) <> '')::int AS total_sailors,
+                COUNT(DISTINCT LOWER(REGEXP_REPLACE(TRIM(skipper), '\\s+', ' ', 'g'))) FILTER (WHERE skipper IS NOT NULL AND TRIM(skipper) <> '')::int AS total_sailors,
                 COUNT(DISTINCT TRIM(regatta_name)) FILTER (WHERE regatta_name IS NOT NULL AND TRIM(regatta_name) <> '')::int AS total_regattas,
                 COUNT(DISTINCT TRIM(yacht_club)) FILTER (WHERE yacht_club IS NOT NULL AND TRIM(yacht_club) <> '')::int AS total_clubs,
                 MIN(regatta_date)::text AS earliest_date,
@@ -4499,6 +4500,7 @@ app.post('/api/chat', async (req, res) => {
 
 attachRaceResultsScraper(app, { pool, openai, axios, cheerio });
 attachRaceResultsScheduler(app, { pool, axios, cheerio });
+attachRegattaDatesScheduler(app, { pool, runScrape: runUpcomingCalendarScrape });
 attachResultsWatcher(app, { pool, axios, cheerio, emailTransporter, cron });
 
 // Static file serving (AFTER all API routes)
@@ -4992,29 +4994,7 @@ app.get('/Images/favicon.ico', (req, res) => {
     res.sendFile(faviconPath);
 });
 
-// Weekly scheduled scrape - runs every Sunday at 2:00 AM UTC
-function setupScheduledScrape() {
-    const scraperUrl = process.env.SCRAPER_SERVICE_URL;
-    if (!scraperUrl) {
-        console.log('[Scheduled Scrape] SCRAPER_SERVICE_URL not set - weekly scrape disabled');
-        return;
-    }
-    // Cron: minute hour day-of-month month day-of-week (0 = Sunday)
-    cron.schedule('0 2 * * 0', async () => {
-        console.log('[Scheduled Scrape] Running weekly scrape (all sources)...');
-        try {
-            const response = await axios.post(`${scraperUrl}/api/scrape-regattas`, { source: 'all' }, {
-                timeout: 300000,
-                headers: { 'Content-Type': 'application/json' }
-            });
-            console.log('[Scheduled Scrape] Complete:', response.data);
-        } catch (err) {
-            console.error('[Scheduled Scrape] Error:', err.message);
-        }
-    });
-    console.log('[Scheduled Scrape] Weekly scrape enabled (Sundays 02:00 UTC)');
-}
-setupScheduledScrape();
+// Weekly upcoming-regatta scrape is owned by attachRegattaDatesScheduler (admin-controlled).
 
 function setupDailyRaceResultsStats() {
     cron.schedule('0 3 * * *', async () => {
@@ -5037,7 +5017,6 @@ setupDailyRaceResultsStats();
 // Regatta scrape status - last scrape, next scrape, new records per source
 app.get('/api/regatta-scrape-status', async (req, res) => {
     try {
-        const scraperUrl = process.env.SCRAPER_SERVICE_URL;
         const sources = [
             { id: 'regattanetwork', name: 'Regatta Network' },
             { id: 'clubspot', name: 'Clubspot' },
@@ -5061,16 +5040,14 @@ app.get('/api/regatta-scrape-status', async (req, res) => {
         const bySource = {};
         result.rows.forEach(r => { bySource[r.source] = r; });
 
-        const scheduleEnabled = !!scraperUrl;
-        const now = new Date();
-        let nextScheduledRun = null;
-        if (scheduleEnabled) {
-            const nextSun = new Date(now);
-            nextSun.setUTCDate(now.getUTCDate() + ((7 - now.getUTCDay() + 7) % 7));
-            nextSun.setUTCHours(2, 0, 0, 0);
-            if (nextSun <= now) nextSun.setUTCDate(nextSun.getUTCDate() + 7);
-            nextScheduledRun = nextSun.toISOString();
+        let datesSchedule = null;
+        try {
+            datesSchedule = await getDatesScheduleStatus(pool);
+        } catch (schedErr) {
+            console.warn('[dates-scheduler] status for scrape-status failed:', schedErr.message);
         }
+        const scheduleEnabled = !!(datesSchedule && datesSchedule.enabled);
+        const nextScheduledRun = datesSchedule && datesSchedule.nextRunAt ? datesSchedule.nextRunAt : null;
 
         const sourcesWithStatus = sources.map(s => {
             const row = bySource[s.id];
@@ -5089,7 +5066,9 @@ app.get('/api/regatta-scrape-status', async (req, res) => {
         res.json({
             success: true,
             scheduleEnabled,
-            scheduleDescription: 'Every Sunday at 02:00 UTC',
+            scheduleDescription: datesSchedule && datesSchedule.scheduleDescription
+                ? datesSchedule.scheduleDescription
+                : 'Not scheduled',
             nextScheduledRun,
             sources: sourcesWithStatus
         });
@@ -5099,59 +5078,65 @@ app.get('/api/regatta-scrape-status', async (req, res) => {
     }
 });
 
-// Regatta scraping endpoint — RN/HS calendars run locally; Clubspot stays background.
+async function runUpcomingCalendarScrape(source = 'all', { awaitClubspot = true } = {}) {
+    const src = source || 'all';
+    const results = {
+        regattanetwork: { found: 0, added: 0 },
+        clubspot: { found: 0, added: 0 },
+        hssailing: { found: 0, added: 0 }
+    };
+    let totalFound = 0;
+    let totalAdded = 0;
+
+    if (src === 'all' || src === 'regattanetwork') {
+        console.log('Scraping Regatta Network calendar...');
+        results.regattanetwork = await scrapeRegattaNetworkCalendar({ axios, cheerio, pool });
+        totalFound += results.regattanetwork.found || 0;
+        totalAdded += results.regattanetwork.added || 0;
+    }
+    if (src === 'all' || src === 'hssailing') {
+        console.log('Scraping High School Sailing calendar...');
+        results.hssailing = await scrapeHighSchoolSailingCalendar({ axios, cheerio, pool });
+        totalFound += results.hssailing.found || 0;
+        totalAdded += results.hssailing.added || 0;
+    }
+    if (src === 'all' || src === 'clubspot') {
+        if (awaitClubspot) {
+            console.log('Scraping Clubspot calendar...');
+            results.clubspot = await scrapeClubspot();
+            totalFound += results.clubspot.found || 0;
+            totalAdded += results.clubspot.added || 0;
+        } else {
+            scrapeClubspot().then((result) => {
+                console.log('Background Clubspot scrape complete:', result);
+            }).catch((err) => {
+                console.error('Background Clubspot scrape error:', err.message);
+            });
+            results.clubspot = { status: 'started' };
+        }
+    }
+
+    return { success: true, totalFound, totalAdded, results };
+}
+
+// Regatta scraping endpoint — RN/HS calendars run locally; Clubspot stays background on HTTP.
 app.post('/api/scrape-regattas', async (req, res) => {
     const source = req.body && req.body.source ? req.body.source : 'all';
     console.log(`=== Regatta Scraping Request: source="${source}" ===`);
 
-    // ClubSpot runs locally via the Parse Server API (no external service needed).
-    // Run in background and respond immediately to avoid HTTP timeouts with large datasets.
     if (source === 'clubspot') {
         res.json({ status: 'started', message: 'Clubspot scrape started in background. Check scrape log for results.' });
-        scrapeClubspot().then(result => {
+        scrapeClubspot().then((result) => {
             console.log('Background Clubspot scrape complete:', result);
-        }).catch(err => {
+        }).catch((err) => {
             console.error('Background Clubspot scrape error:', err.message);
         });
         return;
     }
 
     try {
-        const results = {
-            regattanetwork: { found: 0, added: 0 },
-            clubspot: { found: 0, added: 0 },
-            hssailing: { found: 0, added: 0 }
-        };
-        let totalFound = 0;
-        let totalAdded = 0;
-
-        if (source === 'all' || source === 'regattanetwork') {
-            console.log('Scraping Regatta Network calendar...');
-            results.regattanetwork = await scrapeRegattaNetworkCalendar({ axios, cheerio, pool });
-            totalFound += results.regattanetwork.found || 0;
-            totalAdded += results.regattanetwork.added || 0;
-        }
-        if (source === 'all' || source === 'hssailing') {
-            console.log('Scraping High School Sailing calendar...');
-            results.hssailing = await scrapeHighSchoolSailingCalendar({ axios, cheerio, pool });
-            totalFound += results.hssailing.found || 0;
-            totalAdded += results.hssailing.added || 0;
-        }
-        if (source === 'all') {
-            scrapeClubspot().then(result => {
-                console.log('Background Clubspot scrape complete:', result);
-            }).catch(err => {
-                console.error('Background Clubspot scrape error:', err.message);
-            });
-            results.clubspot = { status: 'started' };
-        }
-
-        return res.json({
-            success: true,
-            totalFound,
-            totalAdded,
-            results
-        });
+        const outcome = await runUpcomingCalendarScrape(source, { awaitClubspot: false });
+        return res.json(outcome);
     } catch (error) {
         console.error('Calendar scrape error:', error.message);
         return res.status(500).json({

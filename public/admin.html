@@ -174,9 +174,19 @@
             padding-top: 20px;
             border-top: none;
         }
-        .admin-tile .scheduler-controls {
-            margin-left: auto;
-            margin-right: auto;
+        .admin-tile.results-scheduler .scheduler-controls {
+            margin-left: 0;
+            margin-right: 0;
+        }
+        #resultsSchedulerSection .stats-container {
+            margin-bottom: 16px;
+        }
+        #resultsDashTile .dates-toolbar {
+            margin-top: 14px;
+        }
+        #datesHistoryTile .scrape-history h2 {
+            font-size: 1.05em;
+            margin: 18px 0 12px;
         }
 
         .results-scheduler {
@@ -1123,24 +1133,32 @@
             margin-top: 10px;
         }
         #datesDashTile .stats-container,
-        #alertsDashTile .stats-container {
+        #alertsDashTile .stats-container,
+        #resultsDashTile .stats-container,
+        #resultsSchedulerSection .stats-container {
             grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
             gap: 12px;
         }
         #datesDashTile .stat-card,
-        #alertsDashTile .stat-card {
+        #alertsDashTile .stat-card,
+        #resultsDashTile .stat-card,
+        #resultsSchedulerSection .stat-card {
             padding: 16px 14px;
             border: 1px solid rgba(126, 207, 255, 0.2);
             border-radius: 12px;
             background: rgba(8, 24, 72, 0.45);
         }
         #datesDashTile .stat-card:hover,
-        #alertsDashTile .stat-card:hover {
+        #alertsDashTile .stat-card:hover,
+        #resultsDashTile .stat-card:hover,
+        #resultsSchedulerSection .stat-card:hover {
             transform: none;
             background: rgba(8, 24, 72, 0.65);
         }
         #datesDashTile .stat-card h3,
-        #alertsDashTile .stat-card h3 {
+        #alertsDashTile .stat-card h3,
+        #resultsDashTile .stat-card h3,
+        #resultsSchedulerSection .stat-card h3 {
             margin: 0;
             color: #9fd4ff;
             font-size: 0.78em;
@@ -1148,15 +1166,58 @@
             text-transform: uppercase;
         }
         #datesDashTile .stat-card .value,
-        #alertsDashTile .stat-card .value {
+        #alertsDashTile .stat-card .value,
+        #resultsDashTile .stat-card .value,
+        #resultsSchedulerSection .stat-card .value {
             font-size: 1.85em;
             color: #7ef0c3;
             margin: 8px 0 4px;
         }
         #datesDashTile .stat-card .label,
-        #alertsDashTile .stat-card .label {
+        #alertsDashTile .stat-card .label,
+        #resultsDashTile .stat-card .label,
+        #resultsSchedulerSection .stat-card .label {
             font-size: 0.82em;
             color: #b7c6d8;
+        }
+        #resultsYearDashTile .year-stats {
+            grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+            gap: 12px;
+            margin-top: 10px;
+        }
+        #resultsYearDashTile .year-stat-card {
+            padding: 16px 14px;
+            border: 1px solid rgba(126, 207, 255, 0.2);
+            border-radius: 12px;
+            background: rgba(8, 24, 72, 0.45);
+            text-align: left;
+        }
+        #resultsYearDashTile .year-stat-card.is-current {
+            border-color: rgba(126, 255, 196, 0.45);
+            box-shadow: inset 0 0 0 1px rgba(126, 255, 196, 0.18);
+        }
+        #resultsYearDashTile .year-stat-card h3 {
+            margin: 0 0 10px;
+            color: #9fd4ff;
+            font-size: 0.78em;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+        #resultsYearDashTile .year-stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            margin-top: 6px;
+        }
+        #resultsYearDashTile .year-stat-row span {
+            color: #b7c6d8;
+            font-size: 0.82em;
+        }
+        #resultsYearDashTile .year-stat-row strong {
+            color: #7ef0c3;
+            font-size: 1.15em;
+            font-weight: 800;
         }
         .alert-status {
             display: inline-block;
@@ -1271,7 +1332,6 @@
             margin: 0 0 14px;
         }
         body.photos-tab-active .page-top-dashboard,
-        body:not(.results-tab-active) #resultsDashTile,
         body:not(.dates-tab-active) #datesDashTile,
         body:not(.alerts-tab-active) #alertsDashTile {
             display: none;
@@ -1379,7 +1439,7 @@
         <h1>Admin Dashboard</h1>
 
         <section class="admin-tile page-top-dashboard" id="datesDashTile">
-            <h2>Upcoming calendar</h2>
+            <h2>Dashboard</h2>
             <p class="tile-sub" id="datesDashSub">Future events only, sorted by the next remaining date.</p>
             <div id="statsContainer" class="stats-container"><div class="loading">Loading upcoming totals…</div></div>
             <div class="dates-toolbar">
@@ -1398,61 +1458,60 @@
             </div>
         </section>
 
-        <section class="admin-tile page-top-dashboard" id="resultsDashTile">
-            <h2>Results Dashboard</h2>
-            <p class="tile-sub">Totals from scraped ClubSpot + Regatta Network race results.</p>
-            <div id="raceResultsStats" class="stats-container"><div class="loading">Loading scraped-results totals…</div></div>
-        </section>
-
         <div id="tab-dates" class="tab-panel active">
-
-        <details class="admin-details" id="datesScrapeDetails">
-            <summary>Scrape calendar dates</summary>
-            <div class="details-body">
-                <div class="scrape-section">
-                    <div class="scrape-source-select">
-                        <label for="scrapeSourceSelect">Select Source:</label>
+        <div class="results-tiles" id="datesAdminTiles">
+            <section class="admin-tile results-scheduler" id="datesSchedulerSection">
+                <h2>Scheduler</h2>
+                <p class="tile-sub">
+                    Weekly scrape of upcoming ClubSpot, Regatta Network, and High School calendars. Pick a day and time (Eastern).
+                </p>
+                <div id="datesSchedulerStatus" class="loading">Loading scheduler…</div>
+                <div class="scheduler-controls" id="datesSchedulerControls">
+                    <div>
+                        <label for="datesSchedDateTimeInput">Day &amp; time</label>
+                        <input type="datetime-local" id="datesSchedDateTimeInput" step="60">
+                    </div>
+                    <div>
+                        <label for="scrapeSourceSelect">Sources</label>
                         <select id="scrapeSourceSelect">
-                            <option value="all">All Sources</option>
-                            <option value="regattanetwork">Regatta Network Only</option>
-                            <option value="clubspot">Clubspot Only</option>
-                            <option value="hssailing">High School Sailing Only</option>
+                            <option value="all">All sources</option>
+                            <option value="regattanetwork">Regatta Network only</option>
+                            <option value="clubspot">Clubspot only</option>
+                            <option value="hssailing">High School Sailing only</option>
                         </select>
                     </div>
-                    <button class="action-button scrape" id="scrapeButton" onclick="startScraping()">
-                        Start Scraping
-                    </button>
-                    <div class="scrape-status" id="scrapeStatus"></div>
-                    <div class="action-buttons" style="margin-top: 16px;">
-                        <button class="action-button danger" id="clearButton" onclick="showClearConfirmation()">Clear All Regattas</button>
-                    </div>
-                    <div id="clearWarning" class="clear-warning" style="display: none;">
-                        <h3>⚠️ Warning: This will delete ALL regattas!</h3>
-                        <p>This action cannot be undone. All regatta date/calendar data will be permanently deleted from the database. Scraped race results are not affected.</p>
-                        <p>Are you absolutely sure you want to proceed?</p>
-                        <div class="confirm-buttons">
-                            <button class="confirm-button yes" onclick="clearAllRegattas()">Yes, Delete All</button>
-                            <button class="confirm-button no" onclick="hideClearConfirmation()">Cancel</button>
-                        </div>
+                </div>
+                <div class="scheduler-actions">
+                    <button type="button" class="action-button" onclick="saveDatesSchedule()">Save Schedule</button>
+                    <button type="button" class="action-button pause" id="datesSchedPauseBtn" onclick="toggleDatesSchedulePause()">Pause</button>
+                    <button type="button" class="action-button scrape" id="scrapeButton" onclick="startScraping()">Run Now</button>
+                    <button type="button" class="action-button" onclick="loadDatesSchedule(); loadScrapeStatus();">Refresh Status</button>
+                </div>
+                <div class="scrape-status" id="scrapeStatus"></div>
+                <div class="action-buttons" style="margin-top: 16px;">
+                    <button class="action-button danger" id="clearButton" onclick="showClearConfirmation()">Clear All Regattas</button>
+                </div>
+                <div id="clearWarning" class="clear-warning" style="display: none;">
+                    <h3>⚠️ Warning: This will delete ALL regattas!</h3>
+                    <p>This action cannot be undone. All regatta date/calendar data will be permanently deleted from the database. Scraped race results are not affected.</p>
+                    <p>Are you absolutely sure you want to proceed?</p>
+                    <div class="confirm-buttons">
+                        <button class="confirm-button yes" onclick="clearAllRegattas()">Yes, Delete All</button>
+                        <button class="confirm-button no" onclick="hideClearConfirmation()">Cancel</button>
                     </div>
                 </div>
-            </div>
-        </details>
+            </section>
 
-        <details class="admin-details" id="datesHistoryDetails">
-            <summary>Schedule &amp; scrape history</summary>
-            <div class="details-body">
-                <div class="scrape-section" id="scheduledScrapeStatusSection">
-                    <p>Weekly scrape runs every Sunday at 02:00 UTC for all 3 sources.</p>
-                    <div id="scheduledScrapeStatusContainer" class="loading">Loading...</div>
-                </div>
+            <section class="admin-tile" id="datesHistoryTile">
+                <h2>History</h2>
+                <p class="tile-sub">Last calendar scrape per source, plus recent scrape log totals.</p>
+                <div id="scheduledScrapeStatusContainer" class="loading">Loading...</div>
                 <div id="datesScrapeHistory"></div>
-            </div>
-        </details>
+            </section>
 
-        <section class="admin-tile upcoming-list-tile" id="regattaTableContainer">
+            <section class="admin-tile upcoming-list-tile" id="regattaTableContainer">
             <div class="regatta-table-container">
-                <h2>Next 20 upcoming</h2>
+                <h2>Next 20 Regattas</h2>
                 <p class="tile-sub">Soonest events with a date still ahead. Series show the next remaining date, not the original start.</p>
                 <div id="regattaCount" style="margin: 0 0 12px; color: #b7c6d8;"></div>
 
@@ -1527,12 +1586,58 @@
             </div>
         </section>
         </div>
+        </div>
 
         <div id="tab-results" class="tab-panel">
         <div class="results-tiles" id="raceResultsSection">
+            <section class="admin-tile" id="resultsDashTile">
+                <h2>Dashboard</h2>
+                <p class="tile-sub">Unique skippers and unique regatta names in scraped ClubSpot + Regatta Network results.</p>
+                <div id="raceResultsStats" class="stats-container"><div class="loading">Loading scraped-results totals…</div></div>
+                <div class="dates-toolbar">
+                    <button type="button" class="action-button" onclick="loadRaceResultsStats(); loadResultsScrapeHistory();">Refresh</button>
+                </div>
+            </section>
+
+            <section class="admin-tile" id="resultsYearDashTile">
+                <h2>By year</h2>
+                <p class="tile-sub">Unique skippers and regatta names for this year and the previous five.</p>
+                <div id="raceResultsYearStats" class="stats-container year-stats"><div class="loading">Loading year totals…</div></div>
+            </section>
+
+            <section class="admin-tile results-scheduler" id="resultsSchedulerSection">
+                <h2>Scheduled scrapes</h2>
+                <p class="tile-sub">
+                    Weekly ClubSpot + Regatta Network collect. Set the day, time (Eastern), and lookback window.
+                </p>
+                <div id="resultsScheduleDash" class="stats-container"><div class="loading">Loading last scheduled run…</div></div>
+                <div id="resultsSchedulerStatus" class="loading">Loading scheduler…</div>
+                <div class="scheduler-controls" id="resultsSchedulerControls">
+                    <div>
+                        <label for="schedDateTimeInput">Day &amp; time</label>
+                        <input type="datetime-local" id="schedDateTimeInput" step="60">
+                    </div>
+                    <div>
+                        <label for="schedLookbackSelect">Frequency (lookback)</label>
+                        <select id="schedLookbackSelect">
+                            <option value="7" selected>Weekly · past 7 days</option>
+                            <option value="14">Weekly · past 14 days</option>
+                            <option value="30">Weekly · past 30 days</option>
+                            <option value="60">Weekly · past 60 days</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="scheduler-actions">
+                    <button type="button" class="action-button" onclick="saveResultsSchedule()">Save Schedule</button>
+                    <button type="button" class="action-button pause" id="schedPauseBtn" onclick="toggleResultsSchedulePause()">Pause</button>
+                    <button type="button" class="action-button scrape" onclick="runResultsScheduleNow()">Run Now</button>
+                    <button type="button" class="action-button" onclick="loadResultsSchedule()">Refresh Status</button>
+                </div>
+            </section>
+
             <section class="admin-tile" id="resultsScrapeTile">
-                <h2>Run a Scrape</h2>
-                <p class="tile-sub">Collect results now by rolling window or calendar year.</p>
+                <h2>Manual scrape</h2>
+                <p class="tile-sub">Collect results now by rolling window or calendar year. Live progress and recent jobs stay here.</p>
 
                 <div class="scrape-mode-row">
                     <div class="scrape-source-select">
@@ -1574,44 +1679,14 @@
 
                 <div class="action-buttons">
                     <button class="action-button scrape" id="resultsScrapeButton" onclick="startResultsScrape()">Start Results Scrape</button>
-                    <button class="action-button" onclick="loadRaceResultsStats(); loadResultsScrapeHistory();">Refresh Stats</button>
+                    <button class="action-button" onclick="loadRaceResultsStats(); loadResultsScrapeHistory();">Refresh</button>
                     <button class="action-button danger" onclick="clearScrapedResults()">Clear Scraped Results</button>
-                </div>
-
-                <div id="resultsScrapeHistory" class="scrape-history-panel">
-                    <div class="loading">Loading scrape history…</div>
                 </div>
 
                 <div class="scrape-status" id="resultsScrapeStatus"></div>
                 <div class="results-log" id="resultsScrapeLog"></div>
-            </section>
-
-            <section class="admin-tile results-scheduler" id="resultsSchedulerSection">
-                <h2>Weekly Scheduler</h2>
-                <p class="tile-sub">
-                    Runs weekly and collects ClubSpot + Regatta Network results for the selected lookback period.
-                </p>
-                <div id="resultsSchedulerStatus" class="loading">Loading scheduler…</div>
-                <div class="scheduler-controls" id="resultsSchedulerControls">
-                    <div>
-                        <label for="schedDateTimeInput">Day &amp; time</label>
-                        <input type="datetime-local" id="schedDateTimeInput" step="60">
-                    </div>
-                    <div>
-                        <label for="schedLookbackSelect">Frequency (lookback)</label>
-                        <select id="schedLookbackSelect">
-                            <option value="7" selected>Weekly · past 7 days</option>
-                            <option value="14">Weekly · past 14 days</option>
-                            <option value="30">Weekly · past 30 days</option>
-                            <option value="60">Weekly · past 60 days</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="scheduler-actions">
-                    <button type="button" class="action-button" onclick="saveResultsSchedule()">Save Schedule</button>
-                    <button type="button" class="action-button pause" id="schedPauseBtn" onclick="toggleResultsSchedulePause()">Pause</button>
-                    <button type="button" class="action-button scrape" onclick="runResultsScheduleNow()">Run Now</button>
-                    <button type="button" class="action-button" onclick="loadResultsSchedule()">Refresh Status</button>
+                <div id="resultsScrapeHistory" class="scrape-history-panel">
+                    <div class="loading">Loading scrape history…</div>
                 </div>
             </section>
         </div>
@@ -1712,6 +1787,10 @@
             document.getElementById('tabBtnAlerts').classList.toggle('active', tab === 'alerts');
             if (location.hash !== '#' + tab) {
                 history.replaceState(null, '', '#' + tab);
+            }
+            if (tab === 'dates') {
+                loadDatesSchedule();
+                loadScrapeStatus();
             }
             if (tab === 'results') {
                 loadRaceResultsStats();
@@ -2460,16 +2539,6 @@
                 const data = await response.json();
                 if (!data.success) throw new Error(data.error || 'Failed to load');
                 let html = '';
-                if (data.scheduleEnabled) {
-                    html += `<p style="color: #00ff88; margin-bottom: 15px;"><strong>Schedule:</strong> ${data.scheduleDescription}`;
-                    if (data.nextScheduledRun) {
-                        const next = new Date(data.nextScheduledRun);
-                        html += ` &nbsp;|&nbsp; <strong>Next run:</strong> ${next.toLocaleString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
-                    }
-                    html += '</p>';
-                } else {
-                    html += '<p style="color: #ffaa00; margin-bottom: 15px;">Schedule disabled (SCRAPER_SERVICE_URL not set). Manual scrapes only.</p>';
-                }
                 html += '<div style="display: grid; gap: 15px;">';
                 (data.sources || []).forEach(s => {
                     const lastStr = s.lastScrape ? new Date(s.lastScrape).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never';
@@ -2731,6 +2800,8 @@
                 </div>
                 ${lastReportSourceTilesHtml(lastReportStats(data.lastRunReport))}
             `;
+            const dash = document.getElementById('resultsScheduleDash');
+            if (dash) dash.innerHTML = lastReportDashboardHtml(lastReportStats(data.lastRunReport));
         }
 
         async function loadResultsSchedule() {
@@ -2745,6 +2816,10 @@
             } catch (err) {
                 box.className = '';
                 box.innerHTML = `<p style="color:#ff8080;">Scheduler error: ${escapeHtml(err.message)}</p>`;
+                const dash = document.getElementById('resultsScheduleDash');
+                if (dash) {
+                    dash.innerHTML = `<div class="loading" style="color:#ff6666;">Could not load last scheduled run: ${escapeHtml(err.message)}</div>`;
+                }
             }
         }
 
@@ -2830,12 +2905,145 @@
         }
 
 
+        let datesScheduleState = null;
+
+        function applyDatesScheduleForm(data) {
+            const dt = document.getElementById('datesSchedDateTimeInput');
+            if (dt) {
+                dt.value = formatDatetimeLocalFromIso(data.nextRunAt) ||
+                    datetimeLocalFromSchedule(data.dayOfWeek, data.hour, data.minute);
+            }
+            const src = document.getElementById('scrapeSourceSelect');
+            if (src && data.source) src.value = data.source;
+            const pauseBtn = document.getElementById('datesSchedPauseBtn');
+            if (pauseBtn) {
+                if (data.enabled) {
+                    pauseBtn.textContent = 'Pause';
+                    pauseBtn.classList.remove('resume');
+                    pauseBtn.classList.add('pause');
+                } else {
+                    pauseBtn.textContent = 'Resume';
+                    pauseBtn.classList.remove('pause');
+                    pauseBtn.classList.add('resume');
+                }
+            }
+        }
+
+        function renderDatesSchedule(data) {
+            const box = document.getElementById('datesSchedulerStatus');
+            if (!box) return;
+            datesScheduleState = data;
+            applyDatesScheduleForm(data);
+            const pausedClass = data.enabled ? '' : ' paused';
+            const stateLabel = data.enabled ? 'Active' : 'Paused';
+            const nextHtml = data.enabled
+                ? formatScheduleWhenLines(data.nextRunAt)
+                : '— (paused)';
+            box.className = '';
+            box.innerHTML = `
+                <div class="scheduler-status-grid">
+                    <div class="scheduler-stat${pausedClass}">
+                        <div class="label">Status</div>
+                        <div class="value">${stateLabel}</div>
+                    </div>
+                    <div class="scheduler-stat">
+                        <div class="label">Last run</div>
+                        <div class="value">${formatScheduleWhenLines(data.lastRunAt)}</div>
+                    </div>
+                    <div class="scheduler-stat">
+                        <div class="label">Next run</div>
+                        <div class="value">${nextHtml}</div>
+                    </div>
+                    <div class="scheduler-stat">
+                        <div class="label">Schedule</div>
+                        <div class="value">${formatScheduleSummaryHtml(data)}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function loadDatesSchedule() {
+            const box = document.getElementById('datesSchedulerStatus');
+            if (!box) return;
+            box.className = 'loading';
+            box.textContent = 'Loading scheduler…';
+            try {
+                const data = await fetchJsonWithTimeout('/api/regatta-dates/schedule', {}, 15000);
+                if (!data.success) throw new Error(data.error || 'Failed to load schedule');
+                renderDatesSchedule(data);
+            } catch (err) {
+                box.className = '';
+                box.innerHTML = `<p style="color:#ff8080;">Scheduler error: ${escapeHtml(err.message)}</p>`;
+            }
+        }
+
+        function readDatesScheduleForm() {
+            const raw = (document.getElementById('datesSchedDateTimeInput') || {}).value || '';
+            const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(raw);
+            if (!match) throw new Error('Pick a day and time for the weekly schedule.');
+            const year = parseInt(match[1], 10);
+            const month = parseInt(match[2], 10);
+            const day = parseInt(match[3], 10);
+            const hour = parseInt(match[4], 10);
+            const minute = parseInt(match[5], 10);
+            const dayOfWeek = new Date(Date.UTC(year, month - 1, day, 12, 0, 0)).getUTCDay();
+            return {
+                dayOfWeek,
+                hour,
+                minute,
+                source: document.getElementById('scrapeSourceSelect').value || 'all',
+                enabled: datesScheduleState ? !!datesScheduleState.enabled : true
+            };
+        }
+
+        function showDatesStatus(message, kind) {
+            const status = document.getElementById('scrapeStatus');
+            if (!status) return;
+            status.className = 'scrape-status active ' + (kind === 'error' ? 'error' : 'success');
+            status.textContent = message;
+        }
+
+        async function saveDatesSchedule() {
+            try {
+                const body = readDatesScheduleForm();
+                const res = await fetch('/api/regatta-dates/schedule', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Save failed');
+                renderDatesSchedule(data);
+                showDatesStatus('Weekly calendar schedule saved.', 'success');
+                loadScrapeStatus();
+            } catch (err) {
+                showDatesStatus('Schedule save error: ' + err.message, 'error');
+            }
+        }
+
+        async function toggleDatesSchedulePause() {
+            try {
+                const paused = datesScheduleState && !datesScheduleState.enabled;
+                const url = paused
+                    ? '/api/regatta-dates/schedule/resume'
+                    : '/api/regatta-dates/schedule/pause';
+                const res = await fetch(url, { method: 'POST' });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Toggle failed');
+                renderDatesSchedule(data);
+                showDatesStatus(paused ? 'Scheduler resumed.' : 'Scheduler paused.', 'success');
+                loadScrapeStatus();
+            } catch (err) {
+                showDatesStatus('Pause/resume error: ' + err.message, 'error');
+            }
+        }
+
         async function loadAll() {
             const button = document.getElementById('refreshButton');
             button.disabled = true;
             button.textContent = 'Loading...';
 
-            await Promise.all([loadStats(), loadRegattas(), loadScrapeStatus()]);
+            await Promise.all([loadStats(), loadRegattas(), loadScrapeStatus(), loadDatesSchedule()]);
 
             button.disabled = false;
             button.textContent = 'Refresh';
@@ -2901,8 +3109,6 @@
             const status = document.getElementById('scrapeStatus');
             const sourceSelect = document.getElementById('scrapeSourceSelect');
 
-            const details = document.getElementById('datesScrapeDetails');
-            if (details) details.open = true;
             button.disabled = true;
             button.textContent = 'Scraping...';
             status.className = 'scrape-status active';
@@ -2920,7 +3126,11 @@
 
                 const data = await response.json();
 
-                if (data.success) {
+                if (data.status === 'started') {
+                    status.className = 'scrape-status active success';
+                    status.innerHTML = '<strong>Clubspot scrape started</strong> in the background. Check History for totals when it finishes.';
+                    setTimeout(() => { loadAll(); }, 2000);
+                } else if (data.success) {
                     status.className = 'scrape-status active success';
                     status.innerHTML = `
                         <strong>Scraping Complete!</strong><br>
@@ -2943,7 +3153,7 @@
                 console.error('Scraping error:', error);
             } finally {
                 button.disabled = false;
-                button.textContent = 'Start Scraping';
+                button.textContent = 'Run Now';
             }
         }
 
@@ -2977,30 +3187,78 @@
             if (!box) return;
             box.innerHTML = '<div class="loading">Loading scraped-results totals…</div>';
             try {
-                const [data, schedule] = await Promise.all([
-                    fetchJsonWithTimeout('/api/race-results/stats', {}, 20000),
-                    fetchJsonWithTimeout('/api/race-results/schedule', {}, 15000).catch(() => null)
-                ]);
+                const data = await fetchJsonWithTimeout('/api/race-results/stats', {}, 20000);
                 if (!data.success) throw new Error(data.error || 'Failed');
                 const asOf = formatStatsAsOf(data);
-                const asOfLabel = asOf ? `Daily snapshot as of ${asOf}` : 'Daily snapshot pending';
-                const lastInfo = lastReportStats(schedule && schedule.lastRunReport);
+                const asOfLabel = asOf ? `Snapshot as of ${asOf}` : 'Snapshot pending';
                 box.innerHTML = `
                     <div class="stat-card clickable" onclick="exportRaceResultsCsv('sailors')" title="Download distinct sailors as CSV">
                         <h3>Sailors</h3>
                         <div class="value">${Number(data.total_sailors || 0).toLocaleString()}</div>
-                        <div class="label">Distinct skippers · ${asOfLabel}</div>
+                        <div class="label">Unique skipper names · ${asOfLabel}</div>
                     </div>
                     <div class="stat-card clickable" onclick="exportRaceResultsCsv('regattas')" title="Download distinct regattas as CSV">
                         <h3>Regattas</h3>
                         <div class="value">${Number(data.total_regattas || 0).toLocaleString()}</div>
                         <div class="label">${data.earliest_date || '—'} to ${data.latest_date || '—'} · ${asOfLabel}</div>
                     </div>
-                    ${lastReportDashboardHtml(lastInfo)}
                 `;
+                renderResultsYearDashboard(data);
             } catch (err) {
                 box.innerHTML = `<div class="loading" style="color:#ff6666;">Could not load scraped-results stats: ${escapeHtml(err.message)}</div>`;
+                const yearBox = document.getElementById('raceResultsYearStats');
+                if (yearBox) {
+                    yearBox.innerHTML = `<div class="loading" style="color:#ff6666;">Could not load year totals: ${escapeHtml(err.message)}</div>`;
+                }
             }
+        }
+
+        function resultsYearWindow(now = new Date()) {
+            const current = now.getFullYear();
+            const years = [];
+            for (let y = current; y >= current - 5; y--) years.push(y);
+            return years;
+        }
+
+        function renderResultsYearDashboard(data) {
+            const yearBox = document.getElementById('raceResultsYearStats');
+            if (!yearBox) return;
+            const yearTotals = data.yearTotals || [];
+            const byYear = {};
+            yearTotals.forEach((row) => {
+                const year = parseInt(row.year, 10);
+                if (!Number.isFinite(year)) return;
+                byYear[year] = {
+                    sailors: Number(row.sailors || 0),
+                    regattas: Number(row.regattas || 0)
+                };
+            });
+            const computing = !yearTotals.length && Number(data.total_sailors || 0) > 0;
+            if (computing) {
+                yearBox.innerHTML = '<div class="loading">Computing unique sailors and regattas by year…</div>';
+                if (!renderResultsYearDashboard.retryTimer) {
+                    renderResultsYearDashboard.retryTimer = setTimeout(() => {
+                        renderResultsYearDashboard.retryTimer = null;
+                        loadRaceResultsStats();
+                    }, 5000);
+                }
+                return;
+            }
+            if (renderResultsYearDashboard.retryTimer) {
+                clearTimeout(renderResultsYearDashboard.retryTimer);
+                renderResultsYearDashboard.retryTimer = null;
+            }
+            const currentYear = new Date().getFullYear();
+            yearBox.innerHTML = resultsYearWindow().map((year) => {
+                const row = byYear[year] || { sailors: 0, regattas: 0 };
+                const currentClass = year === currentYear ? ' is-current' : '';
+                return `
+                    <div class="year-stat-card${currentClass}">
+                        <h3>${year}${year === currentYear ? ' · now' : ''}</h3>
+                        <div class="year-stat-row"><span>Sailors</span><strong>${Number(row.sailors).toLocaleString()}</strong></div>
+                        <div class="year-stat-row"><span>Regattas</span><strong>${Number(row.regattas).toLocaleString()}</strong></div>
+                    </div>`;
+            }).join('');
         }
 
         function exportRaceResultsCsv(type) {
