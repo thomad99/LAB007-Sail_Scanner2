@@ -231,6 +231,44 @@
             font-size: 0.9rem;
         }
 
+        .alert-tiles {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            margin: 4px 0 12px;
+        }
+
+        .alert-tile {
+            background: #f8fafc;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 10px 12px;
+            min-width: 0;
+        }
+
+        .alert-tile span {
+            display: block;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .alert-tile strong {
+            display: block;
+            margin-top: 4px;
+            font-size: 1.02rem;
+            font-weight: 800;
+            color: var(--ink);
+            line-height: 1.2;
+            word-break: break-word;
+        }
+
+        .alert-tile.ending strong {
+            color: #b91c1c;
+        }
+
         .alerts-manage {
             display: flex;
             flex-direction: column;
@@ -1021,6 +1059,10 @@
                 margin: 0;
             }
 
+            .alert-tiles {
+                grid-template-columns: 1fr;
+            }
+
             .footer-inner {
                 flex-direction: column;
                 text-align: center;
@@ -1214,6 +1256,7 @@
         const NEARBY_RADIUS_MILES = 50;
         const WATCH_STORAGE_KEY = 'ls-results-watches';
         let pendingWatch = null;
+        let alertRemainTimer = null;
 
         function loadWatchState() {
             try {
@@ -1234,14 +1277,19 @@
             return typeof item === 'string' ? item : item.token;
         }
 
-        function rememberWatch(email, url, token, name) {
+        function rememberWatch(email, url, token, name, date) {
             const state = loadWatchState();
             state.email = email;
             state.items = state.items || {};
             if (token) {
                 const prev = state.items[url];
                 const prevName = prev && typeof prev === 'object' ? prev.name : '';
-                state.items[url] = { token, name: name || prevName || '' };
+                const prevDate = prev && typeof prev === 'object' ? prev.date : '';
+                state.items[url] = {
+                    token,
+                    name: name || prevName || '',
+                    date: date || prevDate || ''
+                };
             }
             saveWatchState(state);
         }
@@ -1264,6 +1312,7 @@
                 results_url: url,
                 token: typeof val === 'string' ? val : val.token,
                 regatta_name: typeof val === 'string' ? '' : (val.name || ''),
+                regatta_date: typeof val === 'string' ? '' : (val.date || ''),
                 active: true
             })).filter(watch => watch.token);
         }
@@ -1377,12 +1426,16 @@
                         token: watch.token,
                         results_url: match.results_url || watch.results_url,
                         regatta_name: match.regatta_name || watch.regatta_name,
+                        regatta_date: match.regatta_date || watch.regatta_date || '',
                         active: true,
                         notify_count: Number(match.notify_count || 0),
                         last_changed: match.last_changed || null,
                         expires_at: match.expires_at || null,
                         created_at: match.created_at || null
                     });
+                    if (match.regatta_date) {
+                        rememberWatch(loadWatchState().email, merged[merged.length - 1].results_url, watch.token, merged[merged.length - 1].regatta_name, match.regatta_date);
+                    }
                 });
                 return merged;
             } catch (_err) {
@@ -1433,6 +1486,10 @@
                             <button type="button" class="search-button" data-tab="search">Find regattas</button>
                         </div>
                     `;
+                    if (alertRemainTimer) {
+                        clearInterval(alertRemainTimer);
+                        alertRemainTimer = null;
+                    }
                     return;
                 }
                 let html = alertsEmailFormHtml();
@@ -1447,22 +1504,34 @@
                     const lastAlert = watch.last_changed
                         ? formatAlertStamp(watch.last_changed)
                         : 'None yet';
-                    const expires = watch.expires_at
-                        ? formatAlertStamp(watch.expires_at)
-                        : 'in 48 hours';
+                    const remain = formatAlertRemaining(watch.expires_at);
+                    const dateRegatta = { regatta_date: watch.regatta_date };
+                    const badge = formatDateBadge(dateRegatta);
+                    const dateLine = formatEventDates(dateRegatta);
                     html += `<article class="regatta-item">
                         <div class="date-badge">
-                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-                                <path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"></path>
-                                <path d="M13.7 21a2 2 0 0 1-3.4 0"></path>
-                            </svg>
+                            <div class="month">${escapeHtml(badge.month)}</div>
+                            <div class="day">${escapeHtml(badge.day)}</div>
+                            <div class="year">${escapeHtml(badge.year)}</div>
                         </div>
                         <div class="regatta-body">
                             <h3>${escapeHtml(name)}</h3>
                             <div class="regatta-meta">
-                                <span>Alerts sent: ${sent}</span>
-                                <span>Last alert: ${escapeHtml(lastAlert)}</span>
-                                <span>Stops automatically after 48 hours (${escapeHtml(expires)})</span>
+                                ${dateLine ? `<span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>${escapeHtml(dateLine)}</span>` : ''}
+                            </div>
+                            <div class="alert-tiles">
+                                <div class="alert-tile">
+                                    <span>Alerts sent</span>
+                                    <strong>${sent}</strong>
+                                </div>
+                                <div class="alert-tile${remain.ended ? ' ending' : ''}">
+                                    <span>Time left</span>
+                                    <strong class="js-alert-remaining" data-expires="${escapeAttr(watch.expires_at || '')}">${escapeHtml(remain.label)}</strong>
+                                </div>
+                                <div class="alert-tile">
+                                    <span>Last alert</span>
+                                    <strong>${escapeHtml(lastAlert)}</strong>
+                                </div>
                             </div>
                             <div class="links">
                                 ${url ? `<a class="primary" href="${escapeAttr(url)}" target="_blank" rel="noopener">Open results</a>` : ''}
@@ -1472,10 +1541,40 @@
                     </article>`;
                 });
                 content.innerHTML = html;
+                startAlertRemainTicker();
             }).catch(err => {
                 updateSidebarAlertsCopy(listLocalWatches().length);
                 content.innerHTML = `${alertsEmailFormHtml()}<div class="alerts-empty"><h2>No alerts set</h2><p>${escapeHtml(err.message || 'Could not load alerts.')}</p></div>`;
             });
+        }
+
+        function formatAlertRemaining(value) {
+            const end = new Date(value).getTime();
+            if (!Number.isFinite(end)) return { label: '—', ended: false };
+            const ms = end - Date.now();
+            if (ms <= 0) return { label: '0h 00m', ended: true };
+            const totalMins = Math.floor(ms / 60000);
+            const hours = Math.floor(totalMins / 60);
+            const mins = totalMins % 60;
+            return { label: hours + 'h ' + String(mins).padStart(2, '0') + 'm', ended: false };
+        }
+
+        function startAlertRemainTicker() {
+            if (alertRemainTimer) clearInterval(alertRemainTimer);
+            alertRemainTimer = setInterval(() => {
+                const panel = document.getElementById('alertsPanel');
+                if (!panel || panel.hidden) {
+                    clearInterval(alertRemainTimer);
+                    alertRemainTimer = null;
+                    return;
+                }
+                document.querySelectorAll('.js-alert-remaining').forEach((el) => {
+                    const remain = formatAlertRemaining(el.getAttribute('data-expires'));
+                    el.textContent = remain.label;
+                    const tile = el.closest('.alert-tile');
+                    if (tile) tile.classList.toggle('ending', remain.ended);
+                });
+            }, 30000);
         }
 
         function formatAlertStamp(value) {
@@ -1582,8 +1681,8 @@
             pendingWatch = null;
         }
 
-        function openAlertModal(url, name, button) {
-            pendingWatch = { url, name, button };
+        function openAlertModal(url, name, button, date) {
+            pendingWatch = { url, name, button, date: date || '' };
             const state = loadWatchState();
             document.getElementById('alertEmailInput').value = state.email || '';
             document.getElementById('alertModalCopy').textContent =
@@ -1645,21 +1744,22 @@
             }
         }
 
-        async function startWatch(email, url, name, button) {
+        async function startWatch(email, url, name, button, date) {
             const response = await fetch('/api/results-watch', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     email,
                     resultsUrl: url,
-                    regattaName: name || ''
+                    regattaName: name || '',
+                    regattaDate: date || ''
                 })
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok || data.error) {
                 throw new Error(data.error || 'Could not set up alerts.');
             }
-            rememberWatch(email, url, data.token, name);
+            rememberWatch(email, url, data.token, name, date);
             if (button) {
                 button.innerHTML = alertButtonMarkup(true);
                 button.classList.add('stop');
@@ -1904,7 +2004,7 @@
             if (resultsUrl) {
                 const watching = Boolean(storedWatchToken(resultsUrl));
                 const btnClass = watching ? 'link-btn stop' : 'link-btn';
-                html += `<button type="button" class="${btnClass}" data-results-url="${escapeAttr(resultsUrl)}" data-regatta-name="${escapeAttr(regatta.regatta_name)}">${alertButtonMarkup(watching)}</button>`;
+                html += `<button type="button" class="${btnClass}" data-results-url="${escapeAttr(resultsUrl)}" data-regatta-name="${escapeAttr(regatta.regatta_name)}" data-regatta-date="${escapeAttr((displayDates(regatta)[0] || String(regatta.regatta_date || '').slice(0, 10)))}">${alertButtonMarkup(watching)}</button>`;
             }
             return html;
         }
@@ -2069,7 +2169,7 @@
                     alert('Please enter a valid email address.');
                     return;
                 }
-                const { url, name, button } = pendingWatch;
+                const { url, name, button, date } = pendingWatch;
                 const confirmBtn = document.getElementById('alertConfirmButton');
                 confirmBtn.disabled = true;
                 confirmBtn.textContent = 'Setting up…';
@@ -2078,7 +2178,7 @@
                     button.textContent = 'Setting up…';
                 }
                 try {
-                    await startWatch(email, url, name, button);
+                    await startWatch(email, url, name, button, date);
                     closeAlertModal();
                     setActiveTab('alerts');
                     setAlertsStatus('Alerts are on for 48 hours. Check your email for a STOP ALERTS button.', true);
@@ -2125,6 +2225,7 @@
                 if (!btn) return;
                 const url = btn.getAttribute('data-results-url');
                 const name = btn.getAttribute('data-regatta-name') || '';
+                const date = btn.getAttribute('data-regatta-date') || '';
                 if (!url) return;
                 if (storedWatchToken(url) || btn.classList.contains('stop')) {
                     if (!confirm('Stop results alerts for this race?')) return;
@@ -2139,7 +2240,7 @@
                     }
                     return;
                 }
-                openAlertModal(url, name, btn);
+                openAlertModal(url, name, btn, date);
             });
         });
 

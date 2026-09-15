@@ -22,6 +22,11 @@ function normalizeUrl(url) {
     return String(url || '').trim();
 }
 
+function normalizeRegattaDate(value) {
+    const s = String(value || '').trim().slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+}
+
 function parseTokens(raw) {
     const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
     const tokens = [...new Set(list.map(value => String(value || '').trim()).filter(value => value && value.length <= 128))];
@@ -83,6 +88,7 @@ async function ensureResultsWatchersTable(pool) {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_results_watchers_active ON results_watchers(active) WHERE active = TRUE;`);
     await pool.query(`ALTER TABLE results_watchers ADD COLUMN IF NOT EXISTS notify_count INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE results_watchers ADD COLUMN IF NOT EXISTS stopped_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE results_watchers ADD COLUMN IF NOT EXISTS regatta_date DATE`);
     await pool.query(`ALTER TABLE results_watchers ALTER COLUMN expires_at SET DEFAULT (CURRENT_TIMESTAMP + INTERVAL '48 hours')`);
     await pool.query(`
         CREATE TABLE IF NOT EXISTS results_watch_events (
@@ -375,6 +381,7 @@ function attachResultsWatcher(app, { pool, axios, cheerio, emailTransporter, cro
             const email = normalizeEmail(req.body && req.body.email);
             const resultsUrl = normalizeUrl(req.body && (req.body.resultsUrl || req.body.websiteUrl));
             const regattaName = String((req.body && req.body.regattaName) || '').trim().slice(0, 200) || null;
+            const regattaDate = normalizeRegattaDate(req.body && (req.body.regattaDate || req.body.regatta_date));
 
             if (!EMAIL_RE.test(email)) {
                 return res.status(400).json({ success: false, error: 'Please enter a valid email address.' });
@@ -402,20 +409,21 @@ function attachResultsWatcher(app, { pool, axios, cheerio, emailTransporter, cro
                     UPDATE results_watchers
                     SET active = TRUE,
                         regatta_name = COALESCE($3, regatta_name),
+                        regatta_date = COALESCE($4::date, regatta_date),
                         expires_at = CURRENT_TIMESTAMP + INTERVAL '48 hours',
                         last_error = NULL,
                         stopped_at = NULL
                     WHERE email = $1 AND results_url = $2
-                `, [email, resultsUrl, regattaName]);
+                `, [email, resultsUrl, regattaName, regattaDate]);
                 await logWatchEvent(pool, watchId, wasActive ? 'renewed' : 'reactivated', regattaName);
             } else {
                 token = newWatchToken();
                 created = true;
                 const inserted = await pool.query(`
-                    INSERT INTO results_watchers (token, email, results_url, regatta_name)
-                    VALUES ($1, $2, $3, $4)
+                    INSERT INTO results_watchers (token, email, results_url, regatta_name, regatta_date)
+                    VALUES ($1, $2, $3, $4, $5::date)
                     RETURNING id
-                `, [token, email, resultsUrl, regattaName]);
+                `, [token, email, resultsUrl, regattaName, regattaDate]);
                 watchId = inserted.rows[0].id;
                 await logWatchEvent(pool, watchId, 'created', regattaName);
             }
@@ -540,12 +548,38 @@ function attachResultsWatcher(app, { pool, axios, cheerio, emailTransporter, cro
                 return res.json({ success: true, watches: [] });
             }
             const result = await pool.query(`
-                SELECT token, active, email, regatta_name, results_url, created_at, last_checked, last_changed, expires_at, notify_count
+                SELECT token, active, email, regatta_name, regatta_date::text AS regatta_date,
+                    results_url, created_at, last_checked, last_changed, expires_at, notify_count
                 FROM results_watchers
                 WHERE token = ANY($1::text[])
                 ORDER BY created_at DESC
             `, [tokens]);
-            res.json({ success: true, watches: result.rows });
+            const watches = result.rows || [];
+            const missingNames = [...new Set(
+                watches
+                    .filter((row) => !normalizeRegattaDate(row.regatta_date) && row.regatta_name)
+                    .map((row) => String(row.regatta_name).trim().toLowerCase())
+            )];
+            if (missingNames.length) {
+                try {
+                    const found = await pool.query(`
+                        SELECT LOWER(TRIM(regatta_name)) AS key,
+                            MIN(regatta_date)::text AS regatta_date
+                        FROM regattas
+                        WHERE LOWER(TRIM(regatta_name)) = ANY($1::text[])
+                        GROUP BY LOWER(TRIM(regatta_name))
+                    `, [missingNames]);
+                    const byName = new Map((found.rows || []).map((row) => [row.key, row.regatta_date]));
+                    watches.forEach((row) => {
+                        if (normalizeRegattaDate(row.regatta_date)) return;
+                        const lookedUp = byName.get(String(row.regatta_name || '').trim().toLowerCase());
+                        if (lookedUp) row.regatta_date = lookedUp;
+                    });
+                } catch (lookupErr) {
+                    console.warn('[Results Watcher] Date lookup failed:', lookupErr.message);
+                }
+            }
+            res.json({ success: true, watches });
         } catch (err) {
             console.error('[Results Watcher] Mine failed:', err);
             res.status(500).json({ success: false, error: 'Could not load alerts.' });

@@ -310,9 +310,10 @@
         .sailor-highlight span {
             display: block;
             margin-top: 4px;
-            font-size: 0.72rem;
+            font-size: 0.68rem;
             font-weight: 600;
             color: #8a96a8;
+            line-height: 1.2;
         }
 
         .sailor-tile {
@@ -323,7 +324,7 @@
         }
 
         .sailor-tile-kicker {
-            margin: 0 0 8px;
+            margin: 0 0 10px;
             font-size: 0.68rem;
             font-weight: 800;
             letter-spacing: 0.08em;
@@ -331,50 +332,115 @@
             color: #8a96a8;
         }
 
-        .podium-row {
+        .podium-stand {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) 88px;
-            gap: 10px;
-            align-items: center;
-            margin-top: 8px;
+            grid-template-columns: 1fr 1.15fr 1fr;
+            align-items: end;
+            gap: 8px;
+            min-height: 148px;
         }
 
-        .podium-row .podium-label {
-            font-size: 0.82rem;
-            color: #5b6b80;
+        .podium-col {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            min-width: 0;
         }
 
-        .podium-row .podium-count {
-            font-size: 0.82rem;
-            font-weight: 700;
-            color: #1d2b44;
-            text-align: right;
+        .podium-tile {
+            border-radius: 12px 12px 0 0;
+            padding: 10px 6px 8px;
+            text-align: center;
         }
 
-        .podium-track {
-            grid-column: 1 / -1;
-            height: 5px;
-            background: #dce6f4;
-            border-radius: 99px;
-            overflow: hidden;
-            margin-top: -4px;
-        }
-
-        .podium-track span {
+        .podium-tile .medal {
             display: block;
-            height: 100%;
-            border-radius: 99px;
-            background: #1d3b8f;
+            font-size: 0.62rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
         }
 
-        .podium-track.gold span { background: #d4a017; }
-        .podium-track.silver span { background: #9aa4b2; }
-        .podium-track.bronze span { background: #c07a3a; }
+        .podium-tile strong {
+            display: block;
+            font-size: 1.35rem;
+            font-weight: 800;
+            line-height: 1.05;
+            margin: 4px 0 2px;
+        }
+
+        .podium-tile .place {
+            display: block;
+            font-size: 0.72rem;
+            font-weight: 700;
+        }
+
+        .podium-riser {
+            border-radius: 0 0 10px 10px;
+        }
+
+        .podium-col.silver .podium-tile {
+            background: linear-gradient(180deg, #f4f6f8 0%, #d5dbe3 100%);
+            color: #4b5563;
+        }
+        .podium-col.silver .podium-riser {
+            height: 36px;
+            background: #c5ccd6;
+        }
+
+        .podium-col.gold .podium-tile {
+            background: linear-gradient(180deg, #ffe9a3 0%, #e4b123 100%);
+            color: #7a5200;
+        }
+        .podium-col.gold .podium-riser {
+            height: 58px;
+            background: #d4a017;
+        }
+
+        .podium-col.bronze .podium-tile {
+            background: linear-gradient(180deg, #f3d3b3 0%, #c07a3a 100%);
+            color: #6a3a12;
+        }
+        .podium-col.bronze .podium-riser {
+            height: 24px;
+            background: #a86328;
+        }
 
         .podium-note {
             margin: 8px 0 0;
             font-size: 0.72rem;
             color: #93a0b3;
+        }
+
+        .race-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .race-stat {
+            background: #fff;
+            border: 1px solid #e6edf5;
+            border-radius: 12px;
+            padding: 10px 6px 9px;
+            text-align: center;
+        }
+
+        .race-stat strong {
+            display: block;
+            font-size: 1.15rem;
+            font-weight: 800;
+            color: #163a8a;
+            letter-spacing: -0.03em;
+        }
+
+        .race-stat span {
+            display: block;
+            margin-top: 4px;
+            font-size: 0.68rem;
+            font-weight: 600;
+            color: #8a96a8;
+            line-height: 1.2;
         }
 
         .best-result-tile {
@@ -930,16 +996,22 @@
         @media (max-width: 768px) {
             .site-bar { padding: 6px 14px; }
             .brand img { height: 38px; }
-            .page { padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px)); }
+            .page {
+                padding: 0;
+            }
             .messenger {
                 width: 100%;
-                height: calc(100dvh - 68px);
-                border-radius: 18px;
+                height: 100%;
+                border-radius: 0;
+                box-shadow: none;
             }
             .msg { max-width: 92%; }
             .bot-stats { gap: 10px; }
             .bot-stat strong { font-size: 0.82rem; }
             .bot-id span { display: none; }
+            .composer {
+                padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+            }
         }
     </style>
     <link rel="stylesheet" href="/fit-screen.css">
@@ -949,6 +1021,23 @@
             max-height: 44px;
             max-width: 48px;
             background: transparent;
+        }
+
+        @media (max-width: 768px) {
+            html,
+            body.fit-app {
+                height: 100dvh !important;
+                min-height: 100dvh !important;
+                overflow: hidden !important;
+            }
+            body.fit-app > main.page {
+                padding: 0 !important;
+                overflow: hidden;
+            }
+            body.fit-app > main.page > .messenger {
+                height: 100%;
+                border-radius: 0;
+            }
         }
     </style>
 </head>
@@ -1207,11 +1296,6 @@
             return '';
         }
 
-        function podiumBarPct(count, total) {
-            const max = Math.max(Number(total) || 0, Number(count) || 0, 1);
-            return Math.max(8, Math.round((Number(count) || 0) / max * 100));
-        }
-
         function renderSailorCardHtml(data) {
             const sailor = data.sailor || {};
             const summary = data.summary || {};
@@ -1221,33 +1305,39 @@
             const shown = 6;
             const total = regattaRows.length;
             const totalRegattas = Number(summary.totalRegattas ?? total);
-            const top3 = Number(podiums.top3 || 0);
+            const races = summary.races || {};
             const firsts = Number(podiums.first || 0);
             const seconds = Number(podiums.second || 0);
             const thirds = Number(podiums.third || 0);
+            const totalRaces = Number(races.total || 0);
+            const raceWins = Number(races.wins || 0);
+            const raceAvg = races.average != null ? races.average : null;
 
             let html = '<div class="sailor-profile">';
             html += '<p class="sailor-profile-name">' + escapeHtml(sailor.name || 'Sailor') + '</p>';
             html += '<p class="sailor-profile-club">' + escapeHtml(sailor.club || '') + '</p>';
             html += '<div class="sailor-highlights">';
             html += '<div class="sailor-highlight"><strong>' + escapeHtml(String(totalRegattas)) + '</strong><span>Regattas</span></div>';
-            html += '<div class="sailor-highlight"><strong>' + escapeHtml(ordinal(summary.bestRegattaPlace)) + '</strong><span>Best overall</span></div>';
-            html += '<div class="sailor-highlight"><strong>' + escapeHtml(ordinal(summary.bestRacePlace)) + '</strong><span>Best race</span></div>';
+            html += '<div class="sailor-highlight"><strong>' + escapeHtml(ordinal(summary.bestRegattaPlace)) + '</strong><span>Best Regatta</span></div>';
+            html += '<div class="sailor-highlight"><strong>' + escapeHtml(ordinal(summary.bestRacePlace)) + '</strong><span>Best Race Position</span></div>';
             html += '</div>';
 
             html += '<div class="sailor-tile">';
             html += '<p class="sailor-tile-kicker">Regatta podiums</p>';
-            html += '<div class="podium-row"><span class="podium-label">Top-3 finishes</span><span class="podium-count">' + escapeHtml(String(top3)) + '</span>';
-            html += '<div class="podium-track"><span style="width:' + podiumBarPct(top3, totalRegattas) + '%"></span></div></div>';
-            html += '<div class="podium-row"><span class="podium-label">1st place</span><span class="podium-count">' + escapeHtml(String(firsts)) + '</span>';
-            html += '<div class="podium-track gold"><span style="width:' + podiumBarPct(firsts, totalRegattas) + '%"></span></div></div>';
-            html += '<div class="podium-row"><span class="podium-label">2nd place</span><span class="podium-count">' + escapeHtml(String(seconds)) + '</span>';
-            html += '<div class="podium-track silver"><span style="width:' + podiumBarPct(seconds, totalRegattas) + '%"></span></div></div>';
-            html += '<div class="podium-row"><span class="podium-label">3rd place</span><span class="podium-count">' + escapeHtml(String(thirds)) + '</span>';
-            html += '<div class="podium-track bronze"><span style="width:' + podiumBarPct(thirds, totalRegattas) + '%"></span></div></div>';
+            html += '<div class="podium-stand">';
+            html += '<div class="podium-col silver"><div class="podium-tile"><span class="medal">Silver</span><strong>' + escapeHtml(String(seconds)) + '</strong><span class="place">2nd place</span></div><div class="podium-riser"></div></div>';
+            html += '<div class="podium-col gold"><div class="podium-tile"><span class="medal">Gold</span><strong>' + escapeHtml(String(firsts)) + '</strong><span class="place">1st place</span></div><div class="podium-riser"></div></div>';
+            html += '<div class="podium-col bronze"><div class="podium-tile"><span class="medal">Bronze</span><strong>' + escapeHtml(String(thirds)) + '</strong><span class="place">3rd place</span></div><div class="podium-riser"></div></div>';
+            html += '</div>';
             if (Number(podiums.missing || 0) > 0) {
                 html += '<p class="podium-note">Counts pending complete results</p>';
             }
+            html += '</div>';
+
+            html += '<div class="race-stats">';
+            html += '<div class="race-stat"><strong>' + escapeHtml(String(totalRaces)) + '</strong><span>Total Races</span></div>';
+            html += '<div class="race-stat"><strong>' + escapeHtml(String(raceWins)) + '</strong><span>Total Race Wins</span></div>';
+            html += '<div class="race-stat"><strong>' + escapeHtml(raceAvg == null ? '—' : String(raceAvg)) + '</strong><span>Average Position</span></div>';
             html += '</div>';
 
             if (best) {

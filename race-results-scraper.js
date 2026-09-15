@@ -1622,7 +1622,13 @@ function buildSailorCard(rows, preferredName) {
 
     const numericPlaces = sailorRows.map(r => parseNumericPlace(r.position)).filter(n => n != null);
     const bestRegattaPlace = numericPlaces.length ? Math.min(...numericPlaces) : null;
-    const bestRacePlace = raceAchievements.length ? raceAchievements[0].racePlace : null;
+    const bestRacePlace = racePlaces.length
+        ? Math.min(...racePlaces.map(r => r.racePlace))
+        : null;
+    const raceWins = racePlaces.filter(r => r.racePlace === 1).length;
+    const raceAverage = racePlaces.length
+        ? Math.round((racePlaces.reduce((sum, r) => sum + r.racePlace, 0) / racePlaces.length) * 10) / 10
+        : null;
     let podiumFirst = 0;
     let podiumSecond = 0;
     let podiumThird = 0;
@@ -1657,6 +1663,11 @@ function buildSailorCard(rows, preferredName) {
                 third: podiumThird,
                 top3: podiumFirst + podiumSecond + podiumThird,
                 missing: podiumMissing
+            },
+            races: {
+                total: racePlaces.length,
+                wins: raceWins,
+                average: raceAverage
             }
         },
         regattaAchievements,
