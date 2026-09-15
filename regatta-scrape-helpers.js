@@ -998,6 +998,7 @@ function formatEventDatesForApi(row) {
     return {
         ...row,
         regatta_date: parseYmd(row.regatta_date),
+        next_date: parseYmd(row.next_date),
         event_dates: dates,
         boat_types: knownSailboatClasses(Array.isArray(row.boat_types) ? row.boat_types : [])
     };

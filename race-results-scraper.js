@@ -1343,6 +1343,12 @@ async function runScrape({ axios, cheerio, pool, source, window, deferFinish = f
                 console.error('[race-results] post-scrape cleanup failed:', cleanupErr.message);
             }
         }
+        try {
+            const { notifyWatchersAfterScrape } = require('./results-watcher');
+            await notifyWatchersAfterScrape();
+        } catch (watchErr) {
+            console.error('[race-results] alert notify after scrape failed:', watchErr.message);
+        }
         const status = job.error ? 'error' : 'success';
         if (source === 'all' || source === 'regattanetwork') {
             await logResultsScrape(pool, {

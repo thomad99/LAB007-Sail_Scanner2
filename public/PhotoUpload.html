@@ -1061,6 +1061,50 @@
             color: #ffffff;
         }
 
+        .regatta-date-matches {
+            grid-column: 1 / -1;
+        }
+
+        .regatta-date-label,
+        .regatta-date-empty {
+            margin: 0 0 8px;
+            font-size: 0.85em;
+            color: #555;
+        }
+
+        .regatta-date-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .regatta-chip {
+            max-width: 100%;
+            text-align: left;
+            background: #f3f7ff;
+            border: 1px solid #c5d8f5;
+            border-radius: 8px;
+            padding: 8px 10px;
+            cursor: pointer;
+            color: #0d3b8e;
+            font-size: 0.88em;
+            line-height: 1.25;
+        }
+
+        .regatta-chip:hover,
+        .regatta-chip.selected {
+            background: #e4edff;
+            border-color: #0066cc;
+        }
+
+        .regatta-chip span {
+            display: block;
+            color: #66758a;
+            font-size: 0.82em;
+            font-weight: 400;
+            margin-top: 2px;
+        }
+
         .metadata-header {
             transition: background-color 0.2s ease;
             padding: 10px;
@@ -1427,11 +1471,12 @@
                                 <label for="date">Date:</label>
                                 <input type="date" id="date" class="metadata-input">
                             </div>
-                            <div>
+                            <div class="autocomplete">
                                 <label for="regattaName">Regatta Name:</label>
                                 <input type="text" id="regattaName" class="metadata-input"
-                                    placeholder="Enter regatta name">
+                                    placeholder="Choose from this date, or type a name" autocomplete="off">
                             </div>
+                            <div id="regattaDateMatches" class="regatta-date-matches"></div>
                             <div>
                                 <label for="yachtClub">Yacht Club:</label>
                                 <input type="text" id="yachtClub" class="metadata-input" list="yachtClubList">
@@ -1614,13 +1659,105 @@
 
         // Add these new functions for autocomplete
         let regattaNames = [];
+        let dateRegattas = [];
+        let dateSuggestTimer = null;
+        let nameSuggestTimer = null;
+
+        function uniqueNameList(names) {
+            const seen = new Set();
+            const out = [];
+            (names || []).forEach((name) => {
+                const t = String(name || '').trim();
+                if (!t) return;
+                const key = t.toLowerCase();
+                if (seen.has(key)) return;
+                seen.add(key);
+                out.push(t);
+            });
+            return out;
+        }
+
+        function expandMetadataSection() {
+            const metadataContent = document.getElementById('metadataContent');
+            if (metadataContent && metadataContent.style.display === 'none') {
+                toggleMetadataSection();
+            }
+        }
+
+        function applyRegattaMatch(event) {
+            if (!event) return;
+            const nameInput = document.getElementById('regattaName');
+            const locationInput = document.getElementById('location');
+            if (nameInput) nameInput.value = event.regatta_name || '';
+            if (locationInput && event.location) locationInput.value = event.location;
+            document.querySelectorAll('.regatta-chip').forEach((btn) => btn.classList.remove('selected'));
+        }
+
+        function renderDateRegattaMatches(events) {
+            const box = document.getElementById('regattaDateMatches');
+            if (!box) return;
+            dateRegattas = Array.isArray(events) ? events : [];
+            if (!dateRegattas.length) {
+                box.innerHTML = '<p class="regatta-date-empty">No calendar events on this date. Type a name to search.</p>';
+                return;
+            }
+            const shown = dateRegattas.slice(0, 12);
+            box.innerHTML = '<p class="regatta-date-label">Events on this date - tap one to fill the name</p>' +
+                '<div class="regatta-date-chips">' +
+                shown.map((ev, i) => {
+                    const loc = ev.location ? '<span>' + escapeHtml(ev.location) + '</span>' : '';
+                    return '<button type="button" class="regatta-chip" data-idx="' + i + '">' +
+                        escapeHtml(ev.regatta_name || 'Untitled') + loc + '</button>';
+                }).join('') + '</div>';
+            box.querySelectorAll('.regatta-chip').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const ev = shown[Number(btn.getAttribute('data-idx'))];
+                    applyRegattaMatch(ev);
+                    btn.classList.add('selected');
+                });
+            });
+        }
+
+        async function suggestRegattasForDate(ymd, opts) {
+            const options = opts || {};
+            const date = String(ymd || '').slice(0, 10);
+            const box = document.getElementById('regattaDateMatches');
+            if (!date) {
+                dateRegattas = [];
+                if (box) box.innerHTML = '';
+                return;
+            }
+            if (box) box.innerHTML = '<p class="regatta-date-empty">Looking up events for this date…</p>';
+            try {
+                const res = await fetch('/api/search-regattas?date=' + encodeURIComponent(date));
+                const data = await res.json();
+                const events = (data && data.success && Array.isArray(data.regattas)) ? data.regattas : [];
+                renderDateRegattaMatches(events);
+                if (options.expand && events.length) expandMetadataSection();
+            } catch (err) {
+                console.error('Error loading calendar events for date:', err);
+                if (box) box.innerHTML = '<p class="regatta-date-empty">Could not load calendar events for this date.</p>';
+            }
+        }
 
         async function loadRegattaNames() {
             try {
                 const response = await fetch('/api/regatta-names');
-                regattaNames = await response.json();
+                const names = await response.json();
+                regattaNames = uniqueNameList(Array.isArray(names) ? names : []);
             } catch (err) {
                 console.error('Error loading regatta names:', err);
+            }
+        }
+
+        async function calendarNameSuggestions(query) {
+            if (!query || query.length < 2) return [];
+            try {
+                const res = await fetch('/api/regatta-name-suggestions?query=' + encodeURIComponent(query));
+                const data = await res.json();
+                return (data && data.success && Array.isArray(data.suggestions)) ? data.suggestions : [];
+            } catch (_err) {
+                return [];
             }
         }
 
@@ -1638,19 +1775,39 @@
                 a.setAttribute("class", "autocomplete-items");
                 this.parentNode.appendChild(a);
 
-                for (let i = 0; i < regattaNames.length; i++) {
-                    if (regattaNames[i].toUpperCase().includes(val.toUpperCase())) {
+                const renderMatches = (names) => {
+                    a.innerHTML = '';
+                    uniqueNameList(names).slice(0, 20).forEach((name) => {
+                        if (!name.toUpperCase().includes(val.toUpperCase())) return;
                         let b = document.createElement("DIV");
-                        b.innerHTML = "<strong>" + regattaNames[i].substr(0, val.length) + "</strong>";
-                        b.innerHTML += regattaNames[i].substr(val.length);
-                        b.innerHTML += "<input type='hidden' value='" + regattaNames[i] + "'>";
+                        const idx = name.toUpperCase().indexOf(val.toUpperCase());
+                        if (idx >= 0) {
+                            b.innerHTML = escapeHtml(name.slice(0, idx)) +
+                                "<strong>" + escapeHtml(name.substr(idx, val.length)) + "</strong>" +
+                                escapeHtml(name.slice(idx + val.length));
+                        } else {
+                            b.textContent = name;
+                        }
+                        b.innerHTML += "<input type='hidden' value='" + escapeHtml(name) + "'>";
                         b.addEventListener("click", function (e) {
                             inp.value = this.getElementsByTagName("input")[0].value;
+                            const match = dateRegattas.find(ev => String(ev.regatta_name || '').toLowerCase() === inp.value.toLowerCase());
+                            if (match) applyRegattaMatch(match);
                             closeAllLists();
                         });
                         a.appendChild(b);
-                    }
-                }
+                    });
+                };
+
+                const dateNames = dateRegattas.map(ev => ev.regatta_name);
+                renderMatches(dateNames.concat(regattaNames));
+
+                clearTimeout(nameSuggestTimer);
+                nameSuggestTimer = setTimeout(async () => {
+                    const extra = await calendarNameSuggestions(val);
+                    if (document.getElementById(inp.id + "autocomplete-list") !== a) return;
+                    renderMatches(dateNames.concat(extra, regattaNames));
+                }, 200);
             });
 
             inp.addEventListener("keydown", function (e) {
@@ -1719,6 +1876,11 @@
             if (dateInput) {
                 const today = new Date().toISOString().split('T')[0];
                 dateInput.value = today;
+                dateInput.addEventListener('change', () => {
+                    clearTimeout(dateSuggestTimer);
+                    dateSuggestTimer = setTimeout(() => suggestRegattasForDate(dateInput.value, { expand: true }), 150);
+                });
+                suggestRegattasForDate(dateInput.value);
             }
 
             // Load remembered values for photographer name and website
@@ -1879,6 +2041,7 @@
                                         const dateString = date.toISOString().split('T')[0];
                                         document.getElementById('date').value = dateString;
                                         console.log('Auto-populated date:', dateString);
+                                        suggestRegattasForDate(dateString, { expand: true });
                                     }
                                 }
                             } catch (error) {

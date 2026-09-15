@@ -1,9 +1,13 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-    <title>LoveSailing Sailing Photo Search Engine - Regatta sailing Photos</title>
+    <meta charset="UTF-8">
+    <title>Photo Search - Love Sailing</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <meta name="description"
         content="Search, view, and purchase high-quality regatta sailing photos. Find images of sailboats, yacht clubs, sailing events, championships, dinghies, offshore races, and more. The ultimate sailing photo search engine for sailors, photographers, and regatta fans.">
     <meta name="keywords"
@@ -24,64 +28,207 @@
     <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
     <link rel="apple-touch-icon" href="/favicon.ico">
     <style>
-        /* Mobile app styling - same as PhotoUpload.html */
+        :root {
+            --navy: #071433;
+            --navy-deep: #04102b;
+            --blue: #1d4ed8;
+            --blue-hover: #1e40af;
+            --ink: #0f172a;
+            --muted: #64748b;
+            --line: #e2e8f0;
+            --chip: #f1f5f9;
+            --page: #f8fafc;
+            --card-shadow: 0 18px 50px rgba(15, 23, 42, 0.12);
+            --radius: 20px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         html,
         body {
             margin: 0;
             padding: 0;
-            height: 100vh;
-            overflow: hidden;
-            position: fixed;
-            width: 100%;
-            background-color: #020053;
-            font-family: Arial, sans-serif;
+            min-height: 100vh;
+            background: #fff;
+            color: var(--ink);
+            font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif;
         }
 
-        .main-container {
-            height: 100vh;
+        a {
+            color: inherit;
+        }
+
+        button,
+        input,
+        select {
+            font-family: inherit;
+        }
+
+        .site-header {
+            background: var(--navy-deep);
+            color: #fff;
+        }
+
+        .header-inner,
+        .hero-inner,
+        .page-inner {
+            width: min(1120px, calc(100% - 40px));
+            margin: 0 auto;
+        }
+
+        .header-inner {
             display: flex;
-            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 72px;
+            gap: 20px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            color: #fff;
+        }
+
+        .brand img {
+            height: 48px;
+            width: auto;
+            max-width: 52px;
+            object-fit: contain;
+            object-position: center;
             background: transparent;
         }
 
-        .content-wrapper {
-            flex: 1;
+        .brand span {
+            font-size: 0.98rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+
+        .hero {
+            position: relative;
             overflow: hidden;
-            background: transparent;
+            background:
+                linear-gradient(100deg, rgba(4, 16, 43, 0.94) 0%, rgba(4, 16, 43, 0.72) 42%, rgba(4, 16, 43, 0.28) 100%),
+                url("/Images/Gemini_Generated_Image_8bt7028bt7028bt7.png") right center / cover no-repeat,
+                linear-gradient(180deg, var(--navy-deep), #0b2a5c);
+            color: #fff;
+            padding: 36px 0 88px;
         }
 
-        /* Mobile tabs */
+        .hero-script {
+            position: absolute;
+            right: 7%;
+            bottom: 34%;
+            margin: 0;
+            font-family: Caveat, "Segoe Script", cursive;
+            font-size: clamp(1.4rem, 2.4vw, 2rem);
+            color: rgba(255, 255, 255, 0.9);
+            transform: rotate(-12deg);
+            pointer-events: none;
+        }
+
+        .hero-inner p.hero-kicker {
+            margin: 0;
+            max-width: 36rem;
+            color: #d7e2f2;
+            font-size: 1.05rem;
+            line-height: 1.45;
+            font-family: inherit;
+            transform: none;
+            position: static;
+        }
+
+        .page {
+            background: var(--page);
+            padding: 0 0 64px;
+            min-height: 40vh;
+        }
+
+        .hamburger-menu {
+            display: none;
+            cursor: pointer;
+            z-index: 1000;
+            padding: 8px;
+        }
+
+        .hamburger-menu span {
+            display: block;
+            width: 22px;
+            height: 2px;
+            margin: 5px 0;
+            background: #fff;
+        }
+
+        .mobile-menu {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: var(--navy-deep);
+            z-index: 999;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .mobile-menu a {
+            display: block;
+            padding: 16px;
+            margin: 8px 0;
+            font-size: 1.2rem;
+            color: white;
+            text-decoration: none;
+            width: 80%;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .close-menu {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 24px;
+            color: white;
+            cursor: pointer;
+        }
+
         .mobile-tabs {
             display: flex;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            margin: 10px;
-            padding: 5px;
+            gap: 4px;
+            margin: 0 0 16px;
+            border-bottom: 1px solid var(--line);
         }
 
         .mobile-tab {
-            flex: 1;
-            background: transparent;
-            border: none;
-            color: white;
-            padding: 12px;
-            font-size: 16px;
-            border-radius: 8px;
+            flex: 0 0 auto;
+            background: none;
+            border: 0;
+            padding: 10px 16px 12px;
+            margin-bottom: -1px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--muted);
             cursor: pointer;
-            transition: background 0.3s;
+            border-bottom: 2px solid transparent;
         }
 
         .mobile-tab.active {
-            background: rgba(255, 255, 255, 0.2);
-            font-weight: bold;
+            color: var(--blue);
+            border-bottom-color: var(--blue);
+            background: none;
+            font-weight: 600;
         }
 
         .mobile-tab-content {
             display: none;
-            height: calc(100vh - 80px);
-            overflow-y: auto;
-            padding: 10px;
-            padding-bottom: 60px;
+            min-height: 0;
+            overflow: auto;
+            padding: 0;
             background: transparent;
         }
 
@@ -89,126 +236,113 @@
             display: block;
         }
 
-        /* Search section styling */
         .search-section {
-            background: rgba(255, 255, 255, 0.95);
-            border: 3px solid #0066cc;
-            border-radius: 15px;
-            padding: 20px;
-            padding-bottom: 40px;
-            margin: 10px 0;
+            position: relative;
+            margin-top: -56px;
+            background: #fff;
+            border-radius: var(--radius);
+            padding: 52px 22px 18px;
             text-align: left;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-        }
-
-        .search-section h2 {
-            margin: 0 0 15px 0;
-            color: #0066cc;
-            text-align: center;
-            font-size: 22px;
+            box-shadow: var(--card-shadow);
         }
 
         .search-form-grid {
             display: grid;
             grid-template-columns: 1fr;
-            gap: 15px;
-            margin-bottom: 20px;
+            gap: 14px;
+            margin-bottom: 8px;
         }
 
         .search-input {
             width: 100%;
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            font-size: 16px;
-            box-sizing: border-box;
+            min-height: 50px;
+            padding: 0 14px;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            font-size: 0.95rem;
             background: white;
+            color: var(--ink);
         }
 
         .search-input:focus {
-            border-color: #0066cc;
+            border-color: #93c5fd;
             outline: none;
-            box-shadow: 0 0 5px rgba(0, 102, 204, 0.3);
+            box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12);
         }
 
         .search-label {
             display: block;
             margin-bottom: 8px;
-            font-weight: bold;
-            color: #333;
-            font-size: 16px;
+            font-weight: 600;
+            color: var(--ink);
+            font-size: 0.82rem;
         }
 
         .search-row {
-            margin-bottom: 10px;
+            margin-bottom: 0;
             width: 100%;
+            min-width: 0;
         }
 
         .search-buttons {
-            margin-top: 20px;
-            margin-bottom: 40px;
+            margin-top: 8px;
+            margin-bottom: 4px;
             text-align: center;
             display: flex;
-            gap: 15px;
-            justify-content: center;
+            gap: 12px;
+            justify-content: flex-start;
+            grid-column: 1 / -1;
         }
 
         .search-button,
         .clear-button {
-            flex: 1;
-            max-width: 150px;
-            padding: 20px 20px;
-            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 50px;
+            padding: 0 22px;
+            border-radius: 12px;
             cursor: pointer;
-            font-size: 18px;
-            font-weight: bold;
+            font-size: 0.95rem;
+            font-weight: 600;
             border: none;
-            min-height: 60px;
-            transition: all 0.3s;
+            white-space: nowrap;
         }
 
         .search-button {
-            background: #0066cc;
+            background: var(--blue);
             color: white;
         }
 
         .search-button:hover {
-            background: #0052a3;
-            transform: translateY(-2px);
+            background: var(--blue-hover);
         }
 
         .search-button:active {
-            background: #004080;
-            transform: translateY(0);
+            background: var(--blue-hover);
         }
 
         .clear-button {
-            background: #6c757d;
-            color: white;
+            background: #e2e8f0;
+            color: var(--ink);
         }
 
         .clear-button:hover {
-            background: #5a6268;
-            transform: translateY(-2px);
+            background: #cbd5e1;
         }
 
         /* Results section */
-        .results-section {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 15px;
-            padding: 15px;
-            margin: 10px 0;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        .results-section:has(#results:empty) {
+            display: none;
         }
 
         .photo-count {
-            text-align: center;
-            color: #666;
-            font-size: 16px;
-            margin-bottom: 15px;
-            padding: 10px;
-            background: rgba(0, 102, 204, 0.1);
-            border-radius: 8px;
+            text-align: left;
+            color: var(--muted);
+            font-size: 0.85rem;
+            margin: 0 0 14px;
+            padding: 0;
+            background: none;
         }
 
         .photo-grid {
@@ -460,40 +594,40 @@
 
         /* Desktop styles */
         @media (min-width: 769px) {
+            .hamburger-menu {
+                display: none;
+            }
+
             .mobile-tabs {
                 display: none;
             }
 
             .mobile-tab-content {
                 display: block;
-                height: 100vh;
-                overflow-y: auto;
+                height: auto;
+                overflow: visible;
             }
 
-            /* Desktop container constraints */
             .search-section {
-                max-width: 800px;
-                margin: 20px auto;
+                max-width: none;
+                margin: -56px 0 0;
             }
 
             .search-form-grid {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 20px;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 16px;
             }
 
-            /* Desktop input field sizing */
             .search-input {
-                width: 20ch;
+                width: 100%;
                 max-width: 100%;
-                min-width: 200px;
+                min-width: 0;
             }
 
-            /* Desktop button sizing */
             .search-button,
             .clear-button {
-                padding: 20px 25px;
-                min-height: 60px;
-                max-width: 120px;
+                min-height: 50px;
+                max-width: none;
             }
 
             .photo-grid {
@@ -521,8 +655,28 @@
             }
         }
 
-        /* Mobile modal improvements */
         @media (max-width: 768px) {
+            .hamburger-menu {
+                display: block;
+            }
+
+            .header-inner,
+            .hero-inner,
+            .page-inner {
+                width: min(1120px, calc(100% - 28px));
+            }
+
+            .hero-script {
+                display: none;
+            }
+
+            .hero {
+                padding: 24px 0 72px;
+            }
+
+            .search-section {
+                margin-top: -48px;
+            }
             .modal-content {
                 max-width: 95vw;
                 max-height: 95vh;
@@ -633,50 +787,71 @@
             -webkit-overflow-scrolling: touch;
         }
 
-        /* Large desktop screens */
         @media (min-width: 1200px) {
-            .search-section {
-                max-width: 900px;
-            }
-
             .search-input {
-                width: 22ch;
-                min-width: 220px;
-            }
-        }
-
-        /* Extra large desktop screens */
-        @media (min-width: 1600px) {
-            .search-section {
-                max-width: 1000px;
-            }
-
-            .search-input {
-                width: 25ch;
-                min-width: 250px;
+                width: 100%;
             }
         }
     </style>
     <script src="https://js.stripe.com/v3/"></script>
     <link rel="stylesheet" href="/fit-screen.css">
+    <style>
+        body.fit-app .brand img {
+            height: 48px;
+            max-height: 48px;
+            max-width: 52px;
+            background: transparent;
+        }
+
+        body.fit-app .search-section {
+            flex-shrink: 0;
+        }
+
+        body.fit-app #searchTab {
+            flex-shrink: 0;
+            overflow: visible;
+        }
+
+        body.fit-app #resultsTab {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: auto;
+        }
+    </style>
 </head>
 
-<body>
-    <div class="main-container">
-        <div class="content-wrapper">
-            <!-- Mobile tabs -->
-            <div class="mobile-tabs">
-                <button class="mobile-tab active" onclick="switchTab('search', event)">Search</button>
-                <button class="mobile-tab" onclick="switchTab('results', event)">Results</button>
+<body class="fit-app">
+    <header class="site-header">
+        <div class="header-inner">
+            <a class="brand" href="index.html">
+                <img src="/Images/Sail_Logo_Trans.PNG" alt="">
+                <span>Love Sailing</span>
+            </a>
+            <div class="hamburger-menu" onclick="toggleMenu()" aria-label="Open menu">
+                <span></span>
+                <span></span>
+                <span></span>
             </div>
+        </div>
+    </header>
 
-            <!-- Search tab -->
-            <div id="searchTab" class="mobile-tab-content active">
-                <div class="search-section">
-                    <h2>Search Photos</h2>
-                    <div id="photoCount" class="photo-count">
-                        Loading photo count...
-                    </div>
+    <section class="hero">
+        <div class="hero-inner">
+            <h1>Photo Search</h1>
+            <p id="photoCount" class="hero-kicker">Loading photo count...</p>
+            <p class="hero-script">More Sailing Together</p>
+        </div>
+    </section>
+
+    <main class="page">
+        <div class="page-inner">
+            <div class="search-section search-card">
+                <div class="mobile-tabs">
+                    <button class="mobile-tab active" onclick="switchTab('search', event)">Search</button>
+                    <button class="mobile-tab" onclick="switchTab('results', event)">Results</button>
+                </div>
+
+                <div id="searchTab" class="mobile-tab-content active">
                     <div class="search-form-grid">
                         <div class="search-row">
                             <label for="sailNumber" class="search-label">Sail Number</label>
@@ -738,13 +913,24 @@
                 </div>
             </div>
 
-            <!-- Results tab -->
             <div id="resultsTab" class="mobile-tab-content">
                 <div class="results-section">
                     <div id="results"></div>
                 </div>
             </div>
         </div>
+    </main>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <div class="close-menu" onclick="toggleMenu()">✕</div>
+        <a href="index.html">Home</a>
+        <a href="Chatbot.html">SailBot</a>
+        <a href="SailScan.html">Photos</a>
+        <a href="PhotoUpload.html">Upload Photos</a>
+        <a href="PhotoSearch.html">Photo Search</a>
+        <a href="Find-regatta.html">Regatta Search</a>
+        <a href="Tracker.html">Tracker</a>
+        <a href="Shop.html">Shopping</a>
     </div>
 
     <!-- Modal -->
@@ -781,6 +967,15 @@
         console.log('Using relative API URLs');
 
         // Tab switching function
+        function toggleMenu() {
+            const mobileMenu = document.getElementById('mobileMenu');
+            if (mobileMenu.style.display === 'flex') {
+                mobileMenu.style.display = 'none';
+            } else {
+                mobileMenu.style.display = 'flex';
+            }
+        }
+
         function switchTab(tabName, event) {
             // Hide all tab contents
             const tabContents = document.querySelectorAll('.mobile-tab-content');
@@ -801,6 +996,33 @@
             if (event && event.target) {
                 event.target.classList.add('active');
             }
+        }
+
+        function applySearchFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            const fields = {
+                sailNumber: ['sail_number', 'sailNumber'],
+                date: ['date'],
+                regattaName: ['regatta_name', 'regattaName'],
+                yachtClub: ['yacht_club', 'yachtClub'],
+                photographerName: ['photographer_name', 'photographerName'],
+                location: ['location']
+            };
+            let hasQuery = false;
+            Object.keys(fields).forEach((id) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const keys = fields[id];
+                let value = '';
+                keys.forEach((key) => {
+                    if (!value) value = params.get(key) || '';
+                });
+                if (value) {
+                    el.value = value;
+                    hasQuery = true;
+                }
+            });
+            return hasQuery;
         }
 
         // Call this when the page loads
@@ -850,6 +1072,9 @@
 
             // Load helper dropdowns
             loadPhotoFilters();
+            if (applySearchFromUrl()) {
+                searchPhotos();
+            }
         });
 
         async function loadPhotoCount() {

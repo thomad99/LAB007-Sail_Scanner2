@@ -1165,7 +1165,7 @@
                         <path d="M13.7 21a2 2 0 0 1-3.4 0"></path>
                     </svg>
                     <h2>Alerts</h2>
-                    <p id="sidebarAlertsCopy">Set an alert from search to get an email when results change.</p>
+                    <p id="sidebarAlertsCopy">Set an alert from search to get an email when results are posted or scores change. Alerts last 48 hours.</p>
                     <button type="button" class="sidebar-button" data-tab="alerts">
                         View alerts
                     </button>
@@ -1179,7 +1179,7 @@
     <div class="modal-overlay" id="alertModal">
         <div class="modal-card">
             <h2>Results alerts</h2>
-            <p id="alertModalCopy">Enter your email and we will check this results page about every 15 minutes. If scores change, we will email you a link to the page.</p>
+            <p id="alertModalCopy">Enter your email and we will watch this regatta for 48 hours. If results are posted or scores change, we will email you a link. Alerts stop automatically after 48 hours.</p>
             <label for="alertEmailInput">Email</label>
             <input type="email" id="alertEmailInput" placeholder="you@email.com" autocomplete="email">
             <div class="modal-actions">
@@ -1377,7 +1377,11 @@
                         token: watch.token,
                         results_url: match.results_url || watch.results_url,
                         regatta_name: match.regatta_name || watch.regatta_name,
-                        active: true
+                        active: true,
+                        notify_count: Number(match.notify_count || 0),
+                        last_changed: match.last_changed || null,
+                        expires_at: match.expires_at || null,
+                        created_at: match.created_at || null
                     });
                 });
                 return merged;
@@ -1425,7 +1429,7 @@
                                 <path d="M13.7 21a2 2 0 0 1-3.4 0"></path>
                             </svg>
                             <h2>No alerts set</h2>
-                            <p>Select a regatta on Find regattas and choose Get alerts to be emailed when results change.</p>
+                            <p>Select a regatta on Find regattas and choose Get alerts to be emailed when results are posted or scores change. Alerts last 48 hours.</p>
                             <button type="button" class="search-button" data-tab="search">Find regattas</button>
                         </div>
                     `;
@@ -1439,6 +1443,13 @@
                 watches.forEach(watch => {
                     const name = watch.regatta_name || 'Regatta results';
                     const url = watch.results_url || '';
+                    const sent = Number(watch.notify_count || 0);
+                    const lastAlert = watch.last_changed
+                        ? formatAlertStamp(watch.last_changed)
+                        : 'None yet';
+                    const expires = watch.expires_at
+                        ? formatAlertStamp(watch.expires_at)
+                        : 'in 48 hours';
                     html += `<article class="regatta-item">
                         <div class="date-badge">
                             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
@@ -1448,7 +1459,11 @@
                         </div>
                         <div class="regatta-body">
                             <h3>${escapeHtml(name)}</h3>
-                            <div class="regatta-meta"><span>Results alerts are on</span></div>
+                            <div class="regatta-meta">
+                                <span>Alerts sent: ${sent}</span>
+                                <span>Last alert: ${escapeHtml(lastAlert)}</span>
+                                <span>Stops automatically after 48 hours (${escapeHtml(expires)})</span>
+                            </div>
                             <div class="links">
                                 ${url ? `<a class="primary" href="${escapeAttr(url)}" target="_blank" rel="noopener">Open results</a>` : ''}
                                 <button type="button" class="link-btn stop" data-results-url="${escapeAttr(url)}" data-regatta-name="${escapeAttr(name)}">${alertButtonMarkup(true)}</button>
@@ -1460,6 +1475,18 @@
             }).catch(err => {
                 updateSidebarAlertsCopy(listLocalWatches().length);
                 content.innerHTML = `${alertsEmailFormHtml()}<div class="alerts-empty"><h2>No alerts set</h2><p>${escapeHtml(err.message || 'Could not load alerts.')}</p></div>`;
+            });
+        }
+
+        function formatAlertStamp(value) {
+            const d = new Date(value);
+            if (Number.isNaN(d.getTime())) return '';
+            return d.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit'
             });
         }
 
@@ -1560,7 +1587,7 @@
             const state = loadWatchState();
             document.getElementById('alertEmailInput').value = state.email || '';
             document.getElementById('alertModalCopy').textContent =
-                `Enter your email and we will check the results page for ${name || 'this regatta'} about every 15 minutes. If scores change, we will email you a link.`;
+                `Enter your email and we will watch ${name || 'this regatta'} for 48 hours. If results are posted or scores change, we will email you a link. Alerts stop automatically after 48 hours.`;
             document.getElementById('alertModal').classList.add('active');
             document.getElementById('alertEmailInput').focus();
         }
@@ -2054,7 +2081,7 @@
                     await startWatch(email, url, name, button);
                     closeAlertModal();
                     setActiveTab('alerts');
-                    setAlertsStatus('Alerts are on. Check your email for a stop link.', true);
+                    setAlertsStatus('Alerts are on for 48 hours. Check your email for a STOP ALERTS button.', true);
                 } catch (err) {
                     if (button) {
                         button.disabled = false;

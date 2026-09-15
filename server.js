@@ -5616,19 +5616,31 @@ app.get('/api/regatta-stats', async (req, res) => {
     `);
 
         const datesExpr = eventDatesSqlExpr();
+        const nextDateSql = `(SELECT MIN(d) FROM unnest(${datesExpr}) AS d WHERE d >= CURRENT_DATE)`;
         const upcomingResult = await pool.query(`
-      SELECT COUNT(*) as count
+      SELECT
+        COUNT(*)::int AS count,
+        COUNT(*) FILTER (WHERE ${nextDateSql} <= CURRENT_DATE + 6)::int AS this_week,
+        MIN(${nextDateSql})::text AS next_date
       FROM regattas
-      WHERE EXISTS (
-        SELECT 1 FROM unnest(${datesExpr}) AS d
-        WHERE d >= CURRENT_DATE
-      )
+      WHERE ${nextDateSql} IS NOT NULL
+    `);
+
+        const upcomingSourceResult = await pool.query(`
+      SELECT source, COUNT(*)::int AS count
+      FROM regattas
+      WHERE ${nextDateSql} IS NOT NULL
+      GROUP BY source
+      ORDER BY count DESC
     `);
 
         res.json({
             success: true,
             totalRegattas: total,
-            upcomingRegattas: parseInt(upcomingResult.rows[0].count),
+            upcomingRegattas: parseInt(upcomingResult.rows[0].count, 10) || 0,
+            thisWeekRegattas: parseInt(upcomingResult.rows[0].this_week, 10) || 0,
+            nextRegattaDate: upcomingResult.rows[0].next_date || null,
+            upcomingBySource: upcomingSourceResult.rows,
             bySource: sourceResult.rows,
             lastScrapes: lastScrapeResult.rows
         });
@@ -5668,9 +5680,9 @@ app.delete('/api/clear-all-regattas', async (req, res) => {
 app.get('/api/all-regattas', async (req, res) => {
     try {
         const {
-            limit = 1000,
+            limit = 20,
             offset = 0,
-            orderBy = 'regatta_date',
+            orderBy = 'next_date',
             order = 'ASC',
             dateFilter = '',
             nameFilter = '',
@@ -5678,34 +5690,35 @@ app.get('/api/all-regattas', async (req, res) => {
             sourceFilter = ''
         } = req.query;
 
-        const validOrderBy = ['regatta_date', 'regatta_name', 'location', 'source'];
+        const datesExpr = eventDatesSqlExpr();
+        const nextDateSql = `(SELECT MIN(d) FROM unnest(${datesExpr}) AS d WHERE d >= CURRENT_DATE)`;
+        const validOrderBy = ['regatta_date', 'next_date', 'regatta_name', 'location', 'source'];
         const validOrder = ['ASC', 'DESC'];
-        const orderByColumn = validOrderBy.includes(orderBy) ? orderBy : 'regatta_date';
+        const orderByColumn = orderBy === 'regatta_date' || orderBy === 'next_date' || !validOrderBy.includes(orderBy)
+            ? 'next_date'
+            : orderBy;
         const orderDirection = validOrder.includes(order.toUpperCase()) ? order.toUpperCase() : 'ASC';
+        const limitNum = Math.min(20, Math.max(1, parseInt(limit, 10) || 20));
+        const offsetNum = Math.max(0, parseInt(offset, 10) || 0);
 
         // Build WHERE clause for filters
         let whereClause = 'WHERE 1=1';
         const params = [];
         let paramCount = 0;
 
-        if (dateFilter) {
+        const dateFilterYmd = /^\d{4}-\d{2}-\d{2}$/.test(String(dateFilter).slice(0, 10))
+            ? String(dateFilter).slice(0, 10)
+            : '';
+
+        if (dateFilterYmd) {
             paramCount++;
-            whereClause += ` AND (
-                regatta_date::text ILIKE $${paramCount}
-                OR EXISTS (
-                    SELECT 1 FROM unnest(${eventDatesSqlExpr()}) AS d
-                    WHERE d::text ILIKE $${paramCount}
-                )
+            whereClause += ` AND EXISTS (
+                SELECT 1 FROM unnest(${datesExpr}) AS d
+                WHERE d = $${paramCount}::date
             )`;
-            params.push(`%${dateFilter}%`);
+            params.push(dateFilterYmd);
         } else {
-            whereClause += ` AND (
-                regatta_date::date >= CURRENT_DATE
-                OR EXISTS (
-                    SELECT 1 FROM unnest(${eventDatesSqlExpr()}) AS d
-                    WHERE d >= CURRENT_DATE
-                )
-            )`;
+            whereClause += ` AND ${nextDateSql} IS NOT NULL`;
         }
 
         if (nameFilter) {
@@ -5728,15 +5741,16 @@ app.get('/api/all-regattas', async (req, res) => {
 
         // Add limit and offset
         paramCount++;
-        params.push(parseInt(limit));
+        params.push(limitNum);
         paramCount++;
-        params.push(parseInt(offset));
+        params.push(offsetNum);
 
         const result = await pool.query(`
-      SELECT regatta_date, event_dates, boat_types, regatta_name, location, event_website_url, registrants_url, registrant_count, source
+      SELECT regatta_date, event_dates, boat_types, regatta_name, location, event_website_url, registrants_url, registrant_count, source,
+             ${nextDateSql} AS next_date
       FROM regattas
       ${whereClause}
-      ORDER BY ${orderByColumn} ${orderDirection}
+      ORDER BY ${orderByColumn} ${orderDirection} NULLS LAST, regatta_name ASC
       LIMIT $${paramCount - 1} OFFSET $${paramCount}
     `, params);
 

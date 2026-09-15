@@ -429,6 +429,30 @@
             color: #0088ff;
         }
 
+        .photo-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px;
+            height: 22px;
+            margin-left: 6px;
+            vertical-align: middle;
+            color: #0d3b8e;
+            border-radius: 6px;
+            text-decoration: none;
+            flex-shrink: 0;
+        }
+
+        .photo-link:hover {
+            background: #e8f0ff;
+            color: #0066cc;
+        }
+
+        .photo-link svg {
+            width: 16px;
+            height: 16px;
+        }
+
         .results-card .sailor-title {
             margin: 0 0 14px;
             color: #0066cc;
@@ -507,6 +531,10 @@
         .event-modal-card h3 {
             margin: 0 0 6px;
             color: #0066cc;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
         }
 
         .event-modal-meta {
@@ -640,13 +668,6 @@
 
         .status.err { color: #c0392b; }
 
-        .sources {
-            margin: 0 0 12px;
-            text-align: center;
-            font-size: 0.72rem;
-            color: #9aa6b5;
-        }
-
         .markdown {
             white-space: pre-wrap;
         }
@@ -729,7 +750,6 @@
                 </button>
             </div>
             <div class="status" id="status"></div>
-            <p class="sources">ClubSpot · Regatta Network</p>
         </section>
     </main>
 
@@ -744,7 +764,6 @@
                 'Hi! What would you like to explore?' +
                 '<div class="chips">' +
                 '<button type="button" class="chip" data-prompt="show sailor results">Sailor results</button>' +
-                '<a class="chip" href="Find-regatta.html">Find a regatta</a>' +
                 '</div></div>';
         }
 
@@ -789,6 +808,20 @@
             return s
                 .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
                 .replace(/\n/g, '<br>');
+        }
+
+        function photoSearchHref(name) {
+            if (!name) return '';
+            return 'PhotoSearch.html?' + new URLSearchParams({ regatta_name: name }).toString();
+        }
+
+        function photoLinkHtml(name) {
+            const href = photoSearchHref(name);
+            if (!href) return '';
+            return '<a class="photo-link" href="' + href + '" target="_blank" rel="noopener" title="Photos from this regatta" aria-label="Photos from ' +
+                escapeHtml(name) + '">' +
+                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">' +
+                '<path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg></a>';
         }
 
         function displayLoc(value) {
@@ -931,7 +964,8 @@
                 html += '<div class="sailor-preview-best"><div class="label">Best result</div>';
                 html += '<button type="button" class="name-link" data-regatta-name="' + escapeHtml(best.regatta_name || '') +
                     '" data-regatta-date="' + escapeHtml(best.regatta_date_raw || '') + '">' +
-                    escapeHtml(best.regatta_name || '') + '</button>';
+                    escapeHtml(best.regatta_name || '') + '</button>' +
+                    photoLinkHtml(best.regatta_name, best.regatta_date_raw);
                 html += '<div class="meta">' + escapeHtml(best.regatta_date || '') +
                     (best.category ? ' · ' + escapeHtml(best.category) : '') + '</div></div>';
             }
@@ -957,7 +991,8 @@
                         '" data-sortclass="' + escapeHtml((r.category || '').toLowerCase()) +
                         '" data-sortloc="' + escapeHtml(loc.toLowerCase()) + '">' +
                         '<td><button type="button" class="pos-link" data-detail="' + escapeHtml(r.detailId) + '">' + escapeHtml(pos) + '</button></td>' +
-                        '<td><button type="button" class="name-link" data-regatta-name="' + escapeHtml(r.regatta_name || '') + '" data-regatta-date="' + escapeHtml(r.regatta_date_raw || '') + '">' + escapeHtml(r.regatta_name || '') + '</button></td>' +
+                        '<td><button type="button" class="name-link" data-regatta-name="' + escapeHtml(r.regatta_name || '') + '" data-regatta-date="' + escapeHtml(r.regatta_date_raw || '') + '">' + escapeHtml(r.regatta_name || '') + '</button>' +
+                        photoLinkHtml(r.regatta_name, r.regatta_date_raw) + '</td>' +
                         '<td>' + escapeHtml(r.regatta_date || '') + '</td>' +
                         '<td>' + escapeHtml(r.category || '') + '</td>' +
                         '<td>' + escapeHtml(loc) + '</td></tr>' +
@@ -974,7 +1009,7 @@
                     html += '<tr>' +
                         '<td><button type="button" class="pos-link" data-detail="' + escapeHtml(r.detailId) + '">' + escapeHtml(String(r.racePlace)) + '</button></td>' +
                         '<td>' + escapeHtml(String(r.raceIndex)) + (r.throwout ? ' (TO)' : '') + '</td>' +
-                        '<td>' + escapeHtml(r.regatta_name || '') + '</td>' +
+                        '<td>' + escapeHtml(r.regatta_name || '') + photoLinkHtml(r.regatta_name, r.regatta_date_raw) + '</td>' +
                         '<td>' + escapeHtml(r.regatta_date || '') + '</td></tr>' +
                         '<tr class="detail-row"><td colspan="4"><div class="detail-panel" data-detail-panel="' + escapeHtml(r.detailId) + '"></div></td></tr>';
                 });
@@ -1070,7 +1105,7 @@
             const loc = displayLoc(payload && payload.location);
             const classes = uniqueEventOptions(rows, 'category');
             const clubs = uniqueEventOptions(rows, 'yacht_club');
-            let html = '<h3>' + escapeHtml(title) + '</h3><p class="event-modal-meta">' +
+            let html = '<h3>' + escapeHtml(title) + photoLinkHtml(title, payload && payload.regattaDate) + '</h3><p class="event-modal-meta">' +
                 escapeHtml(date) + ' · ' + escapeHtml(loc) +
                 ' · <span class="js-event-count">' + rows.length +
                 ' result' + (rows.length === 1 ? '' : 's') + '</span></p>';
@@ -1142,7 +1177,7 @@
             if (!name) return;
             const modal = ensureEventModal();
             const body = modal.querySelector('.js-event-body');
-            body.innerHTML = '<h3>' + escapeHtml(name) + '</h3><p class="event-modal-meta">Loading event results…</p>';
+            body.innerHTML = '<h3>' + escapeHtml(name) + photoLinkHtml(name, date) + '</h3><p class="event-modal-meta">Loading event results…</p>';
             modal.classList.add('open');
             try {
                 const params = new URLSearchParams({ name });
@@ -1154,7 +1189,7 @@
                 body.innerHTML = renderEventResultsHtml(payload);
                 wireEventResultsView(body, payload);
             } catch (err) {
-                body.innerHTML = '<h3>' + escapeHtml(name) + '</h3><p class="event-modal-meta">' +
+                body.innerHTML = '<h3>' + escapeHtml(name) + photoLinkHtml(name, date) + '</h3><p class="event-modal-meta">' +
                     escapeHtml(err.message || 'Could not load event results.') + '</p>';
             }
         }
@@ -1192,7 +1227,10 @@
                     '<tr><td>Regattas</td><td>' + escapeHtml(String(data.regattas ?? data.total_regattas ?? '—')) + '</td></tr>' +
                     '</table></div>';
             } else if (rt === 'regatta_summary' && (data.dates || data.sailorCount != null)) {
-                html += '<div class="section basic-info"><h3>Summary</h3><table><tr><td>Dates</td><td>' + escapeHtml((data.dates || []).join(', ') || '—') + '</td></tr><tr><td>Sailors</td><td>' + escapeHtml(String(data.sailorCount ?? '—')) + '</td></tr></table></div>';
+                const summaryName = data.regattaName || data.regatta_name || '';
+                html += '<div class="section basic-info"><h3>' + escapeHtml(summaryName || 'Summary') +
+                    photoLinkHtml(summaryName, (data.dates || [])[0]) +
+                    '</h3><table><tr><td>Dates</td><td>' + escapeHtml((data.dates || []).join(', ') || '—') + '</td></tr><tr><td>Sailors</td><td>' + escapeHtml(String(data.sailorCount ?? '—')) + '</td></tr></table></div>';
                 (data.byClass || []).forEach(function (bc) {
                     html += '<div class="section"><h3>Class: ' + escapeHtml(bc.class || '—') + '</h3><table class="data"><thead><tr><th>Position</th><th>Sailor</th><th>Club</th></tr></thead><tbody>';
                     (bc.topSailors || []).forEach(function (s) {
