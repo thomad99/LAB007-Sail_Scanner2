@@ -1204,7 +1204,13 @@
             div.className = 'msg ' + (isUser ? 'user' : 'bot');
             div.textContent = content;
             chatPane.appendChild(div);
-            chatPane.scrollTop = chatPane.scrollHeight;
+        }
+
+        function scrollChatToMessageTop(el) {
+            if (!el) return;
+            const paneTop = chatPane.getBoundingClientRect().top;
+            const elTop = el.getBoundingClientRect().top;
+            chatPane.scrollTop += elTop - paneTop;
         }
 
         function simpleMarkdown(s) {
@@ -1422,7 +1428,7 @@
             const podiums = summary.podiums || {};
             const best = bestRegattaRow(data);
             const regattaRows = data.regattaAchievements || [];
-            const shown = 6;
+            const shown = 5;
             const total = regattaRows.length;
             const totalRegattas = Number(summary.totalRegattas ?? total);
             const races = summary.races || {};
@@ -1497,7 +1503,7 @@
             html += '</div>';
             html += '<div class="sailor-results-foot"><span>Showing ' + Math.min(shown, total) + ' of ' + total + ' regattas</span>';
             if (total > shown) {
-                html += '<button type="button" class="js-show-more">Show more</button>';
+                html += '<button type="button" class="js-show-more">More</button>';
             } else {
                 html += '<button type="button" class="js-download-results">Download</button>';
             }
@@ -1545,10 +1551,10 @@
             if (moreBtn && list) {
                 moreBtn.addEventListener('click', () => {
                     const open = list.classList.toggle('expanded');
-                    moreBtn.textContent = open ? 'Show less' : 'Show more';
+                    moreBtn.textContent = open ? 'Less' : 'More';
                     if (foot) foot.textContent = open
                         ? ('Showing ' + total + ' of ' + total + ' regattas')
-                        : ('Showing ' + Math.min(6, total) + ' of ' + total + ' regattas');
+                        : ('Showing ' + Math.min(5, total) + ' of ' + total + ' regattas');
                 });
             }
         }
@@ -1902,7 +1908,7 @@
                 div.textContent = reply || "I didn't find anything.";
             }
             chatPane.appendChild(div);
-            chatPane.scrollTop = chatPane.scrollHeight;
+            scrollChatToMessageTop(div);
         }
 
         async function send() {
