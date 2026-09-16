@@ -1,4 +1,6 @@
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
     const WATCH_POLL_CRON = '*/15 * * * *';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -122,8 +124,46 @@ function escapeHtml(value) {
         .replace(/"/g, '&quot;');
 }
 
+const LOGO_FILE = path.join(__dirname, 'public', 'Images', 'Sail_Logo_Trans.PNG');
+
 function watchLogoUrl() {
-    return `${publicBaseUrl()}/Images/LoveSailing-Left.jpg`;
+    return `${publicBaseUrl()}/Images/Sail_Logo_Trans.PNG`;
+}
+
+function watchLogoAttachment() {
+    try {
+        if (fs.existsSync(LOGO_FILE)) {
+            return {
+                filename: 'Sail_Logo_Trans.PNG',
+                path: LOGO_FILE,
+                cid: 'lovesailing-logo',
+                contentType: 'image/png'
+            };
+        }
+    } catch (_err) {}
+    return null;
+}
+
+function emailCopy(kind) {
+    if (kind === 'updated') {
+        return {
+            badge: 'RESULTS UPDATED',
+            heading: 'New results are in.',
+            extraTitle: 'Still watching'
+        };
+    }
+    if (kind === 'email') {
+        return {
+            badge: 'ALERT EMAIL UPDATED',
+            heading: "We'll use this inbox.",
+            extraTitle: 'Your alerts'
+        };
+    }
+    return {
+        badge: 'RESULTS ALERTS \u2022 ON',
+        heading: "You're on the list.",
+        extraTitle: 'Following for 48 hours'
+    };
 }
 
 function formatAlertTime(value) {
@@ -141,11 +181,15 @@ function formatAlertTime(value) {
     });
 }
 
-function watchEmailBodies({ title, intro, resultsUrl, stopUrl, extra, changedAt }) {
+function watchEmailBodies({ title, intro, resultsUrl, stopUrl, extra, changedAt, kind, logoSrc }) {
     const name = title || 'regatta results';
+    const copy = emailCopy(kind);
     const extraText = extra ? `\n${extra}\n` : '';
     const changedLine = changedAt ? `Updated: ${formatAlertTime(changedAt)}` : '';
+    const logo = escapeHtml(logoSrc || watchLogoUrl());
+    const extraTitle = extra ? (copy.extraTitle || 'Note') : '';
     const text = [
+        copy.heading,
         intro,
         '',
         `Regatta: ${name}`,
@@ -157,35 +201,100 @@ function watchEmailBodies({ title, intro, resultsUrl, stopUrl, extra, changedAt 
         'Love Sailing'
     ].filter(Boolean).join('\n');
 
+    const extraBlock = extra ? `
+        <tr>
+            <td style="padding:0 32px 28px;font-family:Arial,Helvetica,sans-serif;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                        <td width="4" bgcolor="#148c8c" style="width:4px;background:#148c8c;font-size:0;line-height:0;">&nbsp;</td>
+                        <td bgcolor="#eef6f5" style="padding:16px 18px;background:#eef6f5;">
+                            <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#0b2e3f;">${escapeHtml(extraTitle)}</p>
+                            <p style="margin:0;font-size:14px;line-height:1.5;color:#5b7380;">${escapeHtml(extra)}</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>` : '';
+
     const html = `
-        <div style="font-family:Arial,sans-serif;color:#111;line-height:1.5;max-width:560px">
-            <p style="margin:0 0 18px">
-                <img src="${escapeHtml(watchLogoUrl())}" alt="Love Sailing" width="180" style="display:block;width:180px;max-width:100%;height:auto;border:0">
-            </p>
-            <p>${escapeHtml(intro)}</p>
-            <p><strong>${escapeHtml(name)}</strong></p>
-            ${changedAt ? `<p>Updated: <strong>${escapeHtml(formatAlertTime(changedAt))}</strong></p>` : ''}
-            <p style="margin:18px 0 10px">
-                <a href="${escapeHtml(resultsUrl)}" style="background:#1d4ed8;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:700">View results</a>
-            </p>
-            ${extra ? `<p>${escapeHtml(extra)}</p>` : ''}
-            <p style="margin:22px 0 0">
-                <a href="${escapeHtml(stopUrl)}" style="background:#b91c1c;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:700;letter-spacing:0.04em">STOP ALERTS</a>
-            </p>
-        </div>
-    `;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Love Sailing</title>
+</head>
+<body style="margin:0;padding:0;background:#f3f5f6;">
+    <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${escapeHtml(intro)}</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f5f6;">
+        <tr>
+            <td align="center" style="padding:16px 12px;">
+                <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border:1px solid #e4ecee;">
+                    <tr>
+                        <td style="height:6px;background:#148c8c;font-size:0;line-height:0;">&nbsp;</td>
+                    </tr>
+                    <tr>
+                        <td style="background:#0b2e3f;padding:28px 32px 36px;font-family:Arial,Helvetica,sans-serif;">
+                            <table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:22px;">
+                                <tr>
+                                    <td style="vertical-align:middle;padding:0;">
+                                        <img src="${logo}" alt="Love Sailing" width="48" height="52" style="display:block;border:0;width:48px;height:52px;">
+                                    </td>
+                                    <td style="padding-left:12px;vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:700;color:#ffffff;letter-spacing:0.04em;">Love Sailing</td>
+                                </tr>
+                            </table>
+                            <table role="presentation" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="background:#1e4a56;color:#b7d9d6;font-size:11px;font-weight:700;letter-spacing:0.08em;padding:6px 10px;font-family:Arial,Helvetica,sans-serif;">${escapeHtml(copy.badge)}</td>
+                                </tr>
+                            </table>
+                            <h1 style="margin:18px 0 10px;color:#ffffff;font-size:30px;line-height:1.15;font-weight:700;letter-spacing:-0.02em;">${escapeHtml(copy.heading)}</h1>
+                            <p style="margin:0;color:#c5d4dc;font-size:16px;line-height:1.5;">${escapeHtml(intro)}</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:28px 32px 22px;font-family:Arial,Helvetica,sans-serif;">
+                            <p style="margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:0.12em;color:#8a9aa3;">YOUR REGATTA</p>
+                            <h2 style="margin:0 0 18px;font-size:26px;line-height:1.2;font-weight:700;color:#0b2e3f;">${escapeHtml(name)}</h2>
+                            ${changedAt ? `<p style="margin:0 0 16px;font-size:14px;color:#5b7380;">Updated: <strong style="color:#0b2e3f;">${escapeHtml(formatAlertTime(changedAt))}</strong></p>` : ''}
+                            <a href="${escapeHtml(resultsUrl)}" style="background:#148c8c;color:#ffffff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:700;font-size:15px;font-family:Arial,Helvetica,sans-serif;">View results &rarr;</a>
+                        </td>
+                    </tr>
+                    ${extraBlock}
+                    <tr>
+                        <td style="padding:22px 32px 28px;border-top:1px solid #e8eef0;font-family:Arial,Helvetica,sans-serif;">
+                            <a href="${escapeHtml(stopUrl)}" style="color:#5b6b75;padding:10px 18px;border:1px solid #c9d3d8;border-radius:8px;text-decoration:none;display:inline-block;font-weight:700;font-size:13px;letter-spacing:0.06em;font-family:Arial,Helvetica,sans-serif;">STOP ALERTS</a>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>`;
     return { text, html };
 }
 
-async function sendWatchEmail(emailTransporter, { to, title, intro, resultsUrl, stopUrl, extra, subject, changedAt }) {
+async function sendWatchEmail(emailTransporter, { to, title, intro, resultsUrl, stopUrl, extra, subject, changedAt, kind }) {
     if (!emailTransporter) throw new Error('Email is not configured');
-    const bodies = watchEmailBodies({ title, intro, resultsUrl, stopUrl, extra, changedAt });
+    const attachment = watchLogoAttachment();
+    const bodies = watchEmailBodies({
+        title,
+        intro,
+        resultsUrl,
+        stopUrl,
+        extra,
+        changedAt,
+        kind,
+        logoSrc: attachment ? 'cid:lovesailing-logo' : watchLogoUrl()
+    });
     await emailTransporter.sendMail({
         from: mailFrom(),
         to,
         subject: subject || 'Love Sailing - Alerts',
         text: bodies.text,
-        html: bodies.html
+        html: bodies.html,
+        attachments: attachment ? [attachment] : []
     });
 }
 
@@ -337,7 +446,9 @@ async function pollActiveWatchers({ pool, axios, cheerio, emailTransporter }) {
                         resultsUrl: watch.results_url,
                         stopUrl: stopUrlForToken(watch.token),
                         subject: 'LOVE SAILING - Results updated',
-                        changedAt
+                        changedAt,
+                        kind: 'updated',
+                        extra: 'Alerts stop automatically after 48 hours. You can also stop them anytime below.'
                     });
                     await logWatchEvent(pool, watch.id, 'notified', watch.regatta_name);
                 }
@@ -434,12 +545,13 @@ function attachResultsWatcher(app, { pool, axios, cheerio, emailTransporter, cro
                     to: email,
                     title: regattaName || 'Regatta results',
                     intro: created
-                        ? 'We will email you when results are posted or scores change for this regatta.'
-                        : 'Your results alerts are active again.',
+                        ? "We'll email you when results are posted or scores change for this regatta."
+                        : 'Your results alerts are active again for this regatta.',
                     resultsUrl,
                     stopUrl,
                     subject: created ? 'LOVE SAILING - Alerts started' : 'LOVE SAILING - Alerts active',
-                    extra: 'These alerts automatically stop after 48 hours. You can also stop them anytime with the STOP ALERTS button.'
+                    extra: 'Alerts stop automatically after 48 hours. You can also stop them anytime below.',
+                    kind: created ? 'started' : 'active'
                 });
             } catch (mailErr) {
                 console.error('[Results Watcher] Confirmation email failed:', mailErr.message);
@@ -629,7 +741,8 @@ function attachResultsWatcher(app, { pool, axios, cheerio, emailTransporter, cro
                     intro: `Future results alerts will be sent to ${email}.`,
                     resultsUrl: (sample && sample.results_url) || publicBaseUrl() + '/Find-regatta.html#alerts',
                     stopUrl: sample ? stopUrlForToken(sample.token) : publicBaseUrl() + '/Find-regatta.html#alerts',
-                    extra: updated > 1 ? `${updated} alerts on this device now use this email.` : 'This alert on this device now uses this email.'
+                    extra: updated > 1 ? `${updated} alerts on this device now use this email.` : 'This alert on this device now uses this email.',
+                    kind: 'email'
                 });
             } catch (mailErr) {
                 console.error('[Results Watcher] Email update notice failed:', mailErr.message);
