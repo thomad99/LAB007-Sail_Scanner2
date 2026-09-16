@@ -1601,7 +1601,7 @@
 
             <section class="admin-tile" id="resultsYearDashTile">
                 <h2>By year</h2>
-                <p class="tile-sub">Unique skippers and regatta names for this year and the previous five.</p>
+                <p class="tile-sub">Unique skippers and regatta names from 2015 through this year.</p>
                 <div id="raceResultsYearStats" class="stats-container year-stats"><div class="loading">Loading year totals…</div></div>
             </section>
 
@@ -1816,10 +1816,12 @@
             refreshYearChipSelection();
         }
 
+        const RESULTS_YEAR_MIN = 2015;
+
         function resultsYearRange() {
             const current = new Date().getFullYear();
             const years = [];
-            for (let y = current; y >= 2020; y--) years.push(y);
+            for (let y = current; y >= RESULTS_YEAR_MIN; y--) years.push(y);
             return years;
         }
 
@@ -1871,7 +1873,7 @@
                 .map(y => parseInt(y, 10))
                 .filter(y => Number.isFinite(y) && allowed.has(String(y)));
             const unique = [...new Set(opts.length ? opts : resultsYearRange())].sort((a, b) => b - a);
-            // Always include the full 2020–now range even if the snapshot omitted years.
+            // Always include the full 2015–now range even if the snapshot omitted years.
             resultsYearRange().forEach(y => {
                 if (!unique.includes(y)) unique.push(y);
             });
@@ -1958,7 +1960,7 @@
                     (info.dataYears || []).forEach(y => yearSet.add(y.year));
                     const years = Array.from(yearSet)
                         .map(y => parseInt(y, 10))
-                        .filter(y => Number.isFinite(y) && y >= 2020)
+                        .filter(y => Number.isFinite(y) && y >= RESULTS_YEAR_MIN)
                         .sort((a, b) => b - a);
 
                     html += `<div class="scrape-history-source"><h4>${src.label}</h4>`;
@@ -3216,7 +3218,7 @@
         function resultsYearWindow(now = new Date()) {
             const current = now.getFullYear();
             const years = [];
-            for (let y = current; y >= current - 5; y--) years.push(y);
+            for (let y = current; y >= RESULTS_YEAR_MIN; y--) years.push(y);
             return years;
         }
 

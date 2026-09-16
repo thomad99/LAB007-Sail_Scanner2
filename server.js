@@ -37,6 +37,7 @@ const {
     refreshRaceResultsStatsSnapshot,
     refreshRaceResultsStatsIfStale
 } = require('./race-results-scraper');
+const { canonicalClubSql, yachtClubMatchSql } = require('./yacht-club-aliases');
 const { attachRaceResultsScheduler } = require('./race-results-scheduler');
 const { attachRegattaDatesScheduler, getDatesScheduleStatus } = require('./regatta-dates-scheduler');
 const { PARSE_APP_ID, clubspotGet, clubspotConfigSummary } = require('./clubspot-http');
@@ -2211,6 +2212,7 @@ app.get('/api/search-photos', async (req, res) => {
             regatta_name,
             photographer_name,
             location,
+            yacht_club,
             photo_timestamp_start,
             photo_timestamp_end,
             gps_latitude,
@@ -2257,6 +2259,13 @@ app.get('/api/search-photos', async (req, res) => {
             query += ` AND location ILIKE $${paramCount}`;
             params.push(`%${location}%`);
             paramCount++;
+        }
+        if (yacht_club && String(yacht_club).trim()) {
+            const clubClause = yachtClubMatchSql('yacht_club', yacht_club, params);
+            if (clubClause) {
+                query += ` AND ${clubClause}`;
+                paramCount = params.length + 1;
+            }
         }
         if (photo_timestamp_start) {
             query += ` AND photo_timestamp >= $${paramCount}`;
@@ -4004,7 +4013,13 @@ app.post('/api/sailbot/search', async (req, res) => {
         };
         add('skipper', skipper);
         add('boat_name', boat_name);
-        add('yacht_club', yacht_club);
+        if (yacht_club && String(yacht_club).trim()) {
+            const clubClause = yachtClubMatchSql('yacht_club', yacht_club, params);
+            if (clubClause) {
+                where += ` AND ${clubClause}`;
+                n = params.length;
+            }
+        }
         add('regatta_name', regatta_name);
         if (year != null && year !== '') {
             n++;
@@ -4041,7 +4056,13 @@ app.get('/api/sailbot/export', async (req, res) => {
         };
         add('skipper', skipper);
         add('boat_name', boat_name);
-        add('yacht_club', yacht_club);
+        if (yacht_club && String(yacht_club).trim()) {
+            const clubClause = yachtClubMatchSql('yacht_club', yacht_club, params);
+            if (clubClause) {
+                where += ` AND ${clubClause}`;
+                n = params.length;
+            }
+        }
         add('regatta_name', regatta_name);
         if (year != null && year !== '') {
             n++;
@@ -4212,7 +4233,13 @@ async function runSailbotSearch(criteria) {
     };
     add('skipper', skipper);
     add('boat_name', boat_name);
-    add('yacht_club', yacht_club);
+    if (yacht_club && String(yacht_club).trim()) {
+        const clubClause = yachtClubMatchSql('yacht_club', yacht_club, params);
+        if (clubClause) {
+            where += ` AND ${clubClause}`;
+            n = params.length;
+        }
+    }
     add('regatta_name', regatta_name);
     if (sail_number) {
         n++;
@@ -4240,13 +4267,15 @@ async function runSailbotSearch(criteria) {
 
 async function runClubSailors(yachtClub) {
     if (!yachtClub || !String(yachtClub).trim()) return [];
+    const params = [];
+    const clubClause = yachtClubMatchSql('yacht_club', yachtClub, params);
     const q = `SELECT skipper, COUNT(*)::int AS regattas
         FROM ${RND}
-        WHERE yacht_club ILIKE $1 AND skipper IS NOT NULL AND TRIM(skipper) <> ''${SOZNODATA_EXCLUDE}
+        WHERE ${clubClause} AND skipper IS NOT NULL AND TRIM(skipper) <> ''${SOZNODATA_EXCLUDE}
         GROUP BY skipper
         ORDER BY regattas DESC, skipper ASC
         LIMIT 200`;
-    const r = await pool.query(q, ['%' + String(yachtClub).trim() + '%']);
+    const r = await pool.query(q, params);
     return r.rows;
 }
 
@@ -4276,11 +4305,11 @@ async function runTopClubs(limit = 10, category = null) {
         where += ` AND category ILIKE $${params.length}`;
     }
     params.push(Math.min(50, Math.max(1, parseInt(String(limit), 10) || 10)));
-    const q = `SELECT yacht_club AS club, COUNT(*)::int AS count
+    const q = `SELECT ${canonicalClubSql('yacht_club')} AS club, COUNT(*)::int AS count
         FROM ${RND}
         WHERE ${where}
-        GROUP BY yacht_club
-        ORDER BY count DESC, yacht_club ASC
+        GROUP BY 1
+        ORDER BY count DESC, club ASC
         LIMIT $${params.length}`;
     const r = await pool.query(q, params);
     return r.rows;

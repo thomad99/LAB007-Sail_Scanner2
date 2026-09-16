@@ -9,6 +9,13 @@
 const { parseChatIntent } = require('./chat-intent');
 const { PARSE_APP_ID, clubspotGet, clubspotConfigSummary } = require('./clubspot-http');
 const { parseRnListingRows, withRnShowDivisions } = require('./regatta-scrape-helpers');
+const {
+    clubKey,
+    findClubGroup,
+    canonicalClubName,
+    canonicalClubSql,
+    yachtClubMatchSql
+} = require('./yacht-club-aliases');
 
 const LOOKBACK_DAYS = 60;
 const LOOKBACK_MAX_DAYS = 365;
@@ -26,9 +33,9 @@ const STATS_SNAPSHOT_TABLE = 'race_results_stats';
 const STATS_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const STATS_REFRESH_TIMEOUT_MS = 180000;
 /** Bump when sailor/regatta count logic changes so the cached snapshot recomputes. */
-const STATS_LOGIC_VERSION = 3;
-/** Unique sailor names: case-insensitive, collapsed whitespace. */
-const UNIQUE_SKIPPER_SQL = `LOWER(REGEXP_REPLACE(TRIM(skipper), '\\s+', ' ', 'g'))`;
+const STATS_LOGIC_VERSION = 4;
+/** Unique sailor names: strip HTML tags, case-insensitive, collapsed whitespace. */
+const UNIQUE_SKIPPER_SQL = `LOWER(REGEXP_REPLACE(TRIM(REGEXP_REPLACE(COALESCE(skipper, ''), '<[^>]*>', ' ', 'gi')), '\\s+', ' ', 'g'))`;
 
 const job = {
     running: false,
@@ -83,7 +90,7 @@ function noteCollected(sourceKey, rows) {
     if (!bucket) return;
     for (const row of rows || []) {
         const regattaName = normalizeSpace(row.regatta_name);
-        const skipper = normalizeSpace(row.skipper);
+        const skipper = cleanSailorName(row.skipper);
         if (regattaName) bucket.regattas.add(regattaName.toLowerCase());
         if (skipper) bucket.sailors.add(skipper.toLowerCase());
     }
@@ -93,6 +100,42 @@ function noteCollected(sourceKey, rows) {
 
 function normalizeSpace(s) {
     return String(s == null ? '' : s).replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function decodeHtmlEntities(s) {
+    return String(s == null ? '' : s)
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#0*39;|&apos;/gi, "'")
+        .replace(/&#x0*27;/gi, "'")
+        .replace(/&#(\d+);/g, (_, n) => (Number(n) === 39 ? "'" : ' '))
+        .replace(/&#x([0-9a-f]+);/gi, (_, h) => (parseInt(h, 16) === 0x27 ? "'" : ' '));
+}
+
+/** Letters, spaces, hyphen, period, and apostrophe only — strip HTML/code like <BR>. */
+function cleanSailorName(s) {
+    let t = decodeHtmlEntities(s).replace(/\u00a0/g, ' ');
+    t = t.replace(/<[^>]*>/g, ' ');
+    t = t.replace(/\[[^\]]*\]/g, ' ');
+    t = t.replace(/[\u2018\u2019\u201B\u2032]/g, "'");
+    t = t.replace(/[^\p{L}\p{M}\s'.-]/gu, ' ');
+    t = t.replace(/\s+/g, ' ').trim();
+    t = t.replace(/^['.\-\s]+|['.\-\s]+$/g, '').replace(/\s+/g, ' ').trim();
+    return t;
+}
+
+function cleanSkipperRow(row) {
+    if (!row || typeof row !== 'object') return row;
+    const skipper = cleanSailorName(row.skipper);
+    if (skipper === (row.skipper || '')) return row;
+    return { ...row, skipper };
+}
+
+function cleanSkipperRows(rows) {
+    return (rows || []).map(cleanSkipperRow);
 }
 
 function normalizeSail(s) {
@@ -105,7 +148,7 @@ function resultDedupeKey(row) {
         normalizeSpace(row.source_event_id).toLowerCase(),
         normalizeSpace(row.category).toLowerCase(),
         normalizeSail(row.sail_number),
-        normalizeSpace(row.skipper).toLowerCase()
+        cleanSailorName(row.skipper).toLowerCase()
     ].join('|');
 }
 
@@ -114,7 +157,7 @@ function normalizeResultRow(row) {
         ...row,
         category: normalizeSpace(row.category),
         sail_number: normalizeSpace(row.sail_number),
-        skipper: normalizeSpace(row.skipper),
+        skipper: cleanSailorName(row.skipper),
         boat_name: normalizeSpace(row.boat_name) || null,
         yacht_club: normalizeSpace(row.yacht_club) || null,
         position: normalizeSpace(row.position) || null,
@@ -154,9 +197,9 @@ function snapshotJob() {
     };
 }
 
-const RESULTS_YEAR_MIN = 2020;
+const RESULTS_YEAR_MIN = 2015;
 
-/** Calendar years shown in the admin filter: 2020 through the current year. */
+/** Calendar years shown in the admin filter: 2015 through the current year. */
 function resultsYearOptions(now) {
     const currentYear = (now || new Date()).getUTCFullYear();
     const years = [];
@@ -704,8 +747,60 @@ function kickStaleStatsRefresh(pool, snapshot) {
 }
 
 /** Optional heavy cleanup — only after scrapes, never on dashboard reads. */
+async function sanitizeSkipperNames(pool) {
+    const result = await pool.query(`
+        UPDATE ${TABLE} AS t
+        SET skipper = s.cleaned
+        FROM (
+            SELECT id,
+                TRIM(BOTH FROM REGEXP_REPLACE(
+                    REGEXP_REPLACE(
+                        REGEXP_REPLACE(
+                            REGEXP_REPLACE(
+                                REGEXP_REPLACE(COALESCE(skipper, ''), '&[a-zA-Z]+;|&#[0-9]+;|&#x[0-9A-Fa-f]+;', ' ', 'g'),
+                                '<[^>]*>', ' ', 'gi'
+                            ),
+                            '\\[[^\\]]*\\]', ' ', 'g'
+                        ),
+                        E'[^[:alpha:][:space:]''’.-]', ' ', 'g'
+                    ),
+                    '\\s+', ' ', 'g'
+                )) AS cleaned
+            FROM ${TABLE}
+            WHERE skipper IS NOT NULL AND TRIM(skipper) <> ''
+        ) AS s
+        WHERE t.id = s.id
+          AND s.cleaned <> ''
+          AND t.skipper IS DISTINCT FROM s.cleaned
+    `);
+    const n = result.rowCount || 0;
+    if (n) {
+        await pool.query(`
+            UPDATE ${TABLE} SET dedupe_key =
+                LOWER(TRIM(source)) || '|' ||
+                LOWER(TRIM(source_event_id)) || '|' ||
+                LOWER(TRIM(COALESCE(category, ''))) || '|' ||
+                UPPER(REGEXP_REPLACE(TRIM(COALESCE(sail_number, '')), '[\\s-]+', '', 'g')) || '|' ||
+                LOWER(TRIM(COALESCE(skipper, '')))
+        `);
+        const cleaned = await pool.query(`
+            DELETE FROM ${TABLE} a
+            USING ${TABLE} b
+            WHERE a.dedupe_key = b.dedupe_key
+              AND a.dedupe_key IS NOT NULL
+              AND a.id > b.id
+        `);
+        if (cleaned.rowCount) {
+            console.log(`[race-results] Removed ${cleaned.rowCount} duplicate row(s) after skipper cleanup`);
+        }
+        console.log(`[race-results] Cleaned ${n} skipper name(s)`);
+    }
+    return n;
+}
+
 async function cleanupScrapedResultsData(pool) {
     await ensureScrapedResultsTable(pool);
+    await sanitizeSkipperNames(pool);
     await pool.query(`
         UPDATE ${TABLE} SET
             category = TRIM(REGEXP_REPLACE(COALESCE(category, ''), '\\s+', ' ', 'g')),
@@ -1093,36 +1188,78 @@ function isLikelySinglehandedClass(category) {
  * Prefer explicit separators; for doublehanded fleets, also pair "First Last First Last".
  */
 function splitSailorNames(raw, category) {
-    const text = normalizeSpace(raw);
+    const prepared = decodeHtmlEntities(raw)
+        .replace(/\u00a0/g, ' ')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<[^>]*>/g, ' ');
+    const text = normalizeSpace(prepared);
     if (!text) return [];
 
     const separated = text
         .split(/\s*(?:\/|&|\+|•|\band\b|;|\n|\r|,)\s*/i)
-        .map(normalizeSpace)
+        .map(cleanSailorName)
         .filter(Boolean);
     if (separated.length > 1) return separated;
 
-    if (isLikelySinglehandedClass(category)) return [text];
+    if (isLikelySinglehandedClass(category)) {
+        const one = cleanSailorName(text);
+        return one ? [one] : [];
+    }
 
     const words = text.split(/\s+/).filter(Boolean);
     // "Coco Claypoole Dominic Thomas" → two First+Last names
     if (words.length >= 4 && words.length % 2 === 0) {
         const names = [];
         for (let i = 0; i < words.length; i += 2) {
-            names.push(`${words[i]} ${words[i + 1]}`);
+            const name = cleanSailorName(`${words[i]} ${words[i + 1]}`);
+            if (name) names.push(name);
         }
         return names;
     }
-    return [text];
+    const one = cleanSailorName(text);
+    return one ? [one] : [];
 }
 
 function sailorNamesFromClubspotRegistration(ro, category) {
-    if (Array.isArray(ro.participantNames) && ro.participantNames.length) {
-        const named = ro.participantNames.map(normalizeSpace).filter(Boolean);
-        if (named.length) return named;
+    const collected = [];
+    const pushNames = (value) => {
+        if (!value) return;
+        if (Array.isArray(value)) {
+            value.forEach(pushNames);
+            return;
+        }
+        if (typeof value === 'object') {
+            const combo = `${value.firstName || ''} ${value.lastName || ''}`.trim()
+                || value.name || value.fullName || '';
+            if (combo) pushNames(combo);
+            if (Array.isArray(value.participantNames)) value.participantNames.forEach(pushNames);
+            return;
+        }
+        collected.push(...splitSailorNames(String(value), category));
+    };
+
+    pushNames(ro.participantNames);
+    pushNames(ro.skipper);
+    pushNames(ro.crew);
+    pushNames(ro.skipperName);
+    pushNames(ro.crewName);
+    pushNames(ro.crewNames);
+    pushNames(ro.helm);
+    pushNames(ro.additionalParticipants);
+    if (!collected.length) {
+        pushNames(`${ro.firstName || ''} ${ro.lastName || ''}`.trim());
     }
-    const combined = `${ro.firstName || ''} ${ro.lastName || ''}`.trim();
-    return splitSailorNames(combined, category);
+
+    const unique = [];
+    const seen = new Set();
+    for (const name of collected) {
+        const key = name.toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        unique.push(name);
+    }
+    return unique;
 }
 
 function rowsFromClubspotPayload(payload, event, classId) {
@@ -1491,8 +1628,9 @@ function pickBestKnownClub(rows) {
     for (const row of rows) {
         const club = normalizeSpace(row.yacht_club);
         if (!club) continue;
-        const key = club.toLowerCase();
-        const prev = counts.get(key) || { club, count: 0, latest: null };
+        const canon = canonicalClubName(club) || club;
+        const key = clubKey(canon);
+        const prev = counts.get(key) || { club: canon, count: 0, latest: null };
         prev.count += 1;
         const d = row.regatta_date || '';
         if (!prev.latest || d > prev.latest) prev.latest = d;
@@ -1509,7 +1647,7 @@ function buildSailorCard(rows, preferredName) {
     if (!rows || !rows.length) return null;
     const bySkipper = new Map();
     for (const row of rows) {
-        const name = normalizeSpace(row.skipper);
+        const name = cleanSailorName(row.skipper);
         if (!name) continue;
         const key = name.toLowerCase();
         if (!bySkipper.has(key)) bySkipper.set(key, { name, rows: [] });
@@ -1518,7 +1656,7 @@ function buildSailorCard(rows, preferredName) {
     if (!bySkipper.size) return null;
 
     let chosen = null;
-    const preferred = preferredName ? normalizeSpace(preferredName).toLowerCase() : '';
+    const preferred = preferredName ? cleanSailorName(preferredName).toLowerCase() : '';
     if (preferred && bySkipper.has(preferred)) {
         chosen = bySkipper.get(preferred);
     } else if (bySkipper.size === 1) {
@@ -1811,6 +1949,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
             tableName: TABLE,
             lookbackDaysDefault: LOOKBACK_DAYS,
             lookbackDaysMax: LOOKBACK_MAX_DAYS,
+            yearMin: RESULTS_YEAR_MIN,
             ...snapshotJob()
         });
     });
@@ -1855,7 +1994,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 ORDER BY category ASC, position ASC NULLS LAST, skipper ASC
                 LIMIT $${params.length}
             `, params);
-            const rows = result.rows || [];
+            const rows = cleanSkipperRows(result.rows || []);
             const first = rows[0] || {};
             res.json({
                 success: true,
@@ -1900,7 +2039,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                     GROUP BY TRIM(skipper)
                     ORDER BY result_rows DESC, skipper ASC
                 `, params);
-                rows = r.rows;
+                rows = r.rows.map(row => ({ ...row, skipper: cleanSailorName(row.skipper) }));
                 filename = `scraped-sailors-${Date.now()}.csv`;
             } else if (type === 'regattas') {
                 const where = [sourceClause, `regatta_name IS NOT NULL AND TRIM(regatta_name) <> ''`].filter(Boolean).join(' AND ');
@@ -1930,7 +2069,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                     ${where}
                     ORDER BY regatta_date DESC NULLS LAST, category ASC, position ASC NULLS LAST, skipper ASC
                 `, params);
-                rows = r.rows;
+                rows = cleanSkipperRows(r.rows);
                 filename = `scraped-rows-${Date.now()}.csv`;
             }
 
@@ -2020,6 +2159,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
             }
             res.json({
                 success: true,
+                yearMin: RESULTS_YEAR_MIN,
                 yearOptions: resultsYearOptions(),
                 bySource,
                 recent: recent.rows
@@ -2088,7 +2228,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
             await ensureScrapedResultsTable(pool);
 
             const parsed = await parseChatIntent(message, openai);
-            const intent = (parsed.intent || '').toLowerCase();
+            let intent = (parsed.intent || '').toLowerCase();
             const parser = parsed.parser || 'rules';
             const ok = (body) => res.json({ parser, ...body });
             const criteria = {
@@ -2103,6 +2243,14 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 year: parsed.year,
                 source: parsed.source
             };
+            const clubAliasHit = findClubGroup(String(message).trim()) || findClubGroup(criteria.yacht_club);
+            if (clubAliasHit) {
+                criteria.yacht_club = clubAliasHit.canonical;
+                if (!criteria.skipper || clubKey(criteria.skipper) === clubKey(message) || clubKey(criteria.skipper) === clubKey(clubAliasHit.canonical)) {
+                    criteria.skipper = null;
+                    if (!intent || intent === 'sailor_search') intent = 'club_sailors';
+                }
+            }
 
             if (intent === 'data_summary') {
                 const snapshot = await readRaceResultsStatsSnapshot(pool);
@@ -2137,7 +2285,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 return ok({
                     success: true,
                     reply: r.rows.length ? `Here are ${r.rows.length} recent scraped result rows.` : 'The scraped table is empty. Run a results scrape first.',
-                    data: { resultType: 'rows', rows: r.rows }
+                    data: { resultType: 'rows', rows: cleanSkipperRows(r.rows) }
                 });
             }
 
@@ -2152,7 +2300,13 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
             };
             add('skipper', criteria.skipper);
             add('boat_name', criteria.boat_name);
-            add('yacht_club', criteria.yacht_club);
+            if (criteria.yacht_club && String(criteria.yacht_club).trim()) {
+                const clubClause = yachtClubMatchSql('yacht_club', criteria.yacht_club, params);
+                if (clubClause) {
+                    where += ` AND ${clubClause}`;
+                    n = params.length;
+                }
+            }
             add('regatta_name', criteria.regatta_name);
             if (criteria.sail_number) {
                 n++;
@@ -2197,7 +2351,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                     reply: r.rows.length
                         ? `Top ${r.rows.length} sailor${r.rows.length === 1 ? '' : 's'}${scope} (by result rows):`
                         : `No sailor data yet${scope}.`,
-                    data: { resultType: 'list', rows: r.rows }
+                    data: { resultType: 'list', rows: r.rows.map(row => ({ ...row, name: cleanSailorName(row.name) })) }
                 });
             }
             if (intent === 'top_clubs') {
@@ -2214,10 +2368,10 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 }
                 paramsTop.push(limit);
                 const r = await pool.query(`
-                    SELECT yacht_club AS name, COUNT(*)::int AS count
+                    SELECT ${canonicalClubSql('yacht_club')} AS name, COUNT(*)::int AS count
                     FROM ${TABLE}
                     WHERE ${whereTop}
-                    GROUP BY yacht_club ORDER BY count DESC, yacht_club ASC
+                    GROUP BY 1 ORDER BY count DESC, name ASC
                     LIMIT $${paramsTop.length}
                 `, paramsTop);
                 const scope = criteria.category ? ` in **${criteria.category}**` : '';
@@ -2230,16 +2384,18 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 });
             }
             if (intent === 'club_sailors' && criteria.yacht_club) {
+                const clubParams = [];
+                const clubClause = yachtClubMatchSql('yacht_club', criteria.yacht_club, clubParams);
                 const r = await pool.query(`
                     SELECT skipper AS name, COUNT(*)::int AS count
                     FROM ${TABLE}
-                    WHERE yacht_club ILIKE $1 AND skipper IS NOT NULL AND TRIM(skipper) <> ''
+                    WHERE ${clubClause} AND skipper IS NOT NULL AND TRIM(skipper) <> ''
                     GROUP BY skipper ORDER BY count DESC LIMIT 40
-                `, ['%' + String(criteria.yacht_club).trim() + '%']);
+                `, clubParams);
                 return ok({
                     success: true,
                     reply: r.rows.length ? `Sailors at ${criteria.yacht_club}:` : `No sailors found for ${criteria.yacht_club}.`,
-                    data: { resultType: 'list', rows: r.rows }
+                    data: { resultType: 'list', rows: r.rows.map(row => ({ ...row, name: cleanSailorName(row.name) })) }
                 });
             }
 
@@ -2331,6 +2487,8 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 return ok({ success: true, reply, data: null });
             }
 
+            result.rows = cleanSkipperRows(result.rows);
+
             if (sailorIntent) {
                 const card = buildSailorCard(result.rows, criteria.skipper || String(message).trim());
                 if (card && card.resultType === 'sailors_list') {
@@ -2371,6 +2529,16 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
             res.status(500).json({ success: false, error: e.message });
         }
     });
+
+    ensureScrapedResultsTable(pool)
+        .then(() => sanitizeSkipperNames(pool))
+        .then((n) => {
+            if (n) return refreshRaceResultsStatsSnapshot(pool);
+            return null;
+        })
+        .catch((err) => {
+            console.error('[race-results] skipper name sanitize failed:', err.message);
+        });
 }
 
 module.exports = {

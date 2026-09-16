@@ -353,11 +353,11 @@
             text-align: center;
         }
 
-        .podium-tile .medal {
+        .podium-tile .place {
             display: block;
-            font-size: 0.62rem;
+            font-size: 0.78rem;
             font-weight: 800;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.04em;
         }
 
         .podium-tile strong {
@@ -365,13 +365,7 @@
             font-size: 1.35rem;
             font-weight: 800;
             line-height: 1.05;
-            margin: 4px 0 2px;
-        }
-
-        .podium-tile .place {
-            display: block;
-            font-size: 0.72rem;
-            font-weight: 700;
+            margin: 4px 0 0;
         }
 
         .podium-riser {
@@ -1268,6 +1262,42 @@
             return html;
         }
 
+        function clubKey(name) {
+            return String(name || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        }
+
+        function canonicalClubName(name) {
+            const key = clubKey(name);
+            if (!key) return '';
+            const aliases = {
+                sys: 'Sarasota Youth Sailing',
+                'sarasota youth sailing': 'Sarasota Youth Sailing',
+                'sarasota youth sailing (sys)': 'Sarasota Youth Sailing',
+                'sarasota youth sailing squadron': 'Sarasota Youth Sailing',
+                vyba: 'Venice Youth Boating Association',
+                'venice youth boating association': 'Venice Youth Boating Association'
+            };
+            return aliases[key] || String(name || '').replace(/\s+/g, ' ').trim();
+        }
+
+        function clubsAreSame(a, b) {
+            const left = clubKey(canonicalClubName(a));
+            const right = clubKey(canonicalClubName(b));
+            return Boolean(left && right && left === right);
+        }
+
+        function cleanSailorName(s) {
+            let t = String(s == null ? '' : s).replace(/\u00a0/g, ' ');
+            t = t.replace(/&nbsp;/gi, ' ').replace(/&#0*39;|&apos;/gi, "'");
+            t = t.replace(/<[^>]*>/g, ' ');
+            t = t.replace(/\[[^\]]*\]/g, ' ');
+            t = t.replace(/[\u2018\u2019\u201B\u2032]/g, "'");
+            t = t.replace(/[^\p{L}\p{M}\s'.-]/gu, ' ');
+            t = t.replace(/\s+/g, ' ').trim();
+            t = t.replace(/^['.\-\s]+|['.\-\s]+$/g, '').trim();
+            return t;
+        }
+
         function ordinal(n) {
             const num = parseInt(n, 10);
             if (!Number.isFinite(num)) return '—';
@@ -1314,7 +1344,7 @@
             const raceAvg = races.average != null ? races.average : null;
 
             let html = '<div class="sailor-profile">';
-            html += '<p class="sailor-profile-name">' + escapeHtml(sailor.name || 'Sailor') + '</p>';
+            html += '<p class="sailor-profile-name">' + escapeHtml(cleanSailorName(sailor.name) || 'Sailor') + '</p>';
             html += '<p class="sailor-profile-club">' + escapeHtml(sailor.club || '') + '</p>';
             html += '<div class="sailor-highlights">';
             html += '<div class="sailor-highlight"><strong>' + escapeHtml(String(totalRegattas)) + '</strong><span>Regattas</span></div>';
@@ -1325,9 +1355,9 @@
             html += '<div class="sailor-tile">';
             html += '<p class="sailor-tile-kicker">Regatta podiums</p>';
             html += '<div class="podium-stand">';
-            html += '<div class="podium-col silver"><div class="podium-tile"><span class="medal">Silver</span><strong>' + escapeHtml(String(seconds)) + '</strong><span class="place">2nd place</span></div><div class="podium-riser"></div></div>';
-            html += '<div class="podium-col gold"><div class="podium-tile"><span class="medal">Gold</span><strong>' + escapeHtml(String(firsts)) + '</strong><span class="place">1st place</span></div><div class="podium-riser"></div></div>';
-            html += '<div class="podium-col bronze"><div class="podium-tile"><span class="medal">Bronze</span><strong>' + escapeHtml(String(thirds)) + '</strong><span class="place">3rd place</span></div><div class="podium-riser"></div></div>';
+            html += '<div class="podium-col silver"><div class="podium-tile"><span class="place">2nd</span><strong>' + escapeHtml(String(seconds)) + '</strong></div><div class="podium-riser"></div></div>';
+            html += '<div class="podium-col gold"><div class="podium-tile"><span class="place">1st</span><strong>' + escapeHtml(String(firsts)) + '</strong></div><div class="podium-riser"></div></div>';
+            html += '<div class="podium-col bronze"><div class="podium-tile"><span class="place">3rd</span><strong>' + escapeHtml(String(thirds)) + '</strong></div><div class="podium-riser"></div></div>';
             html += '</div>';
             if (Number(podiums.missing || 0) > 0) {
                 html += '<p class="podium-note">Counts pending complete results</p>';
@@ -1443,8 +1473,9 @@
         function uniqueEventOptions(rows, key) {
             const map = new Map();
             (rows || []).forEach(r => {
-                const raw = String(r[key] || '').trim();
+                let raw = String(r[key] || '').trim();
                 if (!raw) return;
+                if (key === 'yacht_club') raw = canonicalClubName(raw) || raw;
                 const k = raw.toLowerCase();
                 if (!map.has(k)) map.set(k, raw);
             });
@@ -1458,7 +1489,7 @@
 
         function eventResultRowHtml(r) {
             return '<tr><td>' + escapeHtml(String(r.position ?? '—')) + '</td><td>' +
-                escapeHtml(r.skipper || '') + '</td><td>' +
+                escapeHtml(cleanSailorName(r.skipper)) + '</td><td>' +
                 escapeHtml(r.yacht_club || '') + '</td><td>' +
                 escapeHtml(r.category || '') + '</td><td>' +
                 escapeHtml(r.sail_number || '') + '</td></tr>';
@@ -1507,7 +1538,7 @@
                 const sort = (sortSel && sortSel.value) || 'position';
                 let list = rows.filter(r => {
                     if (cls && String(r.category || '').trim().toLowerCase() !== cls) return false;
-                    if (club && String(r.yacht_club || '').trim().toLowerCase() !== club) return false;
+                    if (club && !clubsAreSame(r.yacht_club, club)) return false;
                     return true;
                 });
                 list.sort((a, b) => {
@@ -1572,7 +1603,7 @@
                 html += '<div class="section"><table class="data"><thead><tr><th>Name</th>' +
                     (hasCount ? '<th>Count</th>' : '') + '</tr></thead><tbody>';
                 data.rows.forEach(r => {
-                    html += '<tr><td>' + escapeHtml(r.name || r.skipper || r.yacht_club || '') + '</td>' +
+                    html += '<tr><td>' + escapeHtml(r.skipper != null ? cleanSailorName(r.skipper) : (r.name || r.yacht_club || '')) + '</td>' +
                         (hasCount ? '<td>' + escapeHtml(String(r.count ?? '')) + '</td>' : '') + '</tr>';
                 });
                 html += '</tbody></table></div>';
@@ -1582,7 +1613,7 @@
                 html += '<div class="section"><table class="data"><thead><tr><th>Pos</th><th>Sailor</th><th>Regatta</th><th>Date</th></tr></thead><tbody>';
                 data.rows.slice(0, 20).forEach(r => {
                     html += '<tr><td>' + escapeHtml(String(r.position ?? '')) + '</td><td>' +
-                        escapeHtml(r.skipper || '') + '</td><td>' +
+                        escapeHtml(cleanSailorName(r.skipper)) + '</td><td>' +
                         escapeHtml(r.regatta_name || '') + '</td><td>' +
                         escapeHtml(r.regatta_date || '') + '</td></tr>';
                 });
@@ -1600,7 +1631,7 @@
                 (data.byClass || []).forEach(function (bc) {
                     html += '<div class="section"><h3>Class: ' + escapeHtml(bc.class || '—') + '</h3><table class="data"><thead><tr><th>Position</th><th>Sailor</th><th>Club</th></tr></thead><tbody>';
                     (bc.topSailors || []).forEach(function (s) {
-                        html += '<tr><td>' + escapeHtml(String(s.position ?? '')) + '</td><td>' + escapeHtml(s.skipper || '') + '</td><td>' + escapeHtml(s.yacht_club || '') + '</td></tr>';
+                        html += '<tr><td>' + escapeHtml(String(s.position ?? '')) + '</td><td>' + escapeHtml(cleanSailorName(s.skipper)) + '</td><td>' + escapeHtml(s.yacht_club || '') + '</td></tr>';
                     });
                     html += '</tbody></table></div>';
                 });
@@ -1608,7 +1639,7 @@
                 const sub = data.subtitle ? '<h3>' + escapeHtml(data.subtitle) + '</h3>' : '';
                 html += '<div class="section">' + sub + '<table class="data"><thead><tr><th>Name</th><th>Regattas</th></tr></thead><tbody>';
                 data.list.forEach(r => {
-                    html += '<tr><td>' + escapeHtml(r.name || '') + '</td><td>' + escapeHtml(String(r.count ?? '')) + '</td></tr>';
+                    html += '<tr><td>' + escapeHtml(cleanSailorName(r.name) || r.name || '') + '</td><td>' + escapeHtml(String(r.count ?? '')) + '</td></tr>';
                 });
                 html += '</tbody></table></div>';
             } else if (rt === 'clubs_list' && hasList) {
@@ -1622,7 +1653,7 @@
             } else if (hasRows) {
                 const { basicInfo, totalRegattas, topPosition, rows } = data;
                 if (basicInfo) {
-                    html += '<div class="section basic-info"><h3>Basic Info</h3><table><tr><td>Name</td><td>' + escapeHtml(basicInfo.name) + '</td></tr><tr><td>Club</td><td>' + escapeHtml(basicInfo.club) + '</td></tr></table></div>';
+                    html += '<div class="section basic-info"><h3>Basic Info</h3><table><tr><td>Name</td><td>' + escapeHtml(cleanSailorName(basicInfo.name) || basicInfo.name || '') + '</td></tr><tr><td>Club</td><td>' + escapeHtml(basicInfo.club) + '</td></tr></table></div>';
                 }
                 html += '<div class="section"><h3>Top Achievements</h3><table class="data"><thead><tr><th>Position</th><th>Regatta Name</th><th>Date</th></tr></thead><tbody>';
                 const topRows = (rows || []).filter(r => r.position != null && /^\d+$/.test(String(r.position).trim())).sort((a, b) => parseInt(a.position, 10) - parseInt(b.position, 10)).slice(0, 5);
@@ -1654,7 +1685,7 @@
                 rows = [];
                 (data.byClass || []).forEach(function (bc) {
                     (bc.topSailors || []).forEach(function (s) {
-                        rows.push({ class: bc.class, position: s.position, skipper: s.skipper, yacht_club: s.yacht_club || '' });
+                        rows.push({ class: bc.class, position: s.position, skipper: cleanSailorName(s.skipper), yacht_club: s.yacht_club || '' });
                     });
                 });
                 if (!rows.length && data.dates?.length) {
