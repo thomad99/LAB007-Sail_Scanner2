@@ -12,6 +12,7 @@ const { parseRnListingRows, withRnShowDivisions } = require('./regatta-scrape-he
 const {
     clubKey,
     findClubGroup,
+    findClubGroupInText,
     canonicalClubName,
     canonicalClubSql,
     yachtClubMatchSql
@@ -1942,6 +1943,36 @@ function startResultsScrapeJob({ axios, cheerio, pool, source = 'all', lookbackD
 }
 
 
+function uniqueCleanSailorNames(rows) {
+    const seen = new Set();
+    const names = [];
+    for (const row of rows || []) {
+        const name = cleanSailorName(row.name || row.skipper);
+        if (!name) continue;
+        const key = name.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        names.push(name);
+    }
+    names.sort((a, b) => a.localeCompare(b));
+    return names;
+}
+
+async function queryUniqueClubSailors(pool, yachtClub) {
+    if (!yachtClub || !String(yachtClub).trim()) return [];
+    const clubParams = [];
+    const clubClause = yachtClubMatchSql('yacht_club', yachtClub, clubParams);
+    const r = await pool.query(`
+        SELECT MAX(TRIM(skipper)) AS name
+        FROM ${TABLE}
+        WHERE ${clubClause}
+          AND skipper IS NOT NULL AND TRIM(skipper) <> ''
+        GROUP BY ${UNIQUE_SKIPPER_SQL}
+        ORDER BY 1 ASC
+    `, clubParams);
+    return uniqueCleanSailorNames(r.rows);
+}
+
 function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
     app.get('/api/race-results/status', (req, res) => {
         res.json({
@@ -2243,13 +2274,31 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 year: parsed.year,
                 source: parsed.source
             };
-            const clubAliasHit = findClubGroup(String(message).trim()) || findClubGroup(criteria.yacht_club);
+            const clubAliasHit = findClubGroupInText(message)
+                || findClubGroup(criteria.yacht_club)
+                || findClubGroup(criteria.skipper);
             if (clubAliasHit) {
                 criteria.yacht_club = clubAliasHit.canonical;
-                if (!criteria.skipper || clubKey(criteria.skipper) === clubKey(message) || clubKey(criteria.skipper) === clubKey(clubAliasHit.canonical)) {
+                const skipperLooksLikeClub = !criteria.skipper
+                    || Boolean(findClubGroupInText(criteria.skipper))
+                    || clubKey(criteria.skipper) === clubKey(message)
+                    || clubKey(criteria.skipper) === clubKey(clubAliasHit.canonical);
+                if (skipperLooksLikeClub) {
                     criteria.skipper = null;
-                    if (!intent || intent === 'sailor_search') intent = 'club_sailors';
+                    if (!intent || intent === 'sailor_search' || intent === 'club_search') {
+                        intent = 'club_sailors';
+                    }
                 }
+            }
+
+            const clubOnly = Boolean(criteria.yacht_club)
+                && !criteria.skipper
+                && !criteria.boat_name
+                && !criteria.sail_number
+                && !criteria.regatta_name
+                && !criteria.position;
+            if (clubOnly && ['club_search', 'club_sailors', 'sailor_search', ''].includes(intent)) {
+                intent = 'club_sailors';
             }
 
             if (intent === 'data_summary') {
@@ -2384,18 +2433,22 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 });
             }
             if (intent === 'club_sailors' && criteria.yacht_club) {
-                const clubParams = [];
-                const clubClause = yachtClubMatchSql('yacht_club', criteria.yacht_club, clubParams);
-                const r = await pool.query(`
-                    SELECT skipper AS name, COUNT(*)::int AS count
-                    FROM ${TABLE}
-                    WHERE ${clubClause} AND skipper IS NOT NULL AND TRIM(skipper) <> ''
-                    GROUP BY skipper ORDER BY count DESC LIMIT 40
-                `, clubParams);
+                const names = await queryUniqueClubSailors(pool, criteria.yacht_club);
+                const clubLabel = criteria.yacht_club;
+                const list = names.map((name) => ({ name }));
                 return ok({
                     success: true,
-                    reply: r.rows.length ? `Sailors at ${criteria.yacht_club}:` : `No sailors found for ${criteria.yacht_club}.`,
-                    data: { resultType: 'list', rows: r.rows.map(row => ({ ...row, name: cleanSailorName(row.name) })) }
+                    reply: names.length
+                        ? `**${names.length} unique sailor${names.length === 1 ? '' : 's'}** at **${clubLabel}**.`
+                        : `No sailors found for ${clubLabel}.`,
+                    data: names.length
+                        ? {
+                            resultType: 'sailors_list',
+                            subtitle: `${names.length} unique sailor${names.length === 1 ? '' : 's'} at ${clubLabel}`,
+                            list,
+                            rows: list
+                        }
+                        : null
                 });
             }
 
@@ -2563,5 +2616,6 @@ module.exports = {
     parseRnResultsPage,
     rowsFromClubspotPayload,
     buildSailorCard,
+    queryUniqueClubSailors,
     parseRaceCells
 };

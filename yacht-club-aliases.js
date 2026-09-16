@@ -33,6 +33,32 @@ function findClubGroup(name) {
     ) || null;
 }
 
+function escapeRegExp(s) {
+    return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Longest alias mentioned as a whole phrase, so "SYS" does not match "SYSCO". */
+function findClubGroupInText(text) {
+    const direct = findClubGroup(text);
+    if (direct) return direct;
+    const hay = String(text || '');
+    if (!hay.trim()) return null;
+    let best = null;
+    let bestLen = 0;
+    for (const group of CLUB_ALIAS_GROUPS) {
+        for (const alias of [group.canonical, ...group.aliases]) {
+            const trimmed = String(alias || '').replace(/\s+/g, ' ').trim();
+            if (!trimmed || trimmed.length <= bestLen) continue;
+            const re = new RegExp(`\\b${escapeRegExp(trimmed)}\\b`, 'i');
+            if (re.test(hay)) {
+                best = group;
+                bestLen = trimmed.length;
+            }
+        }
+    }
+    return best;
+}
+
 function aliasesForClub(name) {
     const group = findClubGroup(name);
     if (!group) {
@@ -93,6 +119,7 @@ module.exports = {
     CLUB_ALIAS_GROUPS,
     clubKey,
     findClubGroup,
+    findClubGroupInText,
     aliasesForClub,
     canonicalClubName,
     clubsAreSame,

@@ -271,73 +271,157 @@
 
         .sailor-profile-name {
             margin: 0;
-            font-size: 1.35rem;
+            font-size: 2.35rem;
             font-weight: 800;
-            letter-spacing: -0.03em;
-            color: #14213d;
+            letter-spacing: -0.045em;
+            line-height: 1.05;
+            color: #0f2744;
         }
 
         .sailor-profile-club {
-            margin: 2px 0 14px;
+            margin: 6px 0 16px;
             color: #7a879a;
-            font-size: 0.92rem;
+            font-size: 1rem;
         }
 
-        .sailor-highlights {
+        .sailor-highlights,
+        .race-stats {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
             margin-bottom: 12px;
         }
 
-        .sailor-highlight {
+        .sailor-stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            min-width: 0;
             background: #fff;
-            border: 1px solid #e6edf5;
-            border-radius: 12px;
-            padding: 10px 6px 9px;
+            border: 1px solid #e4ecf6;
+            border-radius: 18px;
+            padding: 12px 8px 10px;
             text-align: center;
+            box-shadow: 0 4px 10px rgba(20, 40, 80, 0.04);
         }
 
-        .sailor-highlight strong {
+        .stat-icon {
+            flex: 0 0 auto;
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+        }
+
+        .stat-icon svg {
+            width: 26px;
+            height: 26px;
             display: block;
-            font-size: 1.22rem;
+        }
+
+        .sailor-stat-blue .stat-icon { background: #e7f0fb; color: #2f6bbd; }
+        .sailor-stat-gold .stat-icon { background: #f6edd4; color: #c49a22; }
+        .sailor-stat-sky .stat-icon { background: #e8f1fb; color: #3b78c4; }
+        .sailor-stat-slate .stat-icon { background: #eef1f6; color: #5b6b82; }
+        .sailor-stat-teal .stat-icon { background: #e4f3ee; color: #3d8f78; }
+        .sailor-stat-lilac .stat-icon { background: #eee8fa; color: #7b6bb8; }
+
+        .stat-copy {
+            min-width: 0;
+        }
+
+        .stat-copy strong {
+            display: block;
+            font-size: 1.45rem;
             font-weight: 800;
             color: #163a8a;
-            letter-spacing: -0.03em;
-            line-height: 1.1;
+            letter-spacing: -0.04em;
+            line-height: 1.05;
         }
 
-        .sailor-highlight span {
+        .stat-copy span {
             display: block;
-            margin-top: 4px;
-            font-size: 0.68rem;
+            margin-top: 2px;
+            font-size: 0.78rem;
             font-weight: 600;
             color: #8a96a8;
             line-height: 1.2;
         }
 
         .sailor-tile {
-            background: #f4f8ff;
-            border-radius: 12px;
-            padding: 12px 14px 13px;
+            background: #f7fbff;
+            border: 1px solid #e8eef6;
+            border-radius: 18px;
+            padding: 14px 14px 18px;
             margin-bottom: 12px;
+            box-shadow: 0 8px 20px rgba(20, 40, 80, 0.04);
         }
 
-        .sailor-tile-kicker {
-            margin: 0 0 10px;
-            font-size: 0.68rem;
+        .podium-board-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .podium-board-brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+            color: #3d5a86;
+        }
+
+        .podium-board-brand svg {
+            width: 22px;
+            height: 22px;
+            flex: 0 0 auto;
+        }
+
+        .podium-board-title {
+            font-size: 0.82rem;
             font-weight: 800;
             letter-spacing: 0.08em;
             text-transform: uppercase;
-            color: #8a96a8;
+            color: #3d5a86;
+            line-height: 1.1;
         }
+
+        .podium-board-sub {
+            margin-top: 2px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #9aa8bb;
+        }
+
+        .podium-board-link {
+            border: 0;
+            background: none;
+            padding: 0;
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #9aa8bb;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .podium-board-link:hover { color: #2f6bff; }
 
         .podium-stand {
             display: grid;
-            grid-template-columns: 1fr 1.15fr 1fr;
+            grid-template-columns: 1fr 1.18fr 1fr;
             align-items: end;
-            gap: 8px;
-            min-height: 148px;
+            gap: 10px;
+            min-height: 168px;
+            padding: 8px 4px 2px;
         }
 
         .podium-col {
@@ -347,94 +431,102 @@
             min-width: 0;
         }
 
-        .podium-tile {
-            border-radius: 12px 12px 0 0;
-            padding: 10px 6px 8px;
+        .podium-block {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 16px 16px 12px 12px;
             text-align: center;
+            overflow: hidden;
+            box-shadow:
+                inset 0 2px 0 rgba(255,255,255,0.55),
+                inset 0 -10px 16px rgba(0,0,0,0.12),
+                0 14px 18px rgba(20, 33, 61, 0.14);
         }
 
-        .podium-tile .place {
+        .podium-block::before {
+            content: '';
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 22%;
+            background: linear-gradient(90deg, rgba(255,255,255,0.28), transparent);
+            pointer-events: none;
+        }
+
+        .podium-laurels {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            z-index: 1;
+        }
+
+        .podium-laurels svg {
+            width: 18px;
+            height: 34px;
+            opacity: 0.55;
+        }
+
+        .podium-block .place {
+            font-family: Georgia, 'Times New Roman', serif;
+            font-size: 1.7rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            line-height: 1;
+        }
+
+        .podium-block .place sup {
+            font-size: 0.48em;
+            font-weight: 700;
+        }
+
+        .podium-block strong {
             display: block;
-            font-size: 0.78rem;
+            z-index: 1;
+            font-size: 2.05rem;
             font-weight: 800;
-            letter-spacing: 0.04em;
+            line-height: 1;
+            margin-top: 8px;
+            letter-spacing: -0.04em;
         }
 
-        .podium-tile strong {
-            display: block;
-            font-size: 1.35rem;
-            font-weight: 800;
-            line-height: 1.05;
-            margin: 4px 0 0;
+        .podium-plinth {
+            height: 14px;
+            margin: 0 6px;
+            border-radius: 0 0 8px 8px;
+            box-shadow: 0 10px 14px rgba(20, 33, 61, 0.12);
         }
 
-        .podium-riser {
-            border-radius: 0 0 10px 10px;
+        .podium-col.silver .podium-block {
+            min-height: 102px;
+            color: #3d4654;
+            background: linear-gradient(180deg, #f8fafc 0%, #d8dee6 48%, #b7c0cb 100%);
         }
+        .podium-col.silver .podium-plinth { background: linear-gradient(180deg, #c5ccd6, #9aa3af); }
+        .podium-col.silver .podium-laurels svg { color: #6b7380; }
 
-        .podium-col.silver .podium-tile {
-            background: linear-gradient(180deg, #f4f6f8 0%, #d5dbe3 100%);
-            color: #4b5563;
+        .podium-col.gold .podium-block {
+            min-height: 128px;
+            color: #6d4c00;
+            background: linear-gradient(180deg, #ffe58a 0%, #f0c93a 42%, #d4a017 100%);
         }
-        .podium-col.silver .podium-riser {
-            height: 36px;
-            background: #c5ccd6;
-        }
+        .podium-col.gold .podium-plinth { background: linear-gradient(180deg, #e0b21c, #b8890c); }
+        .podium-col.gold .podium-laurels svg { color: #9a6d08; }
 
-        .podium-col.gold .podium-tile {
-            background: linear-gradient(180deg, #ffe9a3 0%, #e4b123 100%);
-            color: #7a5200;
-        }
-        .podium-col.gold .podium-riser {
-            height: 58px;
-            background: #d4a017;
-        }
-
-        .podium-col.bronze .podium-tile {
-            background: linear-gradient(180deg, #f3d3b3 0%, #c07a3a 100%);
+        .podium-col.bronze .podium-block {
+            min-height: 92px;
             color: #6a3a12;
+            background: linear-gradient(180deg, #f3d0ae 0%, #d08a4a 50%, #b56a32 100%);
         }
-        .podium-col.bronze .podium-riser {
-            height: 24px;
-            background: #a86328;
-        }
+        .podium-col.bronze .podium-plinth { background: linear-gradient(180deg, #c07a3a, #8f4f1c); }
+        .podium-col.bronze .podium-laurels svg { color: #8a4e1d; }
 
         .podium-note {
-            margin: 8px 0 0;
+            margin: 10px 0 0;
             font-size: 0.72rem;
             color: #93a0b3;
-        }
-
-        .race-stats {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-            margin-bottom: 12px;
-        }
-
-        .race-stat {
-            background: #fff;
-            border: 1px solid #e6edf5;
-            border-radius: 12px;
-            padding: 10px 6px 9px;
-            text-align: center;
-        }
-
-        .race-stat strong {
-            display: block;
-            font-size: 1.15rem;
-            font-weight: 800;
-            color: #163a8a;
-            letter-spacing: -0.03em;
-        }
-
-        .race-stat span {
-            display: block;
-            margin-top: 4px;
-            font-size: 0.68rem;
-            font-weight: 600;
-            color: #8a96a8;
-            line-height: 1.2;
         }
 
         .best-result-tile {
@@ -507,7 +599,7 @@
 
         .sailor-event {
             display: grid;
-            grid-template-columns: 58px minmax(0, 1fr) auto;
+            grid-template-columns: 58px minmax(0, 1fr);
             gap: 8px;
             align-items: start;
             padding: 11px 2px;
@@ -555,30 +647,6 @@
             color: #7a879a;
             font-size: 0.78rem;
             line-height: 1.35;
-        }
-
-        .sailor-event-photos {
-            align-self: center;
-        }
-
-        .photo-link.labeled {
-            width: auto;
-            height: auto;
-            padding: 4px 2px;
-            gap: 4px;
-            color: #5b6b80;
-            font-size: 0.72rem;
-            font-weight: 600;
-        }
-
-        .photo-link.labeled span {
-            display: none;
-        }
-
-        @media (min-width: 420px) {
-            .photo-link.labeled span {
-                display: inline;
-            }
         }
 
         .sailor-event-detail {
@@ -738,30 +806,6 @@
         .results-card .pos-link:hover,
         .results-card .name-link:hover {
             color: #0088ff;
-        }
-
-        .photo-link {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 22px;
-            height: 22px;
-            margin-left: 6px;
-            vertical-align: middle;
-            color: #0d3b8e;
-            border-radius: 6px;
-            text-decoration: none;
-            flex-shrink: 0;
-        }
-
-        .photo-link:hover {
-            background: #e8f0ff;
-            color: #0066cc;
-        }
-
-        .photo-link svg {
-            width: 16px;
-            height: 16px;
         }
 
         .results-card .sailor-title {
@@ -1006,6 +1050,31 @@
             .composer {
                 padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
             }
+            .sailor-profile-name {
+                font-size: 1.9rem;
+            }
+            .sailor-highlights,
+            .race-stats {
+                gap: 6px;
+            }
+            .sailor-stat {
+                padding: 10px 6px 8px;
+                gap: 5px;
+                border-radius: 14px;
+            }
+            .stat-icon {
+                width: 34px;
+                height: 34px;
+            }
+            .stat-icon svg {
+                width: 18px;
+                height: 18px;
+            }
+            .stat-copy strong { font-size: 1.15rem; }
+            .stat-copy span { font-size: 0.64rem; }
+            .podium-block .place { font-size: 1.1rem; }
+            .podium-block strong { font-size: 1.45rem; }
+            .podium-laurels svg { width: 14px; height: 26px; }
         }
     </style>
     <link rel="stylesheet" href="/fit-screen.css">
@@ -1142,21 +1211,6 @@
             return s
                 .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
                 .replace(/\n/g, '<br>');
-        }
-
-        function photoSearchHref(name) {
-            if (!name) return '';
-            return 'PhotoSearch.html?' + new URLSearchParams({ regatta_name: name }).toString();
-        }
-
-        function photoLinkHtml(name, _date, labeled) {
-            const href = photoSearchHref(name);
-            if (!href) return '';
-            return '<a class="photo-link' + (labeled ? ' labeled' : '') + '" href="' + href + '" target="_blank" rel="noopener" title="Photos from this regatta" aria-label="Photos from ' +
-                escapeHtml(name) + '">' +
-                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">' +
-                '<path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>' +
-                (labeled ? '<span>Photos</span>' : '') + '</a>';
         }
 
         function displayLoc(value) {
@@ -1326,6 +1380,42 @@
             return '';
         }
 
+        function sailorIconSvg(kind) {
+            const icons = {
+                sail: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.2 3.4V16H6.4c-.5 0-.7-.6-.4-1L12.2 3.4z"/><path d="M13.4 5.6V16h4.8c.5 0 .7-.6.4-1L13.4 5.6z"/><path d="M11.6 3.2h1.2V16h-1.2z"/><path d="M4.8 17.4h14.4c.5 0 .7.6.3.9-1.3 1.3-4.6 2.3-7.5 2.3s-6.2-1-7.5-2.3c-.4-.3-.2-.9.3-.9z"/></svg>',
+                trophy: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.8 3.5h10.4v2.8a5.2 5.2 0 01-3.7 5v1.4h2.3V15H8.2v-2.3h2.3v-1.4a5.2 5.2 0 01-3.7-5V3.5zm1.7 1.7v1.1A3.5 3.5 0 0012 9.8a3.5 3.5 0 003.5-3.5V5.2H8.5z"/><path d="M6.8 4.8H4.5A2.8 2.8 0 007.2 8 4.4 4.4 0 016.8 4.8zm10.4 0h2.3A2.8 2.8 0 0116.8 8a4.4 4.4 0 00.4-3.2z"/><rect x="8.2" y="15" width="7.6" height="1.4" rx=".4"/><path d="M6.6 17.6h10.8c.5 0 .9.4.8.9l-.2.7H6l-.2-.7c-.1-.5.3-.9.8-.9z"/></svg>',
+                ribbon: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="9" r="5.6"/><circle cx="12" cy="9" r="2.3" fill="#fff"/><path d="M9.6 13.8 8 20.6l4-2.3 4 2.3-1.6-6.8A6.2 6.2 0 0112 14.6a6.2 6.2 0 01-2.4-.8z"/></svg>',
+                flag: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 3h1.6v18H6z"/><path d="M7.6 4.2h11.2c.4 0 .6.5.3.8L17.4 7.4l1.7 2.3c.3.4 0 .9-.3.9H7.6V4.2z"/><path fill="#fff" d="M9.2 5.2h2.2v1.8H9.2zm4.2 0h2.2v1.8h-2.2zM11.4 7.8h2.2v1.8h-2.2zm4.2 0h2.2v1.8h-2.2z"/></svg>',
+                chart: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="4.2" y="13" width="4.2" height="7.2" rx="1.2"/><rect x="9.9" y="9.2" width="4.2" height="11" rx="1.2"/><rect x="15.6" y="5.4" width="4.2" height="14.8" rx="1.2"/></svg>'
+            };
+            return icons[kind] || '';
+        }
+
+        function sailorStatTile(kind, tone, value, label) {
+            return '<div class="sailor-stat sailor-stat-' + tone + '">' +
+                '<span class="stat-icon">' + sailorIconSvg(kind) + '</span>' +
+                '<span class="stat-copy"><strong>' + escapeHtml(String(value)) + '</strong><span>' + escapeHtml(label) + '</span></span>' +
+                '</div>';
+        }
+
+        function podiumLaurelSvg(side) {
+            const flip = side === 'right' ? ' style="transform:scaleX(-1)"' : '';
+            return '<svg viewBox="0 0 14 32" fill="currentColor" aria-hidden="true"' + flip + '>' +
+                '<ellipse cx="8.2" cy="6" rx="3.1" ry="4.4" transform="rotate(-28 8.2 6)"/><ellipse cx="7.2" cy="12.2" rx="3.2" ry="4.6" transform="rotate(-18 7.2 12.2)"/><ellipse cx="6.8" cy="18.6" rx="3.1" ry="4.5" transform="rotate(-8 6.8 18.6)"/><ellipse cx="7.4" cy="24.8" rx="2.8" ry="4.1" transform="rotate(8 7.4 24.8)"/>' +
+                '</svg>';
+        }
+
+        function podiumColHtml(place, count, tone) {
+            const ord = place === 1 ? '1<sup>st</sup>' : place === 2 ? '2<sup>nd</sup>' : '3<sup>rd</sup>';
+            return '<div class="podium-col ' + tone + '">' +
+                '<div class="podium-block">' +
+                '<div class="podium-laurels">' + podiumLaurelSvg('left') +
+                '<span class="place">' + ord + '</span>' +
+                podiumLaurelSvg('right') + '</div>' +
+                '<strong>' + escapeHtml(String(count)) + '</strong>' +
+                '</div><div class="podium-plinth"></div></div>';
+        }
+
         function renderSailorCardHtml(data) {
             const sailor = data.sailor || {};
             const summary = data.summary || {};
@@ -1347,17 +1437,19 @@
             html += '<p class="sailor-profile-name">' + escapeHtml(cleanSailorName(sailor.name) || 'Sailor') + '</p>';
             html += '<p class="sailor-profile-club">' + escapeHtml(sailor.club || '') + '</p>';
             html += '<div class="sailor-highlights">';
-            html += '<div class="sailor-highlight"><strong>' + escapeHtml(String(totalRegattas)) + '</strong><span>Regattas</span></div>';
-            html += '<div class="sailor-highlight"><strong>' + escapeHtml(ordinal(summary.bestRegattaPlace)) + '</strong><span>Best Regatta</span></div>';
-            html += '<div class="sailor-highlight"><strong>' + escapeHtml(ordinal(summary.bestRacePlace)) + '</strong><span>Best Race Position</span></div>';
+            html += sailorStatTile('sail', 'blue', totalRegattas, 'Regattas');
+            html += sailorStatTile('trophy', 'gold', ordinal(summary.bestRegattaPlace), 'Best Regatta');
+            html += sailorStatTile('ribbon', 'sky', ordinal(summary.bestRacePlace), 'Best Race Position');
             html += '</div>';
 
-            html += '<div class="sailor-tile">';
-            html += '<p class="sailor-tile-kicker">Regatta podiums</p>';
+            html += '<div class="sailor-tile podium-board">';
+            html += '<div class="podium-board-head"><div class="podium-board-brand">' + sailorIconSvg('trophy') +
+                '<div><div class="podium-board-title">Regatta Podiums</div><div class="podium-board-sub">Top 3 finishers</div></div></div>' +
+                '<button type="button" class="podium-board-link js-jump-results">Race results ›</button></div>';
             html += '<div class="podium-stand">';
-            html += '<div class="podium-col silver"><div class="podium-tile"><span class="place">2nd</span><strong>' + escapeHtml(String(seconds)) + '</strong></div><div class="podium-riser"></div></div>';
-            html += '<div class="podium-col gold"><div class="podium-tile"><span class="place">1st</span><strong>' + escapeHtml(String(firsts)) + '</strong></div><div class="podium-riser"></div></div>';
-            html += '<div class="podium-col bronze"><div class="podium-tile"><span class="place">3rd</span><strong>' + escapeHtml(String(thirds)) + '</strong></div><div class="podium-riser"></div></div>';
+            html += podiumColHtml(2, seconds, 'silver');
+            html += podiumColHtml(1, firsts, 'gold');
+            html += podiumColHtml(3, thirds, 'bronze');
             html += '</div>';
             if (Number(podiums.missing || 0) > 0) {
                 html += '<p class="podium-note">Counts pending complete results</p>';
@@ -1365,9 +1457,9 @@
             html += '</div>';
 
             html += '<div class="race-stats">';
-            html += '<div class="race-stat"><strong>' + escapeHtml(String(totalRaces)) + '</strong><span>Total Races</span></div>';
-            html += '<div class="race-stat"><strong>' + escapeHtml(String(raceWins)) + '</strong><span>Total Race Wins</span></div>';
-            html += '<div class="race-stat"><strong>' + escapeHtml(raceAvg == null ? '—' : String(raceAvg)) + '</strong><span>Average Position</span></div>';
+            html += sailorStatTile('flag', 'slate', totalRaces, 'Total Races');
+            html += sailorStatTile('trophy', 'teal', raceWins, 'Total Race Wins');
+            html += sailorStatTile('chart', 'lilac', raceAvg == null ? '—' : String(raceAvg), 'Average Position');
             html += '</div>';
 
             if (best) {
@@ -1381,7 +1473,7 @@
                     (best.category ? ' · ' + escapeHtml(best.category) : '') + '</div></div></div>';
             }
 
-            html += '<div class="sailor-results-head"><h3>Regatta results</h3><span class="sort-note">Newest first</span></div>';
+            html += '<div class="sailor-results-head" id="sailorResultsHead"><h3>Regatta results</h3><span class="sort-note">Newest first</span></div>';
             html += '<div class="sailor-event-list js-event-list">';
             if (regattaRows.length) {
                 regattaRows.forEach((r, idx) => {
@@ -1396,7 +1488,6 @@
                     html += '<div class="sailor-event-meta">' + escapeHtml(r.regatta_date || '') +
                         (r.category ? ' · ' + escapeHtml(r.category) : '') +
                         (loc ? '<br>' + escapeHtml(loc) : '') + '</div></div>';
-                    html += '<div class="sailor-event-photos">' + photoLinkHtml(r.regatta_name, r.regatta_date_raw, true) + '</div>';
                     html += '<div class="sailor-event-detail detail-panel" data-detail-panel="' + escapeHtml(r.detailId) + '"></div>';
                     html += '</div>';
                 });
@@ -1440,6 +1531,13 @@
                     openRegattaEventCard(btn.getAttribute('data-regatta-name'), btn.getAttribute('data-regatta-date'));
                 });
             });
+            const jump = cardEl.querySelector('.js-jump-results');
+            const resultsHead = cardEl.querySelector('#sailorResultsHead') || cardEl.querySelector('.sailor-results-head');
+            if (jump && resultsHead) {
+                jump.addEventListener('click', () => {
+                    resultsHead.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            }
             const list = cardEl.querySelector('.js-event-list');
             const moreBtn = cardEl.querySelector('.js-show-more');
             const foot = cardEl.querySelector('.sailor-results-foot span');
@@ -1502,7 +1600,7 @@
             const loc = displayLoc(payload && payload.location);
             const classes = uniqueEventOptions(rows, 'category');
             const clubs = uniqueEventOptions(rows, 'yacht_club');
-            let html = '<h3>' + escapeHtml(title) + photoLinkHtml(title, payload && payload.regattaDate) + '</h3><p class="event-modal-meta">' +
+            let html = '<h3>' + escapeHtml(title) + '</h3><p class="event-modal-meta">' +
                 escapeHtml(date) + ' · ' + escapeHtml(loc) +
                 ' · <span class="js-event-count">' + rows.length +
                 ' result' + (rows.length === 1 ? '' : 's') + '</span></p>';
@@ -1574,7 +1672,7 @@
             if (!name) return;
             const modal = ensureEventModal();
             const body = modal.querySelector('.js-event-body');
-            body.innerHTML = '<h3>' + escapeHtml(name) + photoLinkHtml(name, date) + '</h3><p class="event-modal-meta">Loading event results…</p>';
+            body.innerHTML = '<h3>' + escapeHtml(name) + '</h3><p class="event-modal-meta">Loading event results…</p>';
             modal.classList.add('open');
             try {
                 const params = new URLSearchParams({ name });
@@ -1586,7 +1684,7 @@
                 body.innerHTML = renderEventResultsHtml(payload);
                 wireEventResultsView(body, payload);
             } catch (err) {
-                body.innerHTML = '<h3>' + escapeHtml(name) + photoLinkHtml(name, date) + '</h3><p class="event-modal-meta">' +
+                body.innerHTML = '<h3>' + escapeHtml(name) + '</h3><p class="event-modal-meta">' +
                     escapeHtml(err.message || 'Could not load event results.') + '</p>';
             }
         }
@@ -1600,10 +1698,11 @@
             // New scraped-results chatbot shapes (same as admin ChatBot)
             if (rt === 'list' && hasRows) {
                 const hasCount = data.rows.some(r => r.count != null);
-                html += '<div class="section"><table class="data"><thead><tr><th>Name</th>' +
+                const namesOnly = data.rows.every(r => (r.name || r.skipper) && r.position == null && !r.regatta_name);
+                html += '<div class="section"><table class="data"><thead><tr><th>' + (namesOnly ? 'Sailor' : 'Name') + '</th>' +
                     (hasCount ? '<th>Count</th>' : '') + '</tr></thead><tbody>';
                 data.rows.forEach(r => {
-                    html += '<tr><td>' + escapeHtml(r.skipper != null ? cleanSailorName(r.skipper) : (r.name || r.yacht_club || '')) + '</td>' +
+                    html += '<tr><td>' + escapeHtml(cleanSailorName(r.name || r.skipper) || r.yacht_club || '') + '</td>' +
                         (hasCount ? '<td>' + escapeHtml(String(r.count ?? '')) + '</td>' : '') + '</tr>';
                 });
                 html += '</tbody></table></div>';
@@ -1611,7 +1710,7 @@
                 return renderSailorCardHtml(data);
             } else if (rt === 'rows' && hasRows) {
                 html += '<div class="section"><table class="data"><thead><tr><th>Pos</th><th>Sailor</th><th>Regatta</th><th>Date</th></tr></thead><tbody>';
-                data.rows.slice(0, 20).forEach(r => {
+                data.rows.forEach(r => {
                     html += '<tr><td>' + escapeHtml(String(r.position ?? '')) + '</td><td>' +
                         escapeHtml(cleanSailorName(r.skipper)) + '</td><td>' +
                         escapeHtml(r.regatta_name || '') + '</td><td>' +
@@ -1626,7 +1725,6 @@
             } else if (rt === 'regatta_summary' && (data.dates || data.sailorCount != null)) {
                 const summaryName = data.regattaName || data.regatta_name || '';
                 html += '<div class="section basic-info"><h3>' + escapeHtml(summaryName || 'Summary') +
-                    photoLinkHtml(summaryName, (data.dates || [])[0]) +
                     '</h3><table><tr><td>Dates</td><td>' + escapeHtml((data.dates || []).join(', ') || '—') + '</td></tr><tr><td>Sailors</td><td>' + escapeHtml(String(data.sailorCount ?? '—')) + '</td></tr></table></div>';
                 (data.byClass || []).forEach(function (bc) {
                     html += '<div class="section"><h3>Class: ' + escapeHtml(bc.class || '—') + '</h3><table class="data"><thead><tr><th>Position</th><th>Sailor</th><th>Club</th></tr></thead><tbody>';
@@ -1635,11 +1733,15 @@
                     });
                     html += '</tbody></table></div>';
                 });
-            } else if (rt === 'sailors_list' && hasList) {
+            } else if (rt === 'sailors_list' && (hasList || hasRows)) {
+                const people = hasList ? data.list : data.rows;
                 const sub = data.subtitle ? '<h3>' + escapeHtml(data.subtitle) + '</h3>' : '';
-                html += '<div class="section">' + sub + '<table class="data"><thead><tr><th>Name</th><th>Regattas</th></tr></thead><tbody>';
-                data.list.forEach(r => {
-                    html += '<tr><td>' + escapeHtml(cleanSailorName(r.name) || r.name || '') + '</td><td>' + escapeHtml(String(r.count ?? '')) + '</td></tr>';
+                const hasCount = people.some(r => r.count != null);
+                html += '<div class="section">' + sub + '<table class="data"><thead><tr><th>Sailor</th>' +
+                    (hasCount ? '<th>Regattas</th>' : '') + '</tr></thead><tbody>';
+                people.forEach(r => {
+                    html += '<tr><td>' + escapeHtml(cleanSailorName(r.name || r.skipper) || r.name || '') + '</td>' +
+                        (hasCount ? '<td>' + escapeHtml(String(r.count ?? '')) + '</td>' : '') + '</tr>';
                 });
                 html += '</tbody></table></div>';
             } else if (rt === 'clubs_list' && hasList) {
@@ -1677,10 +1779,40 @@
             return html;
         }
 
+        function sailorNamesFromData(data) {
+            const src = (data.list && data.list.length) ? data.list : (data.rows || []);
+            const seen = new Set();
+            const names = [];
+            src.forEach(r => {
+                const name = cleanSailorName(r.name || r.skipper || '');
+                if (!name) return;
+                const key = name.toLowerCase();
+                if (seen.has(key)) return;
+                seen.add(key);
+                names.push(name);
+            });
+            return names;
+        }
+
+        function isSailorNameList(data) {
+            if (!data) return false;
+            if (data.resultType === 'sailors_list') return true;
+            const src = (data.list && data.list.length) ? data.list : data.rows;
+            if (!src || !src.length) return false;
+            if (data.resultType === 'list') {
+                return src.every(r => (r.name || r.skipper) && r.position == null && !r.regatta_name);
+            }
+            return false;
+        }
+
         function doDownload(data) {
             if (!data) return;
-            let cols, rows;
-            if (data.resultType === 'regatta_summary' && (data.byClass?.length || data.dates?.length)) {
+            let cols, rows, filename = 'sailing-results-' + Date.now() + '.csv';
+            if (isSailorNameList(data)) {
+                cols = ['sailor'];
+                rows = sailorNamesFromData(data).map(name => ({ sailor: name }));
+                filename = 'sailors-' + Date.now() + '.csv';
+            } else if (data.resultType === 'regatta_summary' && (data.byClass?.length || data.dates?.length)) {
                 cols = ['class', 'position', 'skipper', 'yacht_club'];
                 rows = [];
                 (data.byClass || []).forEach(function (bc) {
@@ -1700,9 +1832,15 @@
                 cols = hasCount ? ['name', 'count'] : ['name'];
                 rows = data.list.map(r => hasCount ? { name: r.name, count: r.count } : { name: r.name });
             } else if (data.rows && data.rows.length) {
-                cols = ['position', 'regatta_name', 'regatta_date'];
-                rows = data.rows;
+                cols = ['position', 'skipper', 'regatta_name', 'regatta_date'];
+                rows = data.rows.map(r => ({
+                    position: r.position,
+                    skipper: cleanSailorName(r.skipper),
+                    regatta_name: r.regatta_name,
+                    regatta_date: r.regatta_date
+                }));
             } else return;
+            if (!rows.length) return;
             const lines = [cols.join(',')];
             rows.forEach(r => {
                 lines.push(cols.map(c => '"' + String(r[c] ?? '').replace(/"/g, '""') + '"').join(','));
@@ -1710,7 +1848,7 @@
             const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = 'sailing-results-' + Date.now() + '.csv';
+            a.download = filename;
             a.click();
             URL.revokeObjectURL(a.href);
         }
@@ -1731,13 +1869,16 @@
                 (data.list && data.list.length) ||
                 (data.rows && data.rows.length) ||
                 data.resultType === 'sailor_card' ||
+                data.resultType === 'sailors_list' ||
                 data.resultType === 'summary' ||
                 data.resultType === 'list' ||
                 data.resultType === 'rows' ||
                 (data.resultType === 'regatta_summary' && (data.dates?.length || data.sailorCount != null || (data.byClass && data.byClass.length)))
             );
-            const skipReply = data && data.resultType === 'sailor_card';
-            if (skipReply) div.classList.add('wide');
+            const skipReply = data && (data.resultType === 'sailor_card' || data.resultType === 'sailors_list');
+            if (data && (skipReply || data.resultType === 'sailors_list' || isSailorNameList(data))) {
+                div.classList.add('wide');
+            }
             if (!skipReply && reply) {
                 const md = document.createElement('div');
                 md.className = 'markdown';

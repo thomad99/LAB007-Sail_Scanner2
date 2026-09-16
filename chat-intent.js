@@ -13,6 +13,8 @@
  *   club/yacht club/YC → yacht_club
  */
 
+const { findClubGroup, findClubGroupInText } = require('./yacht-club-aliases');
+
 const INTENT_CACHE_TTL_MS = 15 * 60 * 1000;
 const INTENT_CACHE_MAX = 80;
 const intentCache = new Map();
@@ -28,7 +30,7 @@ Vocabulary:
 - sail number / sail # / sail → sail_number
 - club / yacht club / YC / sailing club → yacht_club
 - "who won X" / winners → regatta_search + that event name
-- "sailors at/for [club]" → club_sailors
+- "sailors at/for [club]", "club SYS sailors", "SYS sailors", or a club with no sailor/regatta → club_sailors (unique skipper names)
 - "best/top sailor(s)" → top_sailors; "best/top club(s)" → top_clubs
 - "top 10 sailors" / "top 5 sailors in C420" → top_sailors with limit and optional category (boat class)
 
@@ -114,6 +116,32 @@ function extractTopLimit(text) {
     return null;
 }
 
+function stripClubQueryNoise(s) {
+    return cleanValue(String(s || '').replace(
+        /\b(?:sailors?|people|skippers?|racers?|members?|yacht\s+club|sailing\s+club|clubs?|yc)\b/ig,
+        ' '
+    ));
+}
+
+function parseClubSailorsClub(q) {
+    const sailorsAt = q.match(/\b(?:sailors?|people|skippers?|racers?)\s+(?:at|for|from|of)\s+(.+)/i)
+        || q.match(/\bwho\s+(?:races?|sails?|competes?)\s+(?:at|for|from)\s+(.+)/i);
+    if (sailorsAt) return stripClubQueryNoise(sailorsAt[1]);
+
+    const clubThenSailors = q.match(/\b(?:yacht\s+)?club\s+(.+?)\s+sailors?\b/i);
+    if (clubThenSailors) return stripClubQueryNoise(clubThenSailors[1]);
+
+    const sailorsThenClub = q.match(/\bsailors?\s+(?:at\s+)?(?:the\s+)?(?:yacht\s+)?club\s+(.+)/i);
+    if (sailorsThenClub) return stripClubQueryNoise(sailorsThenClub[1]);
+
+    if (/\bsailors?\b/i.test(q) && !/\b(?:regatta|race|event|series)\b/i.test(q)) {
+        const named = findClubGroupInText(q) || findClubGroup(stripClubQueryNoise(q));
+        if (named) return named.canonical;
+        if (/\bclub\b/i.test(q)) return stripClubQueryNoise(q);
+    }
+    return null;
+}
+
 function extractClassCategory(text) {
     const m = String(text).match(/\b(?:in|for|class|fleet)\s+([A-Za-z0-9][A-Za-z0-9+\/\- ]{0,30})$/i)
         || String(text).match(/\b(?:in|for)\s+(?:the\s+)?([A-Za-z0-9][A-Za-z0-9+\/\-]{1,20})\s+class\b/i);
@@ -161,10 +189,9 @@ function parseIntentRules(message) {
         return { ...base, intent: 'clubs_in_region', region: cleanValue(clubsIn[1]), confidence: 'high' };
     }
 
-    const sailorsAt = q.match(/\b(?:sailors?|people|skippers?|racers?)\s+(?:at|for|from|of)\s+(.+)/i)
-        || q.match(/\bwho\s+(?:races?|sails?|competes?)\s+(?:at|for|from)\s+(.+)/i);
-    if (sailorsAt) {
-        return { ...base, intent: 'club_sailors', yacht_club: cleanValue(sailorsAt[1]), confidence: 'high' };
+    const clubSailorsClub = parseClubSailorsClub(q);
+    if (clubSailorsClub) {
+        return { ...base, intent: 'club_sailors', yacht_club: clubSailorsClub, confidence: 'high' };
     }
 
     const sailNum = q.match(/\bsail(?:\s*(?:number|num|#|no\.?))?\s*[:=\s]+([A-Za-z]{0,4}\s*\d{2,6}[A-Za-z]?)\b/i)
@@ -219,7 +246,14 @@ function parseIntentRules(message) {
     const clubLabeled = labeledCapture(q, ['yacht club', 'sailing club', 'club', 'yc'])
         || (q.match(/\b(?:yacht\s+club|sailing\s+club|club)\s+(?:named|called)\s+(.+)/i) || [])[1];
     if (clubLabeled) {
-        return { ...base, intent: 'club_search', yacht_club: cleanValue(clubLabeled), confidence: 'high' };
+        const clubName = stripClubQueryNoise(clubLabeled) || cleanValue(clubLabeled);
+        const wantsSailors = /\bsailors?\b/i.test(q);
+        return {
+            ...base,
+            intent: wantsSailors ? 'club_sailors' : 'club_search',
+            yacht_club: clubName,
+            confidence: 'high'
+        };
     }
 
     const boatLabeled = labeledCapture(q, ['boat', 'vessel'])

@@ -4269,14 +4269,24 @@ async function runClubSailors(yachtClub) {
     if (!yachtClub || !String(yachtClub).trim()) return [];
     const params = [];
     const clubClause = yachtClubMatchSql('yacht_club', yachtClub, params);
-    const q = `SELECT skipper, COUNT(*)::int AS regattas
+    const q = `SELECT MAX(TRIM(skipper)) AS skipper
         FROM ${RND}
         WHERE ${clubClause} AND skipper IS NOT NULL AND TRIM(skipper) <> ''${SOZNODATA_EXCLUDE}
-        GROUP BY skipper
-        ORDER BY regattas DESC, skipper ASC
-        LIMIT 200`;
+        GROUP BY LOWER(REGEXP_REPLACE(TRIM(REGEXP_REPLACE(COALESCE(skipper, ''), '<[^>]*>', ' ', 'gi')), '\\s+', ' ', 'g'))
+        ORDER BY 1 ASC`;
     const r = await pool.query(q, params);
-    return r.rows;
+    const seen = new Set();
+    const rows = [];
+    for (const row of r.rows) {
+        const name = String(row.skipper || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        if (!name) continue;
+        const key = name.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        rows.push({ skipper: name });
+    }
+    rows.sort((a, b) => a.skipper.localeCompare(b.skipper));
+    return rows;
 }
 
 async function runTopSailors(limit = 10, category = null) {
@@ -4433,12 +4443,12 @@ app.post('/api/chat', async (req, res) => {
 
         if (intent === 'club_sailors') {
             const rows = await runClubSailors(criteria.yacht_club);
-            const list = rows.map(r => ({ name: r.skipper, count: r.regattas }));
+            const list = rows.map(r => ({ name: r.skipper }));
             resultType = 'sailors_list';
             reply = list.length
-                ? `Sailors who have raced for **${String(criteria.yacht_club).trim()}** (${list.length}):\n\nSee the table below.`
+                ? `**${list.length} unique sailor${list.length === 1 ? '' : 's'}** at **${String(criteria.yacht_club).trim()}**.`
                 : `I didn't find any sailors for that club. Try a different club name.`;
-            data = list.length ? { resultType, list, subtitle: 'Sailors at ' + String(criteria.yacht_club).trim() } : null;
+            data = list.length ? { resultType, list, subtitle: `${list.length} unique sailor${list.length === 1 ? '' : 's'} at ` + String(criteria.yacht_club).trim() } : null;
         } else if (intent === 'top_sailors') {
             const limit = Math.min(50, Math.max(1, parseInt(String(criteria.limit || 10), 10) || 10));
             const rows = await runTopSailors(limit, criteria.category);
