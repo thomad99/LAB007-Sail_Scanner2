@@ -1397,6 +1397,13 @@
             return icons[kind] || '';
         }
 
+        function sailorNameLinkHtml(name) {
+            const cleaned = cleanSailorName(name) || String(name || '').trim();
+            if (!cleaned) return '';
+            return '<button type="button" class="name-link js-sailor-link" data-sailor-name="' +
+                escapeHtml(cleaned) + '">' + escapeHtml(cleaned) + '</button>';
+        }
+
         function sailorStatTile(kind, tone, value, label) {
             return '<div class="sailor-stat sailor-stat-' + tone + '">' +
                 '<span class="stat-icon">' + sailorIconSvg(kind) + '</span>' +
@@ -1708,7 +1715,8 @@
                 html += '<div class="section"><table class="data"><thead><tr><th>' + (namesOnly ? 'Sailor' : 'Name') + '</th>' +
                     (hasCount ? '<th>Count</th>' : '') + '</tr></thead><tbody>';
                 data.rows.forEach(r => {
-                    html += '<tr><td>' + escapeHtml(cleanSailorName(r.name || r.skipper) || r.yacht_club || '') + '</td>' +
+                    const sailor = cleanSailorName(r.name || r.skipper) || r.yacht_club || '';
+                    html += '<tr><td>' + (namesOnly ? sailorNameLinkHtml(sailor) : escapeHtml(sailor)) + '</td>' +
                         (hasCount ? '<td>' + escapeHtml(String(r.count ?? '')) + '</td>' : '') + '</tr>';
                 });
                 html += '</tbody></table></div>';
@@ -1746,7 +1754,7 @@
                 html += '<div class="section">' + sub + '<table class="data"><thead><tr><th>Sailor</th>' +
                     (hasCount ? '<th>Regattas</th>' : '') + '</tr></thead><tbody>';
                 people.forEach(r => {
-                    html += '<tr><td>' + escapeHtml(cleanSailorName(r.name || r.skipper) || r.name || '') + '</td>' +
+                    html += '<tr><td>' + sailorNameLinkHtml(r.name || r.skipper) + '</td>' +
                         (hasCount ? '<td>' + escapeHtml(String(r.count ?? '')) + '</td>' : '') + '</tr>';
                 });
                 html += '</tbody></table></div>';
@@ -1911,11 +1919,10 @@
             scrollChatToMessageTop(div);
         }
 
-        async function send() {
-            const text = input.value.trim();
-            if (!text) return;
-            input.value = '';
-            addMsg(text, true);
+        async function sendMessage(text) {
+            const q = String(text || '').trim();
+            if (!q || sendBtn.disabled) return;
+            addMsg(q, true);
             sendBtn.disabled = true;
             status.textContent = '';
             status.className = 'status';
@@ -1923,7 +1930,7 @@
                 const res = await fetch('/api/race-results/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text })
+                    body: JSON.stringify({ message: q })
                 });
                 const j = await res.json();
                 if (!j.success) {
@@ -1942,10 +1949,23 @@
             }
         }
 
+        async function send() {
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = '';
+            await sendMessage(text);
+        }
+
         sendBtn.addEventListener('click', send);
         input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
         document.getElementById('newChatBtn').addEventListener('click', resetChat);
         chatPane.addEventListener('click', (e) => {
+            const sailorLink = e.target.closest('.js-sailor-link');
+            if (sailorLink) {
+                const name = sailorLink.getAttribute('data-sailor-name');
+                if (name) sendMessage(name);
+                return;
+            }
             const chip = e.target.closest('[data-prompt]');
             if (!chip) return;
             const prompt = chip.getAttribute('data-prompt');
