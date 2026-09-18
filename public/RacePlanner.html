@@ -17,114 +17,170 @@
             --navy: #04102b;
             --blue: #1d4ed8;
             --sky: #eaf3fb;
-            --ok: #15803d;
-            --warn: #c2410c;
+            --ok: #16a34a;
+            --warn: #dc2626;
             --muted: #66758a;
         }
         * { box-sizing: border-box; }
         html, body { margin: 0; height: 100%; height: 100dvh; font-family: Inter, system-ui, sans-serif; background: var(--sky); color: #14204a; }
         body { display: flex; flex-direction: column; overflow: hidden; }
-        body.kiosk .topbar { display: none; }
-        body.kiosk { background: #04102b; }
 
         .topbar {
             display: flex; align-items: center; justify-content: space-between; gap: 10px;
-            padding: calc(8px + env(safe-area-inset-top)) 14px 8px;
+            padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
             background: var(--navy); color: #fff; flex-shrink: 0;
         }
-        .brand { display: flex; align-items: center; gap: 8px; color: #fff; text-decoration: none; font-weight: 800; }
-        .brand img { height: 32px; }
-        .topbar-meta { font-size: 0.82rem; opacity: 0.85; text-align: right; }
+        .brand { display: flex; align-items: center; gap: 8px; color: #fff; text-decoration: none; font-weight: 800; font-size: 0.95rem; }
+        .brand img { height: 28px; }
+        .topbar-meta { font-size: 0.78rem; opacity: 0.88; text-align: right; line-height: 1.25; }
 
         .screen { display: none; flex: 1; min-height: 0; flex-direction: column; }
         .screen.active { display: flex; }
 
         .landing {
-            align-items: center; justify-content: center; padding: 24px 16px;
+            align-items: center; justify-content: center; padding: 20px 16px;
             overflow: auto;
         }
-        .landing h1 { margin: 0 0 8px; font-size: clamp(1.8rem, 5vw, 2.6rem); letter-spacing: -0.04em; text-align: center; }
-        .landing p.lead { margin: 0 0 28px; color: var(--muted); text-align: center; max-width: 420px; }
-        .role-cards { display: grid; gap: 16px; width: min(640px, 100%); grid-template-columns: 1fr; }
+        .landing h1 { margin: 0 0 8px; font-size: clamp(1.7rem, 6vw, 2.4rem); letter-spacing: -0.04em; text-align: center; }
+        .landing p.lead { margin: 0 0 22px; color: var(--muted); text-align: center; max-width: 420px; }
+        .role-cards { display: grid; gap: 14px; width: min(640px, 100%); grid-template-columns: 1fr; }
         @media (min-width: 700px) { .role-cards { grid-template-columns: 1fr 1fr; } }
         .role-card {
-            background: #fff; border-radius: 20px; padding: 24px; text-align: center;
-            border: 1px solid #d7e3f0; box-shadow: 0 16px 40px rgba(15,40,80,.08); cursor: pointer;
+            background: #fff; border-radius: 20px; padding: 22px; text-align: center;
+            border: 1px solid #d7e3f0; box-shadow: 0 16px 40px rgba(15,40,80,.08);
         }
-        .role-card:hover { border-color: var(--blue); }
         .role-card h2 { margin: 8px 0 8px; }
-        .role-card p { color: var(--muted); font-size: 0.95rem; }
-        .role-icon { font-size: 2.4rem; }
+        .role-card p { color: var(--muted); font-size: 0.92rem; }
+        .role-icon { font-size: 2.2rem; }
 
-        .join-box { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+        .join-box { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
         input, select, button { font: inherit; }
         input, select {
             width: 100%; min-height: 46px; border-radius: 12px; border: 1px solid #c9d7ea;
             padding: 10px 12px;
         }
         .btn {
-            border: 0; border-radius: 12px; min-height: 46px; padding: 10px 16px;
-            font-weight: 700; cursor: pointer;
+            border: 0; border-radius: 14px; min-height: 48px; padding: 12px 16px;
+            font-weight: 800; cursor: pointer;
         }
         .btn.primary { background: var(--blue); color: #fff; }
         .btn.ghost { background: #e8eef6; color: #14204a; }
-        .btn.warn { background: #c2410c; color: #fff; }
+        .btn.warn { background: var(--warn); color: #fff; font-size: 1.05rem; }
         .btn:disabled { opacity: .45; }
 
         #map { height: 100%; width: 100%; background: #9fc5e0; }
         .map-wrap { flex: 1; min-height: 0; position: relative; }
-        .hud {
-            position: absolute; z-index: 500; pointer-events: none;
-            inset: 0;
-        }
+        .hud { position: absolute; z-index: 500; pointer-events: none; inset: 0; }
         .hud > * { pointer-events: auto; }
 
         .compass {
-            position: absolute; top: 12px; right: 12px;
-            width: 88px; height: 88px; border-radius: 50%;
-            background: rgba(255,255,255,.92);
-            border: 2px solid #14204a;
-            box-shadow: 0 8px 20px rgba(0,0,0,.15);
-            display: grid; place-items: center;
+            position: absolute; top: 10px; right: 10px;
+            width: 104px; height: 104px; border-radius: 50%;
+            background: rgba(255,255,255,.94);
+            border: 3px solid #14204a;
+            box-shadow: 0 8px 20px rgba(0,0,0,.16);
+            overflow: hidden;
         }
-        .compass-rose {
-            width: 70px; height: 70px; position: relative;
+        .compass-rose { width: 100%; height: 100%; position: relative; transition: transform 0.12s linear; }
+        .compass-tick {
+            position: absolute; font-weight: 800; font-size: 13px; color: #14204a;
         }
-        .compass-n {
-            position: absolute; top: -2px; left: 50%; transform: translateX(-50%);
-            font-weight: 800; font-size: 12px; color: #c2410c;
+        .compass-tick.n { top: 6px; left: 50%; transform: translateX(-50%); color: #dc2626; }
+        .compass-tick.e { right: 8px; top: 50%; transform: translateY(-50%); }
+        .compass-tick.s { bottom: 6px; left: 50%; transform: translateX(-50%); }
+        .compass-tick.w { left: 8px; top: 50%; transform: translateY(-50%); }
+        .lubber {
+            position: absolute; left: 50%; top: 2px; z-index: 2;
+            width: 0; height: 0; transform: translateX(-50%);
+            border-left: 7px solid transparent; border-right: 7px solid transparent;
+            border-top: 12px solid #04102b;
         }
-        .needle {
-            position: absolute; left: 50%; top: 8px; width: 0; height: 0;
-            border-left: 6px solid transparent; border-right: 6px solid transparent;
-            border-bottom: 28px solid #c2410c;
-            transform: translateX(-50%);
-            transform-origin: 50% 26px;
+        .compass-hdg {
+            position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+            font-size: 13px; font-weight: 800; z-index: 2; pointer-events: none;
         }
+
+        .nav-card {
+            display: none;
+            position: absolute; top: 10px; left: 10px; right: 126px;
+            background: rgba(4, 16, 43, .92); color: #fff;
+            border-radius: 18px; padding: 12px 14px;
+            box-shadow: 0 10px 24px rgba(0,0,0,.22);
+        }
+        .nav-card.show { display: block; }
+        .nav-card .nav-name { font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.75; font-weight: 800; }
+        .nav-row { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+        .nav-arrow-wrap {
+            width: 54px; height: 54px; border-radius: 50%;
+            background: #1d4ed8; display: grid; place-items: center; flex-shrink: 0;
+        }
+        .nav-arrow {
+            width: 0; height: 0;
+            border-left: 10px solid transparent; border-right: 10px solid transparent;
+            border-bottom: 26px solid #fff;
+            transform-origin: 50% 70%;
+        }
+        .nav-nums { min-width: 0; }
+        .nav-dist { font-size: 1.45rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
+        .nav-sub { font-size: 0.82rem; opacity: 0.85; margin-top: 2px; }
+        .nav-brg { font-size: 1.05rem; font-weight: 800; margin-top: 2px; }
+
+        .water-chip {
+            position: absolute; top: 118px; right: 10px;
+            background: rgba(255,255,255,.94); border-radius: 999px;
+            padding: 6px 10px; font-size: 0.75rem; font-weight: 800;
+            box-shadow: 0 6px 16px rgba(0,0,0,.12);
+        }
+        .water-chip.ready { background: #16a34a; color: #fff; }
+
+        .drag-readout {
+            display: none;
+            position: absolute; left: 50%; top: 50%; transform: translate(-50%, -70px);
+            background: #04102b; color: #fff; font-weight: 800;
+            padding: 8px 12px; border-radius: 12px; white-space: nowrap;
+            box-shadow: 0 8px 20px rgba(0,0,0,.25);
+        }
+        .drag-readout.show { display: block; }
 
         .toolbar {
-            position: absolute; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom));
+            position: absolute; left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom));
             background: rgba(255,255,255,.96); border-radius: 16px;
-            padding: 12px; box-shadow: 0 12px 30px rgba(15,40,80,.16);
+            padding: 10px; box-shadow: 0 12px 30px rgba(15,40,80,.16);
             display: flex; flex-direction: column; gap: 8px;
-            max-height: 42vh; overflow: auto;
+            max-height: 38vh; overflow: auto;
         }
-        .toolbar h3 { margin: 0; font-size: 0.95rem; }
-        .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        body.role-committee .toolbar { max-height: none; overflow: visible; padding: 8px; }
+        .toolbar h3 { margin: 0; font-size: 0.9rem; }
+        .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
         .chip {
-            background: #eef4ff; color: #163a7a; border-radius: 999px; padding: 6px 10px;
-            font-size: 0.8rem; font-weight: 700; border: 1px solid #c9dbf5; cursor: pointer;
+            background: #eef4ff; color: #163a7a; border-radius: 999px; padding: 7px 10px;
+            font-size: 0.78rem; font-weight: 800; border: 1px solid #c9dbf5; cursor: pointer;
         }
         .chip.on { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
-        .stat { font-size: 0.88rem; color: #334155; }
-        .stat b { color: #14204a; }
-        .hint { font-size: 0.8rem; color: var(--muted); }
         .err { color: #b91c1c; font-size: 0.85rem; }
+        .hint { font-size: 0.78rem; color: var(--muted); }
 
-        .degree-canvas {
-            position: absolute; inset: 0; z-index: 410; pointer-events: none;
+        .status-ring {
+            position: absolute; inset: 0; z-index: 440; pointer-events: none;
+            border: 6px solid #dc2626;
+            box-shadow: inset 0 0 22px rgba(220, 38, 38, 0.22);
         }
+        .status-ring.yellow { border-color: #eab308; box-shadow: inset 0 0 22px rgba(234, 179, 8, 0.22); }
+        .status-ring.green { border-color: #16a34a; border-width: 8px; box-shadow: inset 0 0 28px rgba(22, 163, 74, 0.32); }
+        .configured-banner {
+            display: none;
+            position: absolute; left: 50%; bottom: calc(78px + env(safe-area-inset-bottom));
+            transform: translateX(-50%);
+            z-index: 530;
+            background: #16a34a; color: #fff;
+            font-weight: 800; letter-spacing: 0.04em;
+            padding: 8px 14px; border-radius: 999px;
+            box-shadow: 0 8px 20px rgba(0,0,0,.25);
+            white-space: nowrap; font-size: 0.85rem;
+        }
+        .configured-banner.show { display: block; }
 
+        .degree-canvas { position: absolute; inset: 0; z-index: 410; pointer-events: none; }
         .leaflet-container { font-family: inherit; }
         .mark-label {
             background: #dc2626; color: #fff; border: 0; border-radius: 8px;
@@ -132,49 +188,21 @@
         }
         .mark-label.dropped { background: #16a34a; }
         .home-label { background: #15803d; }
-        .drop-label { background: #16a34a; }
-        .status-ring {
-            position: absolute; inset: 0; z-index: 440; pointer-events: none;
-            border: 8px solid #dc2626;
-            box-shadow: inset 0 0 28px rgba(220, 38, 38, 0.28);
-        }
-        .status-ring.yellow {
-            border-color: #eab308;
-            box-shadow: inset 0 0 28px rgba(234, 179, 8, 0.28);
-        }
-        .status-ring.green {
-            border-color: #16a34a;
-            border-width: 10px;
-            box-shadow: inset 0 0 36px rgba(22, 163, 74, 0.38);
-        }
-        .configured-banner {
-            display: none;
-            position: absolute; top: calc(10px + env(safe-area-inset-top)); left: 50%;
-            transform: translateX(-50%);
-            z-index: 530;
-            background: #16a34a; color: #fff;
-            font-weight: 800; letter-spacing: 0.04em;
-            padding: 8px 16px; border-radius: 999px;
-            box-shadow: 0 8px 20px rgba(0,0,0,.25);
-            white-space: nowrap;
-        }
-        .configured-banner.show { display: block; }
-        .kiosk-exit {
-            display: none;
-            position: absolute; top: calc(10px + env(safe-area-inset-top)); left: 12px;
-            z-index: 540;
-        }
-        body.kiosk .kiosk-exit { display: block; }
-        .kiosk-exit .btn { min-height: 36px; padding: 6px 10px; font-size: 0.8rem; }
+        .you-label { background: #7c3aed; color: #fff; border: 0; border-radius: 8px; padding: 2px 7px; font-weight: 800; font-size: 11px; }
         .dist-label span {
-            background: rgba(255,255,255,.92);
+            background: rgba(255,255,255,.94);
             color: #14204a;
             border-radius: 8px;
-            padding: 2px 6px;
+            padding: 3px 7px;
             font-size: 11px;
-            font-weight: 700;
+            font-weight: 800;
             white-space: nowrap;
             box-shadow: 0 1px 4px rgba(0,0,0,.15);
+        }
+        .you-dot {
+            width: 18px; height: 18px; border-radius: 50%;
+            background: #7c3aed; border: 3px solid #fff;
+            box-shadow: 0 0 0 8px rgba(124, 58, 237, .25);
         }
     </style>
 </head>
@@ -191,7 +219,7 @@
         <h1>Race Planner</h1>
         <p class="lead">Set the course from shore, then send Race Committee boats out to drop the marks.</p>
         <div class="role-cards">
-            <div class="role-card" id="pmoCard">
+            <div class="role-card">
                 <div class="role-icon">🗺️</div>
                 <h2>Race PMO</h2>
                 <p>Your GPS is home. Draw the course, drag marks, and watch dropped positions come in.</p>
@@ -201,10 +229,10 @@
                     <p class="hint">The course name becomes today’s join code. The course expires at midnight.</p>
                 </div>
             </div>
-            <div class="role-card" id="rcCard">
+            <div class="role-card">
                 <div class="role-icon">🚤</div>
                 <h2>Race Committee</h2>
-                <p>Join the PMO course, see live bearing to each mark, and pin it when you drop it in the water.</p>
+                <p>Join the PMO course, tap a mark, and drop it when it is in the water.</p>
                 <div class="join-box">
                     <input id="joinCode" placeholder="Course name / code" maxlength="28" autocomplete="off" style="text-transform:uppercase">
                     <input id="rcName" placeholder="Your name or boat">
@@ -221,14 +249,32 @@
             <canvas class="degree-canvas" id="degreeCanvas"></canvas>
             <div class="status-ring" id="statusRing"></div>
             <div class="configured-banner" id="configuredBanner">Course Configured</div>
-            <button type="button" class="btn ghost kiosk-exit" id="exitKioskBtn">Exit kiosk</button>
             <div class="hud">
-                <div class="compass" title="North">
-                    <div class="compass-rose" id="compassRose">
-                        <div class="compass-n">N</div>
-                        <div class="needle" id="needle"></div>
+                <div class="nav-card" id="navCard">
+                    <div class="nav-name" id="navName">Mark</div>
+                    <div class="nav-row">
+                        <div class="nav-arrow-wrap" title="Turn this way">
+                            <div class="nav-arrow" id="navArrow"></div>
+                        </div>
+                        <div class="nav-nums">
+                            <div class="nav-dist" id="navDist">—</div>
+                            <div class="nav-sub" id="navSub">—</div>
+                            <div class="nav-brg" id="navBrg">—</div>
+                        </div>
                     </div>
                 </div>
+                <div class="compass" title="Live compass">
+                    <div class="lubber"></div>
+                    <div class="compass-rose" id="compassRose">
+                        <div class="compass-tick n">N</div>
+                        <div class="compass-tick e">E</div>
+                        <div class="compass-tick s">S</div>
+                        <div class="compass-tick w">W</div>
+                    </div>
+                    <div class="compass-hdg" id="compassHdg">—</div>
+                </div>
+                <div class="water-chip" id="waterChip">0 / 0 in the water</div>
+                <div class="drag-readout" id="dragReadout"></div>
                 <div class="toolbar" id="toolbar"></div>
             </div>
         </div>
@@ -237,6 +283,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         const MARK_TYPES = ['Windward', 'Leeward', 'Pin', 'Committee', 'Offset', 'Gate P', 'Gate S', 'Mark'];
+        const NEAR_M = 10 / 3.28084;
         let role = null;
         let courseCode = null;
         let pmoToken = null;
@@ -246,6 +293,8 @@
         let state = null;
         let map = null;
         let layers = { marks: null, drops: null, people: null, lines: null, home: null };
+        let youMarker = null;
+        let youCircle = null;
         let selectedMarkerId = null;
         let nextLabel = 'Windward';
         let myPos = null;
@@ -253,8 +302,8 @@
         let watchId = null;
         let pollTimer = null;
         let dragging = false;
-        let kioskOn = false;
-        let wakeLock = null;
+        let lastPush = 0;
+        let orientOn = false;
 
         function $(id) { return document.getElementById(id); }
         function toRad(d) { return d * Math.PI / 180; }
@@ -273,11 +322,22 @@
         function cardinal(deg) {
             return ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(deg / 45) % 8];
         }
+        function metersToFeet(m) { return m * 3.28084; }
+        function metersToMiles(m) { return m / 1609.344; }
         function fmtDist(m) {
             if (!Number.isFinite(m)) return '—';
-            const nm = m / 1852;
-            if (m < 1000) return Math.round(m) + ' m · ' + nm.toFixed(2) + ' nm';
-            return (m / 1000).toFixed(2) + ' km · ' + nm.toFixed(2) + ' nm';
+            const ft = metersToFeet(m);
+            const miles = metersToMiles(m);
+            if (ft < 5280) return Math.round(ft) + ' ft · ' + miles.toFixed(ft < 500 ? 3 : 2) + ' mi';
+            return miles.toFixed(2) + ' mi · ' + Math.round(ft).toLocaleString() + ' ft';
+        }
+        function fmtDistParts(m) {
+            if (!Number.isFinite(m)) return { main: '—', sub: '' };
+            const ft = metersToFeet(m);
+            const miles = metersToMiles(m);
+            if (ft < 1000) return { main: Math.round(ft) + ' ft', sub: miles.toFixed(3) + ' mi' };
+            if (ft < 5280) return { main: Math.round(ft) + ' ft', sub: miles.toFixed(2) + ' mi' };
+            return { main: miles.toFixed(2) + ' mi', sub: Math.round(ft).toLocaleString() + ' ft' };
         }
         function fmtBrg(deg) {
             return Math.round(deg) + '° ' + cardinal(deg);
@@ -296,16 +356,52 @@
             return new Promise((resolve, reject) => {
                 if (!navigator.geolocation) return reject(new Error('GPS not available'));
                 navigator.geolocation.getCurrentPosition(
-                    (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, heading: p.coords.heading }),
+                    (p) => resolve({
+                        lat: p.coords.latitude,
+                        lng: p.coords.longitude,
+                        heading: p.coords.heading,
+                        accuracy: p.coords.accuracy
+                    }),
                     (err) => reject(err),
                     { enableHighAccuracy: true, timeout: 12000, maximumAge: 3000 }
                 );
             });
         }
 
+        async function enableCompass() {
+            if (orientOn) return;
+            try {
+                if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    await DeviceOrientationEvent.requestPermission();
+                }
+            } catch (_err) {}
+            const onOrient = (e) => {
+                let h = null;
+                if (Number.isFinite(e.webkitCompassHeading)) h = e.webkitCompassHeading;
+                else if (e.absolute && Number.isFinite(e.alpha)) h = (360 - e.alpha) % 360;
+                else if (Number.isFinite(e.alpha)) h = (360 - e.alpha) % 360;
+                if (h != null) applyHeading(h);
+            };
+            window.addEventListener('deviceorientation', onOrient, true);
+            window.addEventListener('deviceorientationabsolute', onOrient, true);
+            orientOn = true;
+        }
+
+        function applyHeading(deg) {
+            if (!Number.isFinite(deg)) return;
+            myHeading = (deg + 360) % 360;
+            const rose = $('compassRose');
+            if (rose) rose.style.transform = 'rotate(' + (-myHeading) + 'deg)';
+            const hdg = $('compassHdg');
+            if (hdg) hdg.textContent = Math.round(myHeading) + '°';
+            updateLiveHud();
+        }
+
         function showMap() {
             $('landing').classList.remove('active');
             $('mapScreen').classList.add('active');
+            document.body.classList.toggle('role-committee', role === 'committee');
+            document.body.classList.toggle('role-pmo', role === 'pmo');
             if (!map) {
                 map = L.map('map', { zoomControl: true, attributionControl: true });
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -321,56 +417,41 @@
                 map.on('click', onMapClick);
                 setTimeout(() => { map.invalidateSize(); drawDegrees(); }, 250);
             }
-            if (window.matchMedia('(max-width: 900px), (pointer: coarse)').matches) {
-                enterKiosk();
-            }
-        }
-
-        async function enterKiosk() {
-            kioskOn = true;
-            document.body.classList.add('kiosk');
-            const el = document.documentElement;
-            try {
-                if (el.requestFullscreen) await el.requestFullscreen();
-                else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-            } catch (_err) {}
-            try {
-                if (navigator.wakeLock && navigator.wakeLock.request) {
-                    wakeLock = await navigator.wakeLock.request('screen');
-                }
-            } catch (_err) {}
-            setTimeout(() => { if (map) { map.invalidateSize(); drawDegrees(); } }, 250);
-        }
-
-        async function exitKiosk() {
-            kioskOn = false;
-            document.body.classList.remove('kiosk');
-            try {
-                if (document.fullscreenElement && document.exitFullscreen) await document.exitFullscreen();
-                else if (document.webkitFullscreenElement && document.webkitExitFullscreen) document.webkitExitFullscreen();
-            } catch (_err) {}
-            try { if (wakeLock) { await wakeLock.release(); wakeLock = null; } } catch (_err) {}
-            setTimeout(() => { if (map) { map.invalidateSize(); drawDegrees(); } }, 250);
         }
 
         function updateCourseStatus() {
             const ring = $('statusRing');
             const banner = $('configuredBanner');
-            if (!ring) return;
+            const chip = $('waterChip');
             const total = (state && state.markerCount) || (state && state.markers && state.markers.length) || 0;
             const dropped = (state && state.droppedCount) || 0;
-            ring.classList.remove('yellow', 'green');
-            if (total > 0 && dropped >= total) ring.classList.add('green');
-            else if (dropped > 0) ring.classList.add('yellow');
+            if (ring) {
+                ring.classList.remove('yellow', 'green');
+                if (total > 0 && dropped >= total) ring.classList.add('green');
+                else if (dropped > 0) ring.classList.add('yellow');
+            }
             if (banner) banner.classList.toggle('show', Boolean(state && state.configured));
+            if (chip) {
+                chip.textContent = dropped + ' / ' + total + ' in the water';
+                chip.classList.toggle('ready', Boolean(state && state.configured));
+            }
         }
 
         function icon(color, letter) {
             return L.divIcon({
                 className: '',
-                html: '<div style="background:' + color + ';color:#fff;border-radius:50%;width:28px;height:28px;display:grid;place-items:center;font-weight:800;font-size:12px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3)">' + letter + '</div>',
-                iconSize: [28, 28],
-                iconAnchor: [14, 14]
+                html: '<div style="background:' + color + ';color:#fff;border-radius:50%;width:30px;height:30px;display:grid;place-items:center;font-weight:800;font-size:13px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3)">' + letter + '</div>',
+                iconSize: [30, 30],
+                iconAnchor: [15, 15]
+            });
+        }
+
+        function youIcon() {
+            return L.divIcon({
+                className: '',
+                html: '<div class="you-dot"></div>',
+                iconSize: [18, 18],
+                iconAnchor: [9, 9]
             });
         }
 
@@ -388,8 +469,8 @@
             if (span < 0.08) step = 0.01;
             if (span < 0.03) step = 0.005;
             if (span < 0.01) step = 0.001;
-            ctx.strokeStyle = 'rgba(20,32,74,.28)';
-            ctx.fillStyle = 'rgba(20,32,74,.7)';
+            ctx.strokeStyle = 'rgba(20,32,74,.22)';
+            ctx.fillStyle = 'rgba(20,32,74,.65)';
             ctx.lineWidth = 1;
             ctx.font = '11px Inter, sans-serif';
             const startLat = Math.floor(b.getSouth() / step) * step;
@@ -406,6 +487,75 @@
             }
         }
 
+        function originPos() {
+            if (myPos) return myPos;
+            if (state && state.home) return state.home;
+            return null;
+        }
+
+        function lineFromOrigin(toLat, toLng, color) {
+            const origin = originPos();
+            if (!origin) return;
+            L.polyline([[origin.lat, origin.lng], [toLat, toLng]], {
+                color: color || '#dc2626',
+                weight: 2,
+                dashArray: '6 6'
+            }).addTo(layers.lines);
+            const mid = [(origin.lat + toLat) / 2, (origin.lng + toLng) / 2];
+            L.marker(mid, {
+                interactive: false,
+                icon: L.divIcon({
+                    className: 'dist-label',
+                    html: '<span>' + fmtDist(haversine(origin.lat, origin.lng, toLat, toLng)) + '</span>',
+                    iconSize: [170, 22],
+                    iconAnchor: [85, 11]
+                })
+            }).addTo(layers.lines);
+        }
+
+        function updateYouMarker() {
+            if (!map || !myPos) return;
+            if (!youMarker) {
+                youMarker = L.marker([myPos.lat, myPos.lng], { icon: youIcon(), zIndexOffset: 600 })
+                    .bindTooltip('You', { permanent: true, direction: 'right', className: 'you-label' })
+                    .addTo(map);
+            } else {
+                youMarker.setLatLng([myPos.lat, myPos.lng]);
+            }
+            const acc = Number(myPos.accuracy);
+            if (Number.isFinite(acc) && acc > 0 && acc < 80) {
+                if (!youCircle) {
+                    youCircle = L.circle([myPos.lat, myPos.lng], {
+                        radius: acc, color: '#7c3aed', weight: 1, fillOpacity: 0.08
+                    }).addTo(map);
+                } else {
+                    youCircle.setLatLng([myPos.lat, myPos.lng]);
+                    youCircle.setRadius(acc);
+                }
+            }
+        }
+
+        function updateLiveHud() {
+            const mark = selectedMark();
+            const card = $('navCard');
+            if (role === 'committee' && mark && myPos) {
+                const dist = haversine(myPos.lat, myPos.lng, mark.lat, mark.lng);
+                const brg = bearing(myPos.lat, myPos.lng, mark.lat, mark.lng);
+                const rel = ((brg - myHeading) + 360) % 360;
+                const parts = fmtDistParts(dist);
+                $('navName').textContent = mark.label + (mark.dropped ? ' · in the water' : '');
+                $('navDist').textContent = parts.main;
+                $('navSub').textContent = parts.sub;
+                $('navBrg').textContent = fmtBrg(brg);
+                $('navArrow').style.transform = 'rotate(' + rel + 'deg)';
+                card.classList.add('show');
+            } else {
+                card.classList.remove('show');
+            }
+            const drop = $('dropBtn');
+            if (drop) drop.disabled = !(role === 'committee' && myPos && mark && !mark.dropped);
+        }
+
         function renderState() {
             if (!map || !state) return;
             layers.marks.clearLayers();
@@ -414,13 +564,6 @@
             layers.lines.clearLayers();
             if (layers.home) { map.removeLayer(layers.home); layers.home = null; }
 
-            const home = state.home;
-            if (home) {
-                layers.home = L.marker([home.lat, home.lng], { icon: icon('#15803d', 'H'), draggable: false })
-                    .bindTooltip('PMO home', { permanent: true, direction: 'right', className: 'home-label' })
-                    .addTo(map);
-            }
-
             (state.markers || []).forEach((m) => {
                 const dropped = Boolean(m.dropped);
                 const color = dropped ? '#16a34a' : (selectedMarkerId === m.id ? '#b91c1c' : '#dc2626');
@@ -428,16 +571,32 @@
                     icon: icon(color, (m.label || 'M').slice(0, 1)),
                     draggable: role === 'pmo' && !dropped
                 }).addTo(layers.marks);
-                mk.bindTooltip(m.label + (dropped ? ' · dropped' : ''), {
+                mk.bindTooltip(m.label + (dropped ? ' · in water' : ''), {
                     permanent: true,
                     direction: 'top',
                     className: 'mark-label' + (dropped ? ' dropped' : '')
                 });
-                mk.on('click', () => { selectedMarkerId = m.id; renderToolbar(); renderState(); });
+                mk.on('click', (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    selectedMarkerId = m.id;
+                    renderToolbar();
+                    renderState();
+                    updateLiveHud();
+                });
                 if (role === 'pmo' && !dropped) {
                     mk.on('dragstart', () => { dragging = true; });
+                    mk.on('drag', () => {
+                        const p = mk.getLatLng();
+                        const origin = originPos();
+                        const box = $('dragReadout');
+                        if (origin && box) {
+                            box.textContent = fmtDist(haversine(origin.lat, origin.lng, p.lat, p.lng));
+                            box.classList.add('show');
+                        }
+                    });
                     mk.on('dragend', async () => {
                         const p = mk.getLatLng();
+                        $('dragReadout').classList.remove('show');
                         try {
                             state = await api('/courses/' + courseCode + '/markers/' + m.id, {
                                 method: 'PATCH',
@@ -449,30 +608,7 @@
                         renderToolbar();
                     });
                 }
-                if (home) {
-                    L.polyline([[home.lat, home.lng], [m.lat, m.lng]], {
-                        color: dropped ? '#16a34a' : '#dc2626',
-                        weight: 2,
-                        dashArray: '6 6'
-                    }).addTo(layers.lines);
-                    const mid = [(home.lat + m.lat) / 2, (home.lng + m.lng) / 2];
-                    L.marker(mid, {
-                        interactive: false,
-                        icon: L.divIcon({
-                            className: 'dist-label',
-                            html: '<span>' + fmtDist(haversine(home.lat, home.lng, m.lat, m.lng)) + '</span>',
-                            iconSize: [140, 22],
-                            iconAnchor: [70, 11]
-                        })
-                    }).addTo(layers.lines);
-                }
-            });
-
-            (state.drops || []).forEach((d) => {
-                if (d.marker_id) return;
-                L.marker([d.lat, d.lng], { icon: icon('#16a34a', 'D'), draggable: false })
-                    .bindTooltip('Dropped' + (d.user_name ? ' · ' + d.user_name : ''), { permanent: true, direction: 'bottom', className: 'drop-label' })
-                    .addTo(layers.drops);
+                if (role === 'pmo') lineFromOrigin(m.lat, m.lng, dropped ? '#16a34a' : '#dc2626');
             });
 
             (state.positions || []).forEach((p) => {
@@ -482,14 +618,11 @@
                     .addTo(layers.people);
             });
 
-            if (myPos) {
-                L.marker([myPos.lat, myPos.lng], { icon: icon('#7c3aed', 'Y') })
-                    .bindTooltip('You', { permanent: true, className: 'you-label' })
-                    .addTo(layers.people);
-            }
+            updateYouMarker();
             drawDegrees();
             updateCourseStatus();
             renderToolbar();
+            updateLiveHud();
         }
 
         function selectedMark() {
@@ -498,72 +631,44 @@
 
         function renderToolbar() {
             const box = $('toolbar');
-            const home = state && state.home;
             const mark = selectedMark();
             const courseName = (state && state.name) || courseCode;
-            let html = '<div class="row"><h3>' + (role === 'pmo' ? 'Race PMO' : 'Race Committee') +
-                ' · <b>' + courseName + '</b></h3></div>';
-            if (state && state.configured) {
-                html += '<div class="stat"><b>Course Configured</b> — all marks are in the water.</div>';
-            } else if (state && state.markerCount) {
-                html += '<div class="stat">Marks in water: <b>' + (state.droppedCount || 0) + ' / ' + state.markerCount + '</b></div>';
-            }
-            if (role === 'pmo') {
-                html += '<div class="row">';
+            if (role === 'committee') {
+                box.innerHTML = '<button class="btn warn" id="dropBtn"' +
+                    ((myPos && mark && !mark.dropped) ? '' : ' disabled') +
+                    '>Marker Dropped</button>';
+                const drop = $('dropBtn');
+                if (drop) drop.onclick = dropMark;
+            } else {
+                let html = '<div class="row">';
                 MARK_TYPES.forEach((t) => {
                     html += '<button type="button" class="chip' + (nextLabel === t ? ' on' : '') + '" data-label="' + t + '">' + t + '</button>';
                 });
-                html += '</div><p class="hint">Tap the map to add a ' + nextLabel + '. Red = planned. Green = dropped in the water.</p>';
-                html += '<button class="btn ghost" id="copyCode">Copy course code ' + courseCode + '</button>';
-                if (mark) {
-                    html += '<div class="stat">Selected: <b>' + mark.label + '</b>' + (mark.dropped ? ' (dropped)' : ' (waiting)') + '</div>';
-                    if (!mark.dropped) html += '<button class="btn ghost" id="delMark">Remove this mark</button>';
-                }
-            } else {
-                html += '<p class="hint">Select a red mark, then steer to it. Tap Marker Dropped when it is in the water — it turns green for everyone.</p>';
+                html += '</div>';
+                html += '<button class="btn ghost" id="copyCode">Copy ' + courseCode + '</button>';
+                if (mark && !mark.dropped) html += '<button class="btn ghost" id="delMark">Remove ' + mark.label + '</button>';
+                box.innerHTML = html;
+                box.querySelectorAll('.chip').forEach((btn) => {
+                    btn.onclick = () => { nextLabel = btn.getAttribute('data-label'); renderToolbar(); };
+                });
+                const copy = $('copyCode');
+                if (copy) copy.onclick = async () => {
+                    try { await navigator.clipboard.writeText(courseCode); copy.textContent = 'Copied'; } catch (e) { alert(courseCode); }
+                };
+                const del = $('delMark');
+                if (del) del.onclick = async () => {
+                    try {
+                        state = await api('/courses/' + courseCode + '/markers/' + selectedMarkerId, { method: 'DELETE', body: JSON.stringify({ pmoToken }) });
+                        selectedMarkerId = null;
+                        renderState();
+                    } catch (err) { alert(err.message); }
+                };
             }
-            if (myPos && mark) {
-                const brg = bearing(myPos.lat, myPos.lng, mark.lat, mark.lng);
-                const dist = haversine(myPos.lat, myPos.lng, mark.lat, mark.lng);
-                html += '<div class="stat">To <b>' + mark.label + '</b>: ' + fmtBrg(brg) + ' · ' + fmtDist(dist) + '</div>';
-            } else if (myPos && home) {
-                const brg = bearing(myPos.lat, myPos.lng, home.lat, home.lng);
-                html += '<div class="stat">To home: ' + fmtBrg(brg) + ' · ' + fmtDist(haversine(myPos.lat, myPos.lng, home.lat, home.lng)) + '</div>';
-            }
-            if (home && state.markers && state.markers.length) {
-                html += '<div class="stat">Home to marks: ' + state.markers.map((m) => m.label + ' ' + fmtDist(haversine(home.lat, home.lng, m.lat, m.lng))).join(' · ') + '</div>';
-            }
-            if (role === 'committee') {
-                html += '<button class="btn warn" id="dropBtn"' + (myPos ? '' : ' disabled') + '>Marker Dropped</button>';
-            }
-            html += '<button class="btn ghost" id="kioskBtn">' + (kioskOn ? 'Exit kiosk' : 'Kiosk full screen') + '</button>';
-            box.innerHTML = html;
-            box.querySelectorAll('.chip').forEach((btn) => {
-                btn.onclick = () => { nextLabel = btn.getAttribute('data-label'); renderToolbar(); };
-            });
-            const copy = $('copyCode');
-            if (copy) copy.onclick = async () => {
-                try { await navigator.clipboard.writeText(courseCode); copy.textContent = 'Copied ' + courseCode; } catch (e) { alert(courseCode); }
-            };
-            const del = $('delMark');
-            if (del) del.onclick = async () => {
-                try {
-                    state = await api('/courses/' + courseCode + '/markers/' + selectedMarkerId, { method: 'DELETE', body: JSON.stringify({ pmoToken }) });
-                    selectedMarkerId = null;
-                    renderState();
-                } catch (err) { alert(err.message); }
-            };
-            const drop = $('dropBtn');
-            if (drop) drop.onclick = dropMark;
-            const kioskBtn = $('kioskBtn');
-            if (kioskBtn) kioskBtn.onclick = () => { kioskOn ? exitKiosk() : enterKiosk(); renderToolbar(); };
-            $('topMeta').textContent = courseCode ? ((role === 'pmo' ? 'PMO · ' : 'Committee · ') + courseName) : '';
+            $('topMeta').textContent = courseCode ? ((role === 'pmo' ? 'PMO' : 'Committee') + ' · ' + courseName) : '';
         }
 
         async function onMapClick(e) {
-            if (role !== 'pmo') {
-                return;
-            }
+            if (role !== 'pmo') return;
             try {
                 state = await api('/courses/' + courseCode + '/markers', {
                     method: 'POST',
@@ -575,6 +680,19 @@
 
         async function dropMark() {
             if (!myPos) return;
+            const mark = selectedMark();
+            if (!mark) {
+                alert('Tap the mark you dropped.');
+                return;
+            }
+            const dist = haversine(myPos.lat, myPos.lng, mark.lat, mark.lng);
+            if (dist > NEAR_M) {
+                const ok = confirm(
+                    'You are ' + fmtDist(dist) + ' from ' + mark.label +
+                    '. Drop it here anyway?'
+                );
+                if (!ok) return;
+            }
             try {
                 state = await api('/courses/' + courseCode + '/drop', {
                     method: 'POST',
@@ -589,11 +707,14 @@
 
         async function pushPosition() {
             if (!courseCode || !myPos) return;
+            const now = Date.now();
+            if (now - lastPush < 2000) return;
+            lastPush = now;
             try {
                 const body = { lat: myPos.lat, lng: myPos.lng, userId, userName, role, heading: myHeading };
                 if (pmoToken) body.pmoToken = pmoToken;
                 state = await api('/courses/' + courseCode + '/position', { method: 'POST', body: JSON.stringify(body) });
-                renderState();
+                if (!dragging) renderState();
             } catch (err) {
                 console.log(err);
             }
@@ -602,24 +723,27 @@
         function startWatch() {
             if (watchId || !navigator.geolocation) return;
             watchId = navigator.geolocation.watchPosition((p) => {
-                myPos = { lat: p.coords.latitude, lng: p.coords.longitude };
-                if (Number.isFinite(p.coords.heading)) myHeading = p.coords.heading;
-                $('needle').style.transform = 'translateX(-50%) rotate(' + myHeading + 'deg)';
-                pushPosition();
-            }, (err) => console.log(err), { enableHighAccuracy: true, maximumAge: 1000 });
-            window.addEventListener('deviceorientationabsolute', (e) => {
-                if (e.absolute && Number.isFinite(e.alpha)) {
-                    myHeading = (360 - e.alpha) % 360;
-                    $('needle').style.transform = 'translateX(-50%) rotate(' + myHeading + 'deg)';
+                myPos = {
+                    lat: p.coords.latitude,
+                    lng: p.coords.longitude,
+                    accuracy: p.coords.accuracy
+                };
+                if (Number.isFinite(p.coords.heading) && p.coords.speed > 0.4) {
+                    applyHeading(p.coords.heading);
                 }
-            });
+                updateYouMarker();
+                updateLiveHud();
+                pushPosition();
+            }, (err) => console.log(err), { enableHighAccuracy: true, maximumAge: 800, timeout: 15000 });
         }
 
         async function startPmo() {
             $('landingErr').textContent = '';
             try {
+                await enableCompass();
                 const pos = await gps();
                 myPos = pos;
+                if (Number.isFinite(pos.heading)) applyHeading(pos.heading);
                 const name = $('pmoName').value.trim();
                 if (!name) throw new Error('Enter a course name. That name is the join code for today.');
                 const created = await api('/courses', { method: 'POST', body: JSON.stringify({ name, lat: pos.lat, lng: pos.lng }) });
@@ -649,10 +773,12 @@
                 userName = $('rcName').value.trim() || 'Committee';
                 localStorage.setItem('rp_name', userName);
                 if (!courseCode) throw new Error('Enter the course code from the PMO.');
+                await enableCompass();
                 state = await api('/courses/' + courseCode);
                 role = 'committee';
                 const pos = await gps();
                 myPos = pos;
+                if (Number.isFinite(pos.heading)) applyHeading(pos.heading);
                 showMap();
                 map.setView([pos.lat, pos.lng], 16);
                 startWatch();
@@ -668,12 +794,6 @@
 
         $('createCourseBtn').onclick = startPmo;
         $('joinBtn').onclick = joinCommittee;
-        $('exitKioskBtn').onclick = () => { exitKiosk(); renderToolbar(); };
-        document.addEventListener('fullscreenchange', () => {
-            if (!document.fullscreenElement && kioskOn) {
-                document.body.classList.add('kiosk');
-            }
-        });
         window.addEventListener('resize', () => { if (map) { map.invalidateSize(); drawDegrees(); } });
     </script>
 </body>

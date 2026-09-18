@@ -915,8 +915,8 @@
                     <h3>Drop photos here</h3>
                     <p>or choose them from your device — they will upload right away</p>
                     <div class="choose-wrap">
-                        <input type="file" id="imageInput" class="choose-file" accept="image/*" multiple>
-                        <span class="choose-btn">Choose photos</span>
+                        <label class="choose-btn" for="imageInput">Choose photos</label>
+                        <input type="file" id="imageInput" class="choose-file" accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.bmp,.tif,.tiff" multiple>
                     </div>
                     <p class="hint" id="chooseStatus"></p>
                 </div>
@@ -994,6 +994,7 @@
         const footerHint = document.getElementById('footerHint');
 
         let selectedItems = [];
+        let scanning = false;
         let totalFiles = 0;
         let completedFiles = 0;
         let sailNumbersFound = 0;
@@ -1069,27 +1070,35 @@
         }
 
         function addFiles(fileList, autoStart) {
-            const files = Array.from(fileList || []);
-            if (!files.length) return 0;
-            const incoming = files.filter(isImageFile);
-            if (!incoming.length) {
-                if (chooseStatus) chooseStatus.textContent = 'Those files could not be used. Please choose photo files.';
+            try {
+                const files = Array.from(fileList || []);
+                if (!files.length) return 0;
+                const incoming = files.filter(isImageFile);
+                if (!incoming.length) {
+                    if (chooseStatus) chooseStatus.textContent = 'Those files could not be used. Please choose photo files.';
+                    return 0;
+                }
+                const existing = new Set(selectedItems.map((item) => fileKey(item.file)));
+                incoming.forEach((file) => {
+                    if (existing.has(fileKey(file))) return;
+                    existing.add(fileKey(file));
+                    selectedItems.push({ file, url: URL.createObjectURL(file) });
+                });
+                if (incoming[0]) {
+                    populateFromExif(incoming[0]).catch(() => {});
+                }
+                if (autoStart !== false && selectedItems.length && !scanning) {
+                    if (chooseStatus) chooseStatus.textContent = 'Uploading ' + selectedItems.length + ' photo' + (selectedItems.length === 1 ? '' : 's') + '…';
+                    startUpload();
+                } else {
+                    updateSelectionUI();
+                }
+                return incoming.length;
+            } catch (err) {
+                console.error('addFiles', err);
+                if (chooseStatus) chooseStatus.textContent = 'Could not start upload. Please try again.';
                 return 0;
             }
-            const existing = new Set(selectedItems.map((item) => fileKey(item.file)));
-            incoming.forEach((file) => {
-                if (existing.has(fileKey(file))) return;
-                existing.add(fileKey(file));
-                selectedItems.push({ file, url: URL.createObjectURL(file) });
-            });
-            if (incoming[0]) populateFromExif(incoming[0]);
-            if (autoStart !== false && selectedItems.length && !scanning) {
-                if (chooseStatus) chooseStatus.textContent = 'Uploading ' + selectedItems.length + ' photo' + (selectedItems.length === 1 ? '' : 's') + '…';
-                startUpload();
-            } else {
-                updateSelectionUI();
-            }
-            return incoming.length;
         }
 
         function applyRegattaMatch(event) {
@@ -1542,16 +1551,26 @@
         }
 
         function takeInputFiles(input) {
-            const files = Array.from((input && input.files) || []);
+            const files = Array.prototype.slice.call((input && input.files) || []);
             if (!files.length) return false;
             addFiles(files, true);
-            try { input.value = ''; } catch (_err) {}
             return true;
         }
 
         imageInput.addEventListener('change', (e) => {
-            if (takeInputFiles(e.target)) return;
-            setTimeout(() => takeInputFiles(e.target), 100);
+            const input = e.target;
+            if (takeInputFiles(input)) {
+                try { input.value = ''; } catch (_err) {}
+                return;
+            }
+            if (chooseStatus) chooseStatus.textContent = 'Reading photos…';
+            setTimeout(() => {
+                if (takeInputFiles(input)) {
+                    try { input.value = ''; } catch (_err) {}
+                    return;
+                }
+                if (chooseStatus) chooseStatus.textContent = 'No photos were received. Please try Choose photos again.';
+            }, 150);
         });
         cancelBtn.addEventListener('click', clearSelected);
         uploadBtn.addEventListener('click', startUpload);
