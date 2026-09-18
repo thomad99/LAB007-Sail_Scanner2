@@ -846,6 +846,27 @@
             display: flex;
         }
 
+        .alert-toast {
+            display: none;
+            position: fixed;
+            left: 50%;
+            bottom: 24px;
+            transform: translateX(-50%);
+            z-index: 2100;
+            max-width: min(92vw, 440px);
+            padding: 12px 16px;
+            border-radius: 12px;
+            background: #0b2e3f;
+            color: #fff;
+            font-size: 0.92rem;
+            line-height: 1.4;
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.28);
+        }
+
+        .alert-toast.active {
+            display: block;
+        }
+
         .modal-card {
             background: #fff;
             border-radius: 16px;
@@ -1218,6 +1239,7 @@
 
     <footer class="site-footer"></footer>
 
+    <div class="alert-toast" id="alertToast" role="status" aria-live="polite"></div>
     <div class="modal-overlay" id="alertModal">
         <div class="modal-card">
             <h2>Results alerts</h2>
@@ -1258,6 +1280,7 @@
         const WATCH_STORAGE_KEY = 'ls-results-watches';
         let pendingWatch = null;
         let alertRemainTimer = null;
+        let alertToastTimer = null;
 
         function loadWatchState() {
             try {
@@ -1680,6 +1703,17 @@
         function closeAlertModal() {
             document.getElementById('alertModal').classList.remove('active');
             pendingWatch = null;
+        }
+
+        function showAlertToast(message) {
+            const el = document.getElementById('alertToast');
+            if (!el) return;
+            el.textContent = message;
+            el.classList.add('active');
+            if (alertToastTimer) clearTimeout(alertToastTimer);
+            alertToastTimer = setTimeout(() => {
+                el.classList.remove('active');
+            }, 4500);
         }
 
         function openAlertModal(url, name, button, date) {
@@ -2181,8 +2215,8 @@
                 try {
                     await startWatch(email, url, name, button, date);
                     closeAlertModal();
-                    setActiveTab('alerts');
                     setAlertsStatus('Alerts are on for 48 hours. Check your email for a STOP ALERTS button.', true);
+                    showAlertToast('Alerts are on for 48 hours. Check your email for a STOP ALERTS button.');
                 } catch (err) {
                     if (button) {
                         button.disabled = false;
