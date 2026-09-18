@@ -223,12 +223,9 @@
     </header>
 
     <section class="screen landing active" id="landing">
-        <h1>Race Planner</h1>
-        <p class="lead">Set the course from shore, then send Race Committee boats out to drop the marks.</p>
         <div class="role-cards">
             <div class="role-card">
                 <div class="role-icon">🗺️</div>
-                <h2>Race PMO</h2>
                 <p>Your GPS is home. Draw the course, drag marks, and watch dropped positions come in.</p>
                 <div class="join-box">
                     <input id="pmoName" placeholder="Course name" maxlength="80">
@@ -291,6 +288,8 @@
     <script>
         const MARK_TYPES = ['Windward', 'Leeward', 'Pin', 'Committee', 'Offset', 'Gate P', 'Gate S', 'Mark'];
         const NEAR_M = 10 / 3.28084;
+        const SESSION_COOKIE = 'rp_session';
+        const EASTERN = 'America/New_York';
         let role = null;
         let courseCode = null;
         let pmoToken = null;
@@ -314,6 +313,49 @@
         let fromAdmin = false;
 
         function $(id) { return document.getElementById(id); }
+        function cookieSecure() { return location.protocol === 'https:' ? '; Secure' : ''; }
+        function secondsUntilEasternMidnight() {
+            const parts = {};
+            new Intl.DateTimeFormat('en-US', {
+                timeZone: EASTERN,
+                hour: 'numeric',
+                minute: 'numeric',
+                second: 'numeric',
+                hourCycle: 'h23'
+            }).formatToParts(new Date()).forEach((p) => { parts[p.type] = p.value; });
+            return Math.max(1,
+                (23 - Number(parts.hour)) * 3600 +
+                (59 - Number(parts.minute)) * 60 +
+                (60 - Number(parts.second))
+            );
+        }
+        function saveSessionCookie(data) {
+            const payload = {
+                role: data.role,
+                code: data.code,
+                pmoToken: data.pmoToken || '',
+                userName: data.userName || '',
+                userId: data.userId || userId
+            };
+            document.cookie = SESSION_COOKIE + '=' + encodeURIComponent(JSON.stringify(payload)) +
+                '; max-age=' + secondsUntilEasternMidnight() +
+                '; path=/; SameSite=Lax' + cookieSecure();
+        }
+        function readSessionCookie() {
+            const prefix = SESSION_COOKIE + '=';
+            const raw = document.cookie.split('; ').find((c) => c.startsWith(prefix));
+            if (!raw) return null;
+            try {
+                const data = JSON.parse(decodeURIComponent(raw.slice(prefix.length)));
+                if (!data || !data.code || !data.role) return null;
+                return data;
+            } catch (_err) {
+                return null;
+            }
+        }
+        function clearSessionCookie() {
+            document.cookie = SESSION_COOKIE + '=; max-age=0; path=/; SameSite=Lax' + cookieSecure();
+        }
         function toRad(d) { return d * Math.PI / 180; }
         function toDeg(r) { return r * 180 / Math.PI; }
         function haversine(aLat, aLng, bLat, bLng) {
@@ -824,7 +866,8 @@
             } catch (_err) {}
         }
 
-        async function openAsPmo(code, token, admin) {
+        async function openAsPmo(code, token, admin, opts) {
+            const silent = Boolean(opts && opts.silent);
             $('landingErr').textContent = '';
             fromAdmin = Boolean(admin);
             const back = $('adminBack');
@@ -834,8 +877,8 @@
             role = 'pmo';
             userName = 'PMO';
             if (!courseCode || !pmoToken) {
-                $('landingErr').textContent = 'Missing course code.';
-                return;
+                if (!silent) $('landingErr').textContent = 'Missing course code.';
+                return false;
             }
             localStorage.setItem('rp_pmo_' + courseCode, pmoToken);
             showMap();
@@ -843,16 +886,52 @@
             try {
                 state = await api('/courses/' + courseCode);
             } catch (err) {
+                clearSessionCookie();
                 $('mapScreen').classList.remove('active');
                 $('landing').classList.add('active');
                 document.body.classList.remove('role-pmo');
-                $('landingErr').textContent = err.message || 'Could not open this course.';
-                return;
+                if (!silent) $('landingErr').textContent = err.message || 'Could not open this course.';
+                return false;
+            }
+            if (!fromAdmin) {
+                saveSessionCookie({ role: 'pmo', code: courseCode, pmoToken, userName: 'PMO' });
             }
             fitToCourse();
             renderState();
             startPoll();
             attachLiveGps();
+            return true;
+        }
+
+        async function enterCommittee(code, name, opts) {
+            const silent = Boolean(opts && opts.silent);
+            courseCode = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+            userName = String(name || '').trim() || 'Committee';
+            role = 'committee';
+            localStorage.setItem('rp_name', userName);
+            if (!courseCode) {
+                if (!silent) throw new Error('Enter the course code from the PMO.');
+                return false;
+            }
+            try {
+                await enableCompass();
+            } catch (_err) {}
+            try {
+                state = await api('/courses/' + courseCode);
+            } catch (err) {
+                clearSessionCookie();
+                if (silent) return false;
+                throw err;
+            }
+            showMap();
+            map.setView([41.3, -72.4], 9);
+            if (state.home) map.setView([state.home.lat, state.home.lng], 16);
+            else fitToCourse();
+            renderState();
+            saveSessionCookie({ role: 'committee', code: courseCode, userName });
+            startPoll();
+            attachLiveGps();
+            return true;
         }
 
         async function startPmo() {
@@ -870,6 +949,7 @@
                 role = 'pmo';
                 userName = 'PMO';
                 localStorage.setItem('rp_pmo_' + courseCode, pmoToken);
+                saveSessionCookie({ role: 'pmo', code: courseCode, pmoToken, userName: 'PMO' });
                 showMap();
                 map.setView([pos.lat, pos.lng], 16);
                 startWatch();
@@ -884,21 +964,7 @@
         async function joinCommittee() {
             $('landingErr').textContent = '';
             try {
-                courseCode = $('joinCode').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-                userName = $('rcName').value.trim() || 'Committee';
-                localStorage.setItem('rp_name', userName);
-                if (!courseCode) throw new Error('Enter the course code from the PMO.');
-                await enableCompass();
-                state = await api('/courses/' + courseCode);
-                role = 'committee';
-                const pos = await gps();
-                myPos = pos;
-                if (Number.isFinite(pos.heading)) applyHeading(pos.heading);
-                showMap();
-                map.setView([pos.lat, pos.lng], 16);
-                startWatch();
-                await pushPosition();
-                startPoll();
+                await enterCommittee($('joinCode').value, $('rcName').value);
             } catch (err) {
                 $('landingErr').textContent = err.message || 'Could not join. Check the code and location permission.';
             }
@@ -906,12 +972,27 @@
 
         $('createCourseBtn').onclick = startPmo;
         $('joinBtn').onclick = joinCommittee;
+        if (userName) $('rcName').value = userName;
         window.addEventListener('resize', () => { if (map) { map.invalidateSize(); drawDegrees(); } });
-        (function bootFromQuery() {
+        (async function boot() {
             const params = new URLSearchParams(location.search);
             const code = String(params.get('code') || '').trim();
             const token = String(params.get('pmo') || '').trim();
-            if (code && token) openAsPmo(code, token, params.get('from') === 'admin');
+            if (code && token) {
+                await openAsPmo(code, token, params.get('from') === 'admin');
+                return;
+            }
+            const sess = readSessionCookie();
+            if (!sess) return;
+            if (sess.userId) {
+                userId = sess.userId;
+                localStorage.setItem('rp_user', userId);
+            }
+            if (sess.role === 'pmo' && sess.pmoToken) {
+                await openAsPmo(sess.code, sess.pmoToken, false, { silent: true });
+            } else if (sess.role === 'committee') {
+                await enterCommittee(sess.code, sess.userName, { silent: true });
+            }
         })();
     </script>
 </body>

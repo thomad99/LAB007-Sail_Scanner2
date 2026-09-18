@@ -1002,7 +1002,7 @@
             <div class="progress-bar" aria-hidden="true">
                 <div class="progress-fill" id="scanProgressFill"></div>
             </div>
-            <p id="scanHint">The process can take time. Stay here to watch progress, or you can switch apps and it will continue in the background.</p>
+            <p id="scanHint">You can switch apps. Come back any time and this progress screen will still be here.</p>
             <div id="scanDoneActions">
                 <button type="button" class="done-btn primary" id="viewResultsBtn">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -1052,7 +1052,11 @@
         let completedFiles = 0;
         let sailNumbersFound = 0;
         let lastSailFound = '';
-        const SCAN_HINT = 'The process can take time. Stay here to watch progress, or you can switch apps and it will continue in the background.';
+        let wakeLock = null;
+        let holdingHistory = false;
+        const JOB_KEY = 'photoUpload_job';
+        const JOB_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+        const SCAN_HINT = 'You can switch apps. Come back any time and this progress screen will still be here.';
         window.processedFiles = [];
 
         let regattaNames = [];
@@ -1423,10 +1427,193 @@
             };
         }
 
+        function jobCookieSecure() {
+            return location.protocol === 'https:' ? '; Secure' : '';
+        }
+
+        function readJob() {
+            try {
+                const job = JSON.parse(localStorage.getItem(JOB_KEY) || 'null');
+                if (!job || !job.status) return null;
+                if (Date.now() - (job.updatedAt || 0) > JOB_MAX_AGE_MS) return null;
+                return job;
+            } catch (_err) {
+                return null;
+            }
+        }
+
+        function setJobCookie(status) {
+            if (status === 'scanning' || status === 'done') {
+                document.cookie = 'ls_photo_upload=' + status + '; path=/; max-age=' + (12 * 3600) +
+                    '; SameSite=Lax' + jobCookieSecure();
+            } else {
+                document.cookie = 'ls_photo_upload=; path=/; max-age=0; SameSite=Lax' + jobCookieSecure();
+            }
+        }
+
+        function collectFormSnapshot() {
+            const ids = ['date', 'regattaName', 'photographerName', 'photographerWebsite', 'location', 'additionalTags'];
+            const form = {};
+            ids.forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) form[id] = el.value;
+            });
+            const storeUnmatch = document.getElementById('storeUnmatchSails');
+            form.storeUnmatchSails = storeUnmatch ? storeUnmatch.checked : true;
+            return form;
+        }
+
+        function applyFormSnapshot(form) {
+            if (!form) return;
+            Object.keys(form).forEach((id) => {
+                if (id === 'storeUnmatchSails') return;
+                const el = document.getElementById(id);
+                if (el && form[id] != null) el.value = form[id];
+            });
+            const storeUnmatch = document.getElementById('storeUnmatchSails');
+            if (storeUnmatch && typeof form.storeUnmatchSails === 'boolean') {
+                storeUnmatch.checked = form.storeUnmatchSails;
+            }
+        }
+
+        function collectFileResults() {
+            return Array.from(resultsList.querySelectorAll('.result-card')).map((el) => ({
+                id: el.id,
+                name: el.querySelector('h3') ? el.querySelector('h3').textContent : '',
+                html: el.querySelector('.content') ? el.querySelector('.content').innerHTML : '',
+                className: el.className
+            }));
+        }
+
+        function restoreFileResults(list, files) {
+            resultsList.innerHTML = '';
+            if (list && list.length) {
+                list.forEach((row) => {
+                    const card = document.createElement('div');
+                    card.className = row.className || 'result-card processing';
+                    card.id = row.id;
+                    card.innerHTML = '<h3>' + escapeHtml(row.name) + '</h3><div class="content">' + (row.html || '') + '</div>';
+                    resultsList.appendChild(card);
+                });
+                return;
+            }
+            (files || []).forEach((file) => resultsList.appendChild(createResultCard(file)));
+        }
+
+        function persistJobMeta(status) {
+            const job = {
+                status: status || (scanning ? 'scanning' : 'done'),
+                totalFiles,
+                completedFiles,
+                sailNumbersFound,
+                lastSailFound,
+                processedFiles: window.processedFiles || [],
+                fileResults: collectFileResults(),
+                form: collectFormSnapshot(),
+                updatedAt: Date.now()
+            };
+            try {
+                localStorage.setItem(JOB_KEY, JSON.stringify(job));
+            } catch (_err) {}
+            setJobCookie(job.status);
+        }
+
+        function openFileDb() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open('lsPhotoUpload', 1);
+                req.onupgradeneeded = () => {
+                    const db = req.result;
+                    if (!db.objectStoreNames.contains('files')) {
+                        db.createObjectStore('files', { keyPath: 'i' });
+                    }
+                };
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function persistJobFiles(files) {
+            try {
+                const db = await openFileDb();
+                await new Promise((resolve, reject) => {
+                    const tx = db.transaction('files', 'readwrite');
+                    const store = tx.objectStore('files');
+                    store.clear();
+                    (files || []).forEach((file, i) => {
+                        store.put({
+                            i,
+                            name: file.name,
+                            type: file.type || 'image/jpeg',
+                            lastModified: file.lastModified || Date.now(),
+                            blob: file
+                        });
+                    });
+                    tx.oncomplete = resolve;
+                    tx.onerror = () => reject(tx.error);
+                });
+            } catch (err) {
+                console.warn('Could not save photos for resume', err);
+            }
+        }
+
+        async function loadJobFiles() {
+            try {
+                const db = await openFileDb();
+                const rows = await new Promise((resolve, reject) => {
+                    const tx = db.transaction('files', 'readonly');
+                    const req = tx.objectStore('files').getAll();
+                    req.onsuccess = () => resolve(req.result || []);
+                    req.onerror = () => reject(req.error);
+                });
+                return rows.sort((a, b) => a.i - b.i).map((row) => {
+                    const blob = row.blob;
+                    return new File([blob], row.name || 'photo.jpg', {
+                        type: row.type || (blob && blob.type) || 'image/jpeg',
+                        lastModified: row.lastModified || Date.now()
+                    });
+                });
+            } catch (_err) {
+                return [];
+            }
+        }
+
+        async function clearSavedJob() {
+            try { localStorage.removeItem(JOB_KEY); } catch (_err) {}
+            setJobCookie('');
+            try {
+                const db = await openFileDb();
+                await new Promise((resolve, reject) => {
+                    const tx = db.transaction('files', 'readwrite');
+                    tx.objectStore('files').clear();
+                    tx.oncomplete = resolve;
+                    tx.onerror = () => reject(tx.error);
+                });
+            } catch (_err) {}
+        }
+
+        async function requestWakeLock() {
+            try {
+                if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request('screen');
+            } catch (_err) {}
+        }
+
+        function releaseWakeLock() {
+            try { if (wakeLock) wakeLock.release(); } catch (_err) {}
+            wakeLock = null;
+        }
+
+        function holdHistory() {
+            if (holdingHistory) return;
+            holdingHistory = true;
+            try { history.pushState({ photoScan: 1 }, '', location.href); } catch (_err) {}
+        }
+
         function showOverlay() {
             scanOverlay.hidden = false;
             scanPanel.classList.remove('done');
             document.body.classList.add('is-scanning');
+            holdHistory();
+            requestWakeLock();
         }
 
         function hideOverlay() {
@@ -1460,6 +1647,7 @@
 
         async function processFile(file) {
             const resultCard = document.getElementById('result-' + file.name.replace(/[^a-zA-Z0-9]/g, '_'));
+            if (!resultCard) return;
             const contentDiv = resultCard.querySelector('.content');
             scanFileName.textContent = file.name;
             updateDashboard();
@@ -1536,33 +1724,42 @@
             }
         }
 
-        async function startUpload() {
-            if (scanning || !selectedItems.length) return;
+        async function startUpload(opts) {
+            const resume = Boolean(opts && opts.resume);
+            if (scanning) return;
             const files = selectedItems.map((item) => item.file);
+            if (!files.length) return;
             scanning = true;
             uploadBtn.disabled = true;
-            window.processedFiles = [];
-            resultsList.innerHTML = '';
-            resultsCard.hidden = true;
-            totalFiles = files.length;
-            completedFiles = 0;
-            sailNumbersFound = 0;
-            lastSailFound = '';
+            if (!resume) {
+                window.processedFiles = [];
+                resultsList.innerHTML = '';
+                resultsCard.hidden = true;
+                totalFiles = files.length;
+                completedFiles = 0;
+                sailNumbersFound = 0;
+                lastSailFound = '';
+                files.forEach((file) => resultsList.appendChild(createResultCard(file)));
+            }
             showOverlay();
             updateDashboard();
-            files.forEach((file) => resultsList.appendChild(createResultCard(file)));
+            persistJobMeta('scanning');
+            if (!resume) await persistJobFiles(files);
 
             try {
-                try {
-                    await fetch('/api/cleanup', { method: 'POST' });
-                } catch (err) {
-                    console.log('Cleanup skipped:', err);
+                if (!resume) {
+                    try {
+                        await fetch('/api/cleanup', { method: 'POST' });
+                    } catch (err) {
+                        console.log('Cleanup skipped:', err);
+                    }
                 }
 
-                for (const file of files) {
-                    await processFile(file);
-                    completedFiles++;
+                for (let i = completedFiles; i < files.length; i++) {
+                    await processFile(files[i]);
+                    completedFiles = i + 1;
                     updateDashboard();
+                    persistJobMeta('scanning');
                 }
             } finally {
                 scanning = false;
@@ -1573,14 +1770,55 @@
                     ? (sailNumbersFound + ' sail number' + (sailNumbersFound === 1 ? '' : 's') + ' found')
                     : 'No sail numbers found in this batch.';
                 scanProgressFill.style.width = '100%';
+                persistJobMeta('done');
+                releaseWakeLock();
                 updateSelectionUI();
             }
+        }
+
+        async function resumeSavedJob() {
+            if (scanning) {
+                showOverlay();
+                return;
+            }
+            const job = readJob();
+            if (!job || (job.status !== 'scanning' && job.status !== 'done')) return;
+            applyFormSnapshot(job.form);
+            totalFiles = Number(job.totalFiles) || 0;
+            completedFiles = Number(job.completedFiles) || 0;
+            sailNumbersFound = Number(job.sailNumbersFound) || 0;
+            lastSailFound = job.lastSailFound || '';
+            window.processedFiles = Array.isArray(job.processedFiles) ? job.processedFiles : [];
+            const files = await loadJobFiles();
+            selectedItems = files.map((file) => ({ file, url: URL.createObjectURL(file) }));
+            restoreFileResults(job.fileResults, files);
+            showOverlay();
+            if (job.status === 'done') {
+                scanPanel.classList.add('done');
+                scanTitle.textContent = 'Inspected ' + completedFiles + ' of ' + totalFiles + ' photos';
+                scanFileName.textContent = '';
+                scanHint.textContent = sailNumbersFound
+                    ? (sailNumbersFound + ' sail number' + (sailNumbersFound === 1 ? '' : 's') + ' found')
+                    : 'No sail numbers found in this batch.';
+                scanProgressFill.style.width = '100%';
+                updateDashboard();
+                return;
+            }
+            if (!files.length) {
+                await clearSavedJob();
+                hideOverlay();
+                return;
+            }
+            updateDashboard();
+            startUpload({ resume: true });
         }
 
         function resetForMore() {
             hideOverlay();
             resultsCard.hidden = true;
             clearSelected();
+            clearSavedJob();
+            releaseWakeLock();
             document.getElementById('date').value = todayYMD();
             suggestRegattasForDate(document.getElementById('date').value);
             window.scrollTo(0, 0);
@@ -1628,7 +1866,10 @@
         cancelBtn.addEventListener('click', clearSelected);
         uploadBtn.addEventListener('click', startUpload);
         document.getElementById('viewResultsBtn').addEventListener('click', () => {
+            persistJobMeta('viewed');
+            setJobCookie('');
             hideOverlay();
+            releaseWakeLock();
             resultsCard.hidden = false;
             resultsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
@@ -1669,7 +1910,50 @@
             loadRegattaNames();
             autocomplete(document.getElementById('regattaName'));
             updateSelectionUI();
+            resumeSavedJob();
         });
+
+        window.addEventListener('pageshow', () => {
+            const job = readJob();
+            if (scanning || (job && (job.status === 'scanning' || job.status === 'done') && scanOverlay.hidden)) {
+                showOverlay();
+                if (job && job.status === 'done') scanPanel.classList.add('done');
+                updateDashboard();
+            }
+        });
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState !== 'visible') return;
+            const job = readJob();
+            if (scanning) {
+                showOverlay();
+                requestWakeLock();
+                return;
+            }
+            if (job && job.status === 'scanning') resumeSavedJob();
+            else if (job && job.status === 'done') {
+                showOverlay();
+                scanPanel.classList.add('done');
+                updateDashboard();
+            }
+        });
+        window.addEventListener('popstate', (e) => {
+            const job = readJob();
+            if (scanning || (job && (job.status === 'scanning' || job.status === 'done'))) {
+                showOverlay();
+                if (job && job.status === 'done') scanPanel.classList.add('done');
+                try { history.pushState({ photoScan: 1 }, '', location.href); } catch (_err) {}
+            }
+        });
+        const brand = document.querySelector('.brand');
+        if (brand) {
+            brand.addEventListener('click', (e) => {
+                const job = readJob();
+                if (scanning || (job && (job.status === 'scanning' || job.status === 'done'))) {
+                    e.preventDefault();
+                    showOverlay();
+                }
+            });
+        }
     </script>
 </body>
 

@@ -21,6 +21,18 @@
     <meta name="twitter:title" content="Sail Number Scanner - Love Sailing">
     <meta name="twitter:description" content="Identify boats and access race history by scanning sail numbers.">
     <meta name="twitter:image" content="https://lovesailing.ai/Images/LOVE%20SAILING%20LOGO.JPEG">
+    <script>
+        (function () {
+            try {
+                var job = JSON.parse(localStorage.getItem('photoUpload_job') || 'null');
+                var fresh = job && (Date.now() - (job.updatedAt || 0) < 12 * 60 * 60 * 1000);
+                var cookie = /(?:^|; )ls_photo_upload=(scanning|done)(?:;|$)/.test(document.cookie);
+                if ((fresh && (job.status === 'scanning' || job.status === 'done')) || cookie) {
+                    location.replace('PhotoUpload.html');
+                }
+            } catch (e) {}
+        })();
+    </script>
     <style>
         body {
             margin: 0;
