@@ -553,7 +553,11 @@
                 card.classList.remove('show');
             }
             const drop = $('dropBtn');
-            if (drop) drop.disabled = !(role === 'committee' && myPos && mark && !mark.dropped);
+            if (drop) {
+                drop.disabled = !(role === 'committee' && myPos && mark && !mark.dropped);
+            }
+            const unmark = $('unmarkBtn');
+            if (unmark) unmark.disabled = !(role === 'committee' && mark && mark.dropped);
         }
 
         function renderState() {
@@ -569,7 +573,7 @@
                 const color = dropped ? '#16a34a' : (selectedMarkerId === m.id ? '#b91c1c' : '#dc2626');
                 const mk = L.marker([m.lat, m.lng], {
                     icon: icon(color, (m.label || 'M').slice(0, 1)),
-                    draggable: role === 'pmo' && !dropped
+                    draggable: role === 'pmo'
                 }).addTo(layers.marks);
                 mk.bindTooltip(m.label + (dropped ? ' · in water' : ''), {
                     permanent: true,
@@ -583,7 +587,7 @@
                     renderState();
                     updateLiveHud();
                 });
-                if (role === 'pmo' && !dropped) {
+                if (role === 'pmo') {
                     mk.on('dragstart', () => { dragging = true; });
                     mk.on('drag', () => {
                         const p = mk.getLatLng();
@@ -597,6 +601,12 @@
                     mk.on('dragend', async () => {
                         const p = mk.getLatLng();
                         $('dragReadout').classList.remove('show');
+                        const moved = haversine(m.lat, m.lng, p.lat, p.lng);
+                        if (moved < 1) {
+                            dragging = false;
+                            mk.setLatLng([m.lat, m.lng]);
+                            return;
+                        }
                         try {
                             state = await api('/courses/' + courseCode + '/markers/' + m.id, {
                                 method: 'PATCH',
@@ -634,11 +644,17 @@
             const mark = selectedMark();
             const courseName = (state && state.name) || courseCode;
             if (role === 'committee') {
-                box.innerHTML = '<button class="btn warn" id="dropBtn"' +
-                    ((myPos && mark && !mark.dropped) ? '' : ' disabled') +
-                    '>Marker Dropped</button>';
-                const drop = $('dropBtn');
-                if (drop) drop.onclick = dropMark;
+                if (mark && mark.dropped) {
+                    box.innerHTML = '<button class="btn primary" id="unmarkBtn">Unmark</button>';
+                    const unmark = $('unmarkBtn');
+                    if (unmark) unmark.onclick = unmarkDrop;
+                } else {
+                    box.innerHTML = '<button class="btn warn" id="dropBtn"' +
+                        ((myPos && mark && !mark.dropped) ? '' : ' disabled') +
+                        '>Marker Dropped</button>';
+                    const drop = $('dropBtn');
+                    if (drop) drop.onclick = dropMark;
+                }
             } else {
                 let html = '<div class="row">';
                 MARK_TYPES.forEach((t) => {
@@ -674,6 +690,18 @@
                     method: 'POST',
                     body: JSON.stringify({ lat: e.latlng.lat, lng: e.latlng.lng, label: nextLabel, pmoToken })
                 });
+                renderState();
+            } catch (err) { alert(err.message); }
+        }
+
+        async function unmarkDrop() {
+            const mark = selectedMark();
+            if (!mark) {
+                alert('Tap the mark to unmark.');
+                return;
+            }
+            try {
+                state = await api('/courses/' + courseCode + '/drop/' + mark.id, { method: 'DELETE' });
                 renderState();
             } catch (err) { alert(err.message); }
         }

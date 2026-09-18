@@ -697,13 +697,51 @@
 
         #scanDoneActions {
             display: none;
-            flex-wrap: wrap;
-            justify-content: center;
+            width: 100%;
+            max-width: 420px;
+            grid-template-columns: 1fr 1fr;
             gap: 10px;
             margin-top: 22px;
         }
 
-        .scan-panel.done #scanDoneActions { display: flex; }
+        .scan-panel.done #scanDoneActions { display: grid; }
+
+        #scanDoneActions .done-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            min-height: 48px;
+            padding: 12px 10px;
+            border: 0;
+            border-radius: 12px;
+            font: inherit;
+            font-size: 0.92rem;
+            font-weight: 700;
+            cursor: pointer;
+            line-height: 1.2;
+        }
+
+        #scanDoneActions .done-btn svg {
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+        }
+
+        #scanDoneActions .done-btn.primary {
+            background: var(--blue);
+            color: #fff;
+        }
+
+        #scanDoneActions .done-btn.primary:hover { background: var(--blue-hover); }
+
+        #scanDoneActions .done-btn.secondary {
+            background: var(--navy);
+            color: #fff;
+        }
+
+        #scanDoneActions .done-btn.secondary:hover { background: var(--navy-soft); }
 
         .results-card {
             margin-top: 22px;
@@ -966,8 +1004,23 @@
             </div>
             <p id="scanHint">The process can take time. Stay here to watch progress, or you can switch apps and it will continue in the background.</p>
             <div id="scanDoneActions">
-                <button type="button" class="primary-btn" id="viewResultsBtn">View results</button>
-                <button type="button" class="ghost-btn" id="overlayUploadMoreBtn">Upload more</button>
+                <button type="button" class="done-btn primary" id="viewResultsBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+                        <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+                        <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+                        <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+                    </svg>
+                    View results
+                </button>
+                <button type="button" class="done-btn secondary" id="overlayUploadMoreBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="M12 16V6"></path>
+                        <path d="M8.5 9.5 12 6l3.5 3.5"></path>
+                        <path d="M20 16.5a4 4 0 0 0-2.5-7.2A6 6 0 0 0 6.1 11 4.5 4.5 0 0 0 6.5 20H19"></path>
+                    </svg>
+                    Upload more
+                </button>
             </div>
         </div>
     </div>

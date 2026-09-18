@@ -322,6 +322,12 @@ async function attachRacePlanner(app, { pool }) {
                 vals
             );
             if (!updated.rows.length) return res.status(404).json({ success: false, error: 'Marker not found' });
+            if (req.body.lat != null && req.body.lng != null) {
+                await pool.query(
+                    'DELETE FROM race_planner_drops WHERE marker_id = $1 AND course_id = $2',
+                    [id, course.id]
+                );
+            }
             res.json(await courseState(course));
         } catch (err) {
             res.status(err.status || 500).json({ success: false, error: err.message });
@@ -436,6 +442,30 @@ async function attachRacePlanner(app, { pool }) {
                 [course.id, Number.isFinite(markerId) ? markerId : null, userId, String(req.body.userName || 'Committee').slice(0, 40), lat, lng]
             );
             res.json({ success: true, drop: inserted.rows[0], ...(await courseState(course)) });
+        } catch (err) {
+            res.status(err.status || 500).json({ success: false, error: err.message });
+        }
+    });
+
+    app.delete('/api/race-planner/courses/:code/drop/:markerId', async (req, res) => {
+        try {
+            const course = await getCourseByCode(req.params.code);
+            if (!course) return res.status(404).json({ success: false, error: 'Course not found' });
+            rejectIfExpired(course);
+            const markerId = Number(req.params.markerId);
+            if (!Number.isFinite(markerId)) {
+                return res.status(400).json({ success: false, error: 'markerId required' });
+            }
+            const owned = await pool.query(
+                'SELECT id FROM race_planner_markers WHERE id = $1 AND course_id = $2',
+                [markerId, course.id]
+            );
+            if (!owned.rows.length) return res.status(404).json({ success: false, error: 'Marker not found' });
+            await pool.query(
+                'DELETE FROM race_planner_drops WHERE marker_id = $1 AND course_id = $2',
+                [markerId, course.id]
+            );
+            res.json(await courseState(course));
         } catch (err) {
             res.status(err.status || 500).json({ success: false, error: err.message });
         }
