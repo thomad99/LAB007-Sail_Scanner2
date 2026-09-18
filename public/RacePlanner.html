@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Race Planner - Love Sailing</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --navy: #04102b;
+            --blue: #1d4ed8;
+            --sky: #eaf3fb;
+            --ok: #15803d;
+            --warn: #c2410c;
+            --muted: #66758a;
+        }
+        * { box-sizing: border-box; }
+        html, body { margin: 0; height: 100%; height: 100dvh; font-family: Inter, system-ui, sans-serif; background: var(--sky); color: #14204a; }
+        body { display: flex; flex-direction: column; overflow: hidden; }
+
+        .topbar {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            padding: calc(8px + env(safe-area-inset-top)) 14px 8px;
+            background: var(--navy); color: #fff; flex-shrink: 0;
+        }
+        .brand { display: flex; align-items: center; gap: 8px; color: #fff; text-decoration: none; font-weight: 800; }
+        .brand img { height: 32px; }
+        .topbar-meta { font-size: 0.82rem; opacity: 0.85; text-align: right; }
+
+        .screen { display: none; flex: 1; min-height: 0; flex-direction: column; }
+        .screen.active { display: flex; }
+
+        .landing {
+            align-items: center; justify-content: center; padding: 24px 16px;
+            overflow: auto;
+        }
+        .landing h1 { margin: 0 0 8px; font-size: clamp(1.8rem, 5vw, 2.6rem); letter-spacing: -0.04em; text-align: center; }
+        .landing p.lead { margin: 0 0 28px; color: var(--muted); text-align: center; max-width: 420px; }
+        .role-cards { display: grid; gap: 16px; width: min(640px, 100%); grid-template-columns: 1fr; }
+        @media (min-width: 700px) { .role-cards { grid-template-columns: 1fr 1fr; } }
+        .role-card {
+            background: #fff; border-radius: 20px; padding: 24px; text-align: center;
+            border: 1px solid #d7e3f0; box-shadow: 0 16px 40px rgba(15,40,80,.08); cursor: pointer;
+        }
+        .role-card:hover { border-color: var(--blue); }
+        .role-card h2 { margin: 8px 0 8px; }
+        .role-card p { color: var(--muted); font-size: 0.95rem; }
+        .role-icon { font-size: 2.4rem; }
+
+        .join-box { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+        input, select, button { font: inherit; }
+        input, select {
+            width: 100%; min-height: 46px; border-radius: 12px; border: 1px solid #c9d7ea;
+            padding: 10px 12px;
+        }
+        .btn {
+            border: 0; border-radius: 12px; min-height: 46px; padding: 10px 16px;
+            font-weight: 700; cursor: pointer;
+        }
+        .btn.primary { background: var(--blue); color: #fff; }
+        .btn.ghost { background: #e8eef6; color: #14204a; }
+        .btn.warn { background: #c2410c; color: #fff; }
+        .btn:disabled { opacity: .45; }
+
+        #map { height: 100%; width: 100%; background: #9fc5e0; }
+        .map-wrap { flex: 1; min-height: 0; position: relative; }
+        .hud {
+            position: absolute; z-index: 500; pointer-events: none;
+            inset: 0;
+        }
+        .hud > * { pointer-events: auto; }
+
+        .compass {
+            position: absolute; top: 12px; right: 12px;
+            width: 88px; height: 88px; border-radius: 50%;
+            background: rgba(255,255,255,.92);
+            border: 2px solid #14204a;
+            box-shadow: 0 8px 20px rgba(0,0,0,.15);
+            display: grid; place-items: center;
+        }
+        .compass-rose {
+            width: 70px; height: 70px; position: relative;
+        }
+        .compass-n {
+            position: absolute; top: -2px; left: 50%; transform: translateX(-50%);
+            font-weight: 800; font-size: 12px; color: #c2410c;
+        }
+        .needle {
+            position: absolute; left: 50%; top: 8px; width: 0; height: 0;
+            border-left: 6px solid transparent; border-right: 6px solid transparent;
+            border-bottom: 28px solid #c2410c;
+            transform: translateX(-50%);
+            transform-origin: 50% 26px;
+        }
+
+        .toolbar {
+            position: absolute; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom));
+            background: rgba(255,255,255,.96); border-radius: 16px;
+            padding: 12px; box-shadow: 0 12px 30px rgba(15,40,80,.16);
+            display: flex; flex-direction: column; gap: 8px;
+            max-height: 42vh; overflow: auto;
+        }
+        .toolbar h3 { margin: 0; font-size: 0.95rem; }
+        .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .chip {
+            background: #eef4ff; color: #163a7a; border-radius: 999px; padding: 6px 10px;
+            font-size: 0.8rem; font-weight: 700; border: 1px solid #c9dbf5; cursor: pointer;
+        }
+        .chip.on { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+        .stat { font-size: 0.88rem; color: #334155; }
+        .stat b { color: #14204a; }
+        .hint { font-size: 0.8rem; color: var(--muted); }
+        .err { color: #b91c1c; font-size: 0.85rem; }
+
+        .degree-canvas {
+            position: absolute; inset: 0; z-index: 410; pointer-events: none;
+        }
+
+        .leaflet-container { font-family: inherit; }
+        .mark-label {
+            background: #1d4ed8; color: #fff; border: 0; border-radius: 8px;
+            padding: 2px 7px; font-weight: 800; font-size: 12px;
+        }
+        .home-label { background: #15803d; }
+        .drop-label { background: #c2410c; }
+        .dist-label span {
+            background: rgba(255,255,255,.92);
+            color: #14204a;
+            border-radius: 8px;
+            padding: 2px 6px;
+            font-size: 11px;
+            font-weight: 700;
+            white-space: nowrap;
+            box-shadow: 0 1px 4px rgba(0,0,0,.15);
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand" href="index.html">
+            <img src="/Images/Sail_Logo_Trans.PNG" alt="">
+            Race Planner
+        </a>
+        <div class="topbar-meta" id="topMeta"></div>
+    </header>
+
+    <section class="screen landing active" id="landing">
+        <h1>Race Planner</h1>
+        <p class="lead">Set the course from shore, then send Race Committee boats out to drop the marks.</p>
+        <div class="role-cards">
+            <div class="role-card" id="pmoCard">
+                <div class="role-icon">🗺️</div>
+                <h2>Race PMO</h2>
+                <p>Your GPS is home. Draw the course, drag marks, and watch dropped positions come in.</p>
+                <div class="join-box">
+                    <input id="pmoName" placeholder="Course name (optional)">
+                    <button class="btn primary" id="createCourseBtn">Start as PMO</button>
+                    <p class="hint">Creates a share code for Race Committee.</p>
+                </div>
+            </div>
+            <div class="role-card" id="rcCard">
+                <div class="role-icon">🚤</div>
+                <h2>Race Committee</h2>
+                <p>Join the PMO course, see live bearing to each mark, and pin it when you drop it in the water.</p>
+                <div class="join-box">
+                    <input id="joinCode" placeholder="Course code" maxlength="8" autocomplete="off" style="text-transform:uppercase">
+                    <input id="rcName" placeholder="Your name or boat">
+                    <button class="btn primary" id="joinBtn">Join course</button>
+                </div>
+            </div>
+        </div>
+        <p class="err" id="landingErr"></p>
+    </section>
+
+    <section class="screen" id="mapScreen">
+        <div class="map-wrap">
+            <div id="map"></div>
+            <canvas class="degree-canvas" id="degreeCanvas"></canvas>
+            <div class="hud">
+                <div class="compass" title="North">
+                    <div class="compass-rose" id="compassRose">
+                        <div class="compass-n">N</div>
+                        <div class="needle" id="needle"></div>
+                    </div>
+                </div>
+                <div class="toolbar" id="toolbar"></div>
+            </div>
+        </div>
+    </section>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const MARK_TYPES = ['Windward', 'Leeward', 'Pin', 'Committee', 'Offset', 'Gate P', 'Gate S', 'Mark'];
+        let role = null;
+        let courseCode = null;
+        let pmoToken = null;
+        let userId = localStorage.getItem('rp_user') || ('u' + Math.random().toString(36).slice(2, 10));
+        localStorage.setItem('rp_user', userId);
+        let userName = localStorage.getItem('rp_name') || '';
+        let state = null;
+        let map = null;
+        let layers = { marks: null, drops: null, people: null, lines: null, home: null };
+        let selectedMarkerId = null;
+        let nextLabel = 'Windward';
+        let myPos = null;
+        let myHeading = 0;
+        let watchId = null;
+        let pollTimer = null;
+        let dragging = false;
+
+        function $(id) { return document.getElementById(id); }
+        function toRad(d) { return d * Math.PI / 180; }
+        function toDeg(r) { return r * 180 / Math.PI; }
+        function haversine(aLat, aLng, bLat, bLng) {
+            const R = 6371000;
+            const dLat = toRad(bLat - aLat), dLng = toRad(bLng - aLng);
+            const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
+            return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+        }
+        function bearing(aLat, aLng, bLat, bLng) {
+            const y = Math.sin(toRad(bLng - aLng)) * Math.cos(toRad(bLat));
+            const x = Math.cos(toRad(aLat)) * Math.sin(toRad(bLat)) - Math.sin(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.cos(toRad(bLng - aLng));
+            return (toDeg(Math.atan2(y, x)) + 360) % 360;
+        }
+        function cardinal(deg) {
+            return ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(deg / 45) % 8];
+        }
+        function fmtDist(m) {
+            if (!Number.isFinite(m)) return '—';
+            const nm = m / 1852;
+            if (m < 1000) return Math.round(m) + ' m · ' + nm.toFixed(2) + ' nm';
+            return (m / 1000).toFixed(2) + ' km · ' + nm.toFixed(2) + ' nm';
+        }
+        function fmtBrg(deg) {
+            return Math.round(deg) + '° ' + cardinal(deg);
+        }
+
+        async function api(path, opts) {
+            const headers = { 'Content-Type': 'application/json' };
+            if (pmoToken) headers['X-Pmo-Token'] = pmoToken;
+            const res = await fetch('/api/race-planner' + path, Object.assign({ headers }, opts));
+            const data = await res.json();
+            if (!res.ok || data.success === false) throw new Error(data.error || 'Request failed');
+            return data;
+        }
+
+        function gps() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) return reject(new Error('GPS not available'));
+                navigator.geolocation.getCurrentPosition(
+                    (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, heading: p.coords.heading }),
+                    (err) => reject(err),
+                    { enableHighAccuracy: true, timeout: 12000, maximumAge: 3000 }
+                );
+            });
+        }
+
+        function showMap() {
+            $('landing').classList.remove('active');
+            $('mapScreen').classList.add('active');
+            if (!map) {
+                map = L.map('map', { zoomControl: true, attributionControl: true });
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '&copy; OpenStreetMap'
+                }).addTo(map);
+                L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
+                layers.lines = L.layerGroup().addTo(map);
+                layers.marks = L.layerGroup().addTo(map);
+                layers.drops = L.layerGroup().addTo(map);
+                layers.people = L.layerGroup().addTo(map);
+                map.on('move zoom resize', drawDegrees);
+                map.on('click', onMapClick);
+                setTimeout(() => { map.invalidateSize(); drawDegrees(); }, 250);
+            }
+        }
+
+        function icon(color, letter) {
+            return L.divIcon({
+                className: '',
+                html: '<div style="background:' + color + ';color:#fff;border-radius:50%;width:28px;height:28px;display:grid;place-items:center;font-weight:800;font-size:12px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3)">' + letter + '</div>',
+                iconSize: [28, 28],
+                iconAnchor: [14, 14]
+            });
+        }
+
+        function drawDegrees() {
+            const canvas = $('degreeCanvas');
+            if (!map || !canvas) return;
+            const size = map.getSize();
+            canvas.width = size.x;
+            canvas.height = size.y;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const b = map.getBounds();
+            const span = Math.max(b.getNorth() - b.getSouth(), b.getEast() - b.getWest());
+            let step = 0.05;
+            if (span < 0.08) step = 0.01;
+            if (span < 0.03) step = 0.005;
+            if (span < 0.01) step = 0.001;
+            ctx.strokeStyle = 'rgba(20,32,74,.28)';
+            ctx.fillStyle = 'rgba(20,32,74,.7)';
+            ctx.lineWidth = 1;
+            ctx.font = '11px Inter, sans-serif';
+            const startLat = Math.floor(b.getSouth() / step) * step;
+            const startLng = Math.floor(b.getWest() / step) * step;
+            for (let lat = startLat; lat <= b.getNorth() + step; lat += step) {
+                const y = map.latLngToContainerPoint([lat, b.getWest()]).y;
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+                ctx.fillText(lat.toFixed(step < 0.01 ? 3 : 2) + '°', 8, y - 4);
+            }
+            for (let lng = startLng; lng <= b.getEast() + step; lng += step) {
+                const x = map.latLngToContainerPoint([b.getSouth(), lng]).x;
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+                ctx.fillText(lng.toFixed(step < 0.01 ? 3 : 2) + '°', x + 6, 16);
+            }
+        }
+
+        function renderState() {
+            if (!map || !state) return;
+            layers.marks.clearLayers();
+            layers.drops.clearLayers();
+            layers.people.clearLayers();
+            layers.lines.clearLayers();
+            if (layers.home) { map.removeLayer(layers.home); layers.home = null; }
+
+            const home = state.home;
+            if (home) {
+                layers.home = L.marker([home.lat, home.lng], { icon: icon('#15803d', 'H'), draggable: false })
+                    .bindTooltip('PMO home', { permanent: true, direction: 'right', className: 'home-label' })
+                    .addTo(map);
+            }
+
+            (state.markers || []).forEach((m) => {
+                const mk = L.marker([m.lat, m.lng], {
+                    icon: icon(selectedMarkerId === m.id ? '#7c3aed' : '#1d4ed8', (m.label || 'M').slice(0, 1)),
+                    draggable: role === 'pmo'
+                }).addTo(layers.marks);
+                mk.bindTooltip(m.label, { permanent: true, direction: 'top', className: 'mark-label' });
+                mk.on('click', () => { selectedMarkerId = m.id; renderToolbar(); renderState(); });
+                if (role === 'pmo') {
+                    mk.on('dragstart', () => { dragging = true; });
+                    mk.on('dragend', async () => {
+                        const p = mk.getLatLng();
+                        try {
+                            state = await api('/courses/' + courseCode + '/markers/' + m.id, {
+                                method: 'PATCH',
+                                body: JSON.stringify({ lat: p.lat, lng: p.lng, pmoToken })
+                            });
+                        } catch (err) { alert(err.message); }
+                        dragging = false;
+                        renderState();
+                        renderToolbar();
+                    });
+                }
+                if (home) {
+                    L.polyline([[home.lat, home.lng], [m.lat, m.lng]], { color: '#1d4ed8', weight: 2, dashArray: '6 6' }).addTo(layers.lines);
+                    const mid = [(home.lat + m.lat) / 2, (home.lng + m.lng) / 2];
+                    L.marker(mid, {
+                        interactive: false,
+                        icon: L.divIcon({
+                            className: 'dist-label',
+                            html: '<span>' + fmtDist(haversine(home.lat, home.lng, m.lat, m.lng)) + '</span>',
+                            iconSize: [140, 22],
+                            iconAnchor: [70, 11]
+                        })
+                    }).addTo(layers.lines);
+                }
+            });
+
+            (state.drops || []).forEach((d) => {
+                L.marker([d.lat, d.lng], { icon: icon('#c2410c', 'D'), draggable: false })
+                    .bindTooltip('Dropped' + (d.user_name ? ' · ' + d.user_name : ''), { permanent: true, direction: 'bottom', className: 'drop-label' })
+                    .addTo(layers.drops);
+            });
+
+            (state.positions || []).forEach((p) => {
+                if (p.user_id === userId) return;
+                L.marker([p.lat, p.lng], { icon: icon('#0f766e', p.role === 'pmo' ? 'P' : 'C') })
+                    .bindTooltip(p.user_name || p.role, { permanent: true, className: 'you-label' })
+                    .addTo(layers.people);
+            });
+
+            if (myPos) {
+                L.marker([myPos.lat, myPos.lng], { icon: icon('#7c3aed', 'Y') })
+                    .bindTooltip('You', { permanent: true, className: 'you-label' })
+                    .addTo(layers.people);
+            }
+            drawDegrees();
+            renderToolbar();
+        }
+
+        function selectedMark() {
+            return (state && state.markers || []).find((m) => m.id === selectedMarkerId) || null;
+        }
+
+        function renderToolbar() {
+            const box = $('toolbar');
+            const home = state && state.home;
+            const mark = selectedMark();
+            let html = '<div class="row"><h3>' + (role === 'pmo' ? 'Race PMO' : 'Race Committee') +
+                ' · Code <b>' + courseCode + '</b></h3></div>';
+            if (role === 'pmo') {
+                html += '<div class="row">';
+                MARK_TYPES.forEach((t) => {
+                    html += '<button type="button" class="chip' + (nextLabel === t ? ' on' : '') + '" data-label="' + t + '">' + t + '</button>';
+                });
+                html += '</div><p class="hint">Tap the map to add a ' + nextLabel + '. Drag a mark to move it.</p>';
+                html += '<button class="btn ghost" id="copyCode">Copy course code ' + courseCode + '</button>';
+                if (mark) {
+                    html += '<div class="stat">Selected: <b>' + mark.label + '</b></div>';
+                    html += '<button class="btn ghost" id="delMark">Remove this mark</button>';
+                }
+            } else {
+                html += '<p class="hint">Select a planned mark, then steer to it. Tap Marker Dropped when it is in the water.</p>';
+            }
+            if (myPos && mark) {
+                const brg = bearing(myPos.lat, myPos.lng, mark.lat, mark.lng);
+                const dist = haversine(myPos.lat, myPos.lng, mark.lat, mark.lng);
+                html += '<div class="stat">To <b>' + mark.label + '</b>: ' + fmtBrg(brg) + ' · ' + fmtDist(dist) + '</div>';
+            } else if (myPos && home) {
+                const brg = bearing(myPos.lat, myPos.lng, home.lat, home.lng);
+                html += '<div class="stat">To home: ' + fmtBrg(brg) + ' · ' + fmtDist(haversine(myPos.lat, myPos.lng, home.lat, home.lng)) + '</div>';
+            }
+            if (home && state.markers && state.markers.length) {
+                html += '<div class="stat">Home to marks: ' + state.markers.map((m) => m.label + ' ' + fmtDist(haversine(home.lat, home.lng, m.lat, m.lng))).join(' · ') + '</div>';
+            }
+            if (role === 'committee') {
+                html += '<button class="btn warn" id="dropBtn"' + (myPos ? '' : ' disabled') + '>Marker Dropped</button>';
+            }
+            box.innerHTML = html;
+            box.querySelectorAll('.chip').forEach((btn) => {
+                btn.onclick = () => { nextLabel = btn.getAttribute('data-label'); renderToolbar(); };
+            });
+            const copy = $('copyCode');
+            if (copy) copy.onclick = async () => {
+                try { await navigator.clipboard.writeText(courseCode); copy.textContent = 'Copied ' + courseCode; } catch (e) { alert(courseCode); }
+            };
+            const del = $('delMark');
+            if (del) del.onclick = async () => {
+                try {
+                    state = await api('/courses/' + courseCode + '/markers/' + selectedMarkerId, { method: 'DELETE', body: JSON.stringify({ pmoToken }) });
+                    selectedMarkerId = null;
+                    renderState();
+                } catch (err) { alert(err.message); }
+            };
+            const drop = $('dropBtn');
+            if (drop) drop.onclick = dropMark;
+            $('topMeta').textContent = courseCode ? (role === 'pmo' ? 'PMO · ' : 'Committee · ') + courseCode : '';
+        }
+
+        async function onMapClick(e) {
+            if (role !== 'pmo') {
+                return;
+            }
+            try {
+                state = await api('/courses/' + courseCode + '/markers', {
+                    method: 'POST',
+                    body: JSON.stringify({ lat: e.latlng.lat, lng: e.latlng.lng, label: nextLabel, pmoToken })
+                });
+                renderState();
+            } catch (err) { alert(err.message); }
+        }
+
+        async function dropMark() {
+            if (!myPos) return;
+            try {
+                state = await api('/courses/' + courseCode + '/drop', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        lat: myPos.lat, lng: myPos.lng, userId, userName,
+                        markerId: selectedMarkerId
+                    })
+                });
+                renderState();
+            } catch (err) { alert(err.message); }
+        }
+
+        async function pushPosition() {
+            if (!courseCode || !myPos) return;
+            try {
+                const body = { lat: myPos.lat, lng: myPos.lng, userId, userName, role, heading: myHeading };
+                if (pmoToken) body.pmoToken = pmoToken;
+                state = await api('/courses/' + courseCode + '/position', { method: 'POST', body: JSON.stringify(body) });
+                renderState();
+            } catch (err) {
+                console.log(err);
+            }
+        }
+
+        function startWatch() {
+            if (watchId || !navigator.geolocation) return;
+            watchId = navigator.geolocation.watchPosition((p) => {
+                myPos = { lat: p.coords.latitude, lng: p.coords.longitude };
+                if (Number.isFinite(p.coords.heading)) myHeading = p.coords.heading;
+                $('needle').style.transform = 'translateX(-50%) rotate(' + myHeading + 'deg)';
+                pushPosition();
+            }, (err) => console.log(err), { enableHighAccuracy: true, maximumAge: 1000 });
+            window.addEventListener('deviceorientationabsolute', (e) => {
+                if (e.absolute && Number.isFinite(e.alpha)) {
+                    myHeading = (360 - e.alpha) % 360;
+                    $('needle').style.transform = 'translateX(-50%) rotate(' + myHeading + 'deg)';
+                }
+            });
+        }
+
+        async function startPmo() {
+            $('landingErr').textContent = '';
+            try {
+                const pos = await gps();
+                myPos = pos;
+                const name = $('pmoName').value.trim() || 'Race course';
+                const created = await api('/courses', { method: 'POST', body: JSON.stringify({ name, lat: pos.lat, lng: pos.lng }) });
+                courseCode = created.code;
+                pmoToken = created.pmoToken;
+                role = 'pmo';
+                userName = 'PMO';
+                localStorage.setItem('rp_pmo_' + courseCode, pmoToken);
+                showMap();
+                map.setView([pos.lat, pos.lng], 16);
+                startWatch();
+                state = await api('/courses/' + courseCode);
+                renderState();
+                pollTimer = setInterval(async () => {
+                    if (dragging) return;
+                    try { state = await api('/courses/' + courseCode); renderState(); } catch (e) {}
+                }, 2500);
+            } catch (err) {
+                $('landingErr').textContent = err.message || 'Could not start PMO. Allow location access.';
+            }
+        }
+
+        async function joinCommittee() {
+            $('landingErr').textContent = '';
+            try {
+                courseCode = $('joinCode').value.trim().toUpperCase();
+                userName = $('rcName').value.trim() || 'Committee';
+                localStorage.setItem('rp_name', userName);
+                if (!courseCode) throw new Error('Enter the course code from the PMO.');
+                state = await api('/courses/' + courseCode);
+                role = 'committee';
+                const pos = await gps();
+                myPos = pos;
+                showMap();
+                map.setView([pos.lat, pos.lng], 16);
+                startWatch();
+                await pushPosition();
+                pollTimer = setInterval(async () => {
+                    if (dragging) return;
+                    try { state = await api('/courses/' + courseCode); renderState(); } catch (e) {}
+                }, 2500);
+            } catch (err) {
+                $('landingErr').textContent = err.message || 'Could not join. Check the code and location permission.';
+            }
+        }
+
+        $('createCourseBtn').onclick = startPmo;
+        $('joinBtn').onclick = joinCommittee;
+        window.addEventListener('resize', () => { if (map) { map.invalidateSize(); drawDegrees(); } });
+    </script>
+</body>
+</html>

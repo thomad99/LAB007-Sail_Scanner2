@@ -448,6 +448,9 @@
             border-radius: 10px;
             padding: 11px 18px;
             min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .choose-btn:hover,
@@ -464,7 +467,14 @@
             padding: 11px 14px;
         }
 
-        #imageInput { display: none; }
+        #imageInput {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+        }
 
         .thumbs-block {
             padding: 8px 22px 6px;
@@ -888,10 +898,11 @@
                     </div>
                     <h3>Drop photos here</h3>
                     <p>or choose them from your device</p>
-                    <button type="button" class="choose-btn" id="chooseBtn">Choose photos</button>
-                    <input type="file" id="imageInput" accept="image/*" multiple>
+                    <label class="choose-btn" for="imageInput">Choose photos</label>
+                    <p class="hint" id="chooseStatus"></p>
                 </div>
             </div>
+            <input type="file" id="imageInput" accept="image/*,image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.png,.heic,.heif,.webp" multiple>
 
             <div class="thumbs-block" id="thumbsBlock" hidden>
                 <p class="thumbs-label" id="thumbsLabel">0 photos selected</p>
@@ -951,7 +962,7 @@
         const thumbsLabel = document.getElementById('thumbsLabel');
         const uploadBtn = document.getElementById('uploadBtn');
         const cancelBtn = document.getElementById('cancelBtn');
-        const chooseBtn = document.getElementById('chooseBtn');
+        const chooseStatus = document.getElementById('chooseStatus');
         const dropWrap = document.getElementById('dropWrap');
         const cardFooter = document.getElementById('cardFooter');
         const scanOverlay = document.getElementById('scanOverlay');
@@ -1007,6 +1018,13 @@
             return file.name + ':' + file.size + ':' + file.lastModified;
         }
 
+        function isImageFile(file) {
+            if (!file) return false;
+            const type = String(file.type || '').toLowerCase();
+            if (type.startsWith('image/')) return true;
+            return /\.(jpe?g|png|gif|webp|heic|heif|bmp|tif{1,2})$/i.test(file.name || '');
+        }
+
         function updateSelectionUI() {
             const count = selectedItems.length;
             const hasPhotos = count > 0;
@@ -1019,21 +1037,27 @@
                 ? (count + ' photo' + (count === 1 ? '' : 's') + ' selected')
                 : 'Photos ready. Details are optional.';
             thumbsLabel.textContent = count + ' photo' + (count === 1 ? '' : 's') + ' selected';
+            if (chooseStatus) {
+                chooseStatus.textContent = hasPhotos ? '' : '';
+            }
             thumbs.innerHTML = '';
             selectedItems.forEach((item, index) => {
                 const el = document.createElement('div');
                 el.className = 'thumb';
                 el.innerHTML = '<img alt=""><button type="button" class="thumb-remove" aria-label="Remove photo">&times;</button>';
                 el.querySelector('img').src = item.url;
-                el.querySelector('button').addEventListener('click', () => removeSelected(index));
+                el.querySelector('button').addEventListener('click', (evt) => {
+                    evt.preventDefault();
+                    evt.stopPropagation();
+                    removeSelected(index);
+                });
                 thumbs.appendChild(el);
             });
             if (hasPhotos) {
-                const add = document.createElement('button');
-                add.type = 'button';
+                const add = document.createElement('label');
                 add.className = 'add-more';
+                add.setAttribute('for', 'imageInput');
                 add.innerHTML = '<span>+</span>Add more';
-                add.addEventListener('click', () => imageInput.click());
                 thumbs.appendChild(add);
             }
         }
@@ -1053,7 +1077,13 @@
         }
 
         function addFiles(fileList) {
-            const incoming = Array.from(fileList || []).filter((f) => f.type.startsWith('image/'));
+            const files = Array.from(fileList || []);
+            if (!files.length) return;
+            const incoming = files.filter(isImageFile);
+            if (!incoming.length) {
+                if (chooseStatus) chooseStatus.textContent = 'Those files could not be used. Please choose photo files.';
+                return;
+            }
             const existing = new Set(selectedItems.map((item) => fileKey(item.file)));
             incoming.forEach((file) => {
                 if (existing.has(fileKey(file))) return;
@@ -1512,10 +1542,10 @@
             });
         }
 
-        chooseBtn.addEventListener('click', () => imageInput.click());
         imageInput.addEventListener('change', (e) => {
-            addFiles(e.target.files);
-            imageInput.value = '';
+            const files = Array.from(e.target.files || []);
+            addFiles(files);
+            e.target.value = '';
         });
         cancelBtn.addEventListener('click', clearSelected);
         uploadBtn.addEventListener('click', startUpload);

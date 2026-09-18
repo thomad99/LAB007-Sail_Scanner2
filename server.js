@@ -64,6 +64,7 @@ const {
     scrapeHighSchoolSailingCalendar
 } = require('./regatta-calendar-scraper');
 const { attachResultsWatcher, ensureResultsWatchersTable } = require('./results-watcher');
+const { attachRacePlanner } = require('./race-planner');
 
 // Load Puppeteer only if ENABLE_PUPPETEER environment variable is set to 'true'
 // Main server should NOT have this set - only the dedicated scraper service should
@@ -4541,6 +4542,7 @@ attachRaceResultsScraper(app, { pool, openai, axios, cheerio });
 attachRaceResultsScheduler(app, { pool, axios, cheerio });
 attachRegattaDatesScheduler(app, { pool, runScrape: runUpcomingCalendarScrape });
 attachResultsWatcher(app, { pool, axios, cheerio, emailTransporter, cron });
+attachRacePlanner(app, { pool });
 
 // Static file serving (AFTER all API routes)
 app.use(express.static(path.join(__dirname, 'public')));

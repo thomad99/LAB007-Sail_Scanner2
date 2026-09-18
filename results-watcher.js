@@ -1,10 +1,14 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { PARSE_APP_ID, clubspotGet } = require('./clubspot-http');
 
     const WATCH_POLL_CRON = '*/15 * * * *';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_URL_LEN = 2000;
+const PARSE_BOAT_CLASSES_URL = 'https://theclubspot.com/parse/classes/boatClasses';
+const CLUBSPOT_RESULTS_API = 'https://results.theclubspot.com/clubspot-results-v4';
+const WATCH_UA = 'LoveSailing/1.0 (results-watcher; https://lovesailing.ai)';
 
 let pollDeps = null;
 
@@ -48,6 +52,23 @@ function newWatchToken() {
     return crypto.randomBytes(24).toString('hex');
 }
 
+function hashText(text) {
+    return crypto.createHash('sha256').update(String(text || '')).digest('hex');
+}
+
+function isUsableBaseline(hash) {
+    return /^(cs:|html:|empty:)/.test(String(hash || ''));
+}
+
+function normalizeSnapshotText(text) {
+    return String(text || '')
+        .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:am|pm)?\b/gi, ' ')
+        .replace(/\b(?:last updated|updated|as of|generated)\b[^\n]{0,80}/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+}
+
 function fingerprintHtml(cheerio, html) {
     const $ = cheerio.load(html || '');
     $('script, style, noscript, iframe, svg, canvas, link, meta').remove();
@@ -60,13 +81,7 @@ function fingerprintHtml(cheerio, html) {
     } else {
         chunks.push($('main').text() || $('body').text() || $.root().text());
     }
-    const text = chunks.join('\n')
-        .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:am|pm)?\b/gi, ' ')
-        .replace(/\b(?:last updated|updated|as of|generated)\b[^\n]{0,80}/gi, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .toLowerCase();
-    return crypto.createHash('sha256').update(text).digest('hex');
+    return hashText(normalizeSnapshotText(chunks.join('\n')));
 }
 
 async function ensureResultsWatchersTable(pool) {
@@ -308,90 +323,147 @@ function clubspotEventIdFromUrl(url) {
 }
 
 function regattaNetworkEventIdFromUrl(url) {
-    const match = String(url || '').match(/regattanetwork\.com\/event\/(\d+)/i);
-    return match ? match[1] : null;
+    const text = String(url || '');
+    const eventMatch = text.match(/regattanetwork\.com\/event\/(\d+)/i);
+    if (eventMatch) return eventMatch[1];
+    const queryMatch = text.match(/[?&]regatta_id=(\d+)/i);
+    return queryMatch ? queryMatch[1] : null;
 }
 
-function splitStoredHash(stored) {
-    const text = String(stored || '');
-    const idx = text.indexOf('|');
-    if (idx < 0) return { local: text, remote: '' };
-    return { local: text.slice(0, idx), remote: text.slice(idx + 1) };
+function watchLog(msg) {
+    console.log(`[Results Watcher] ${msg}`);
 }
 
-async function fingerprintLocalResults(pool, regattaName) {
-    const name = String(regattaName || '').trim();
-    if (!name) return 'local:none';
+function normalizeClubspotPayload(payload) {
+    const regs = (payload && payload.scoresByRegistration) || [];
+    return regs.map((entry) => {
+        const ro = entry.registrationObject || {};
+        const className = (ro.boatClassObject && ro.boatClassObject.name) || '';
+        const scores = Array.isArray(entry.scoring_data)
+            ? entry.scoring_data
+                .map((s) => `${s.race_number || ''}:${s.points ?? ''}:${s.letterScore || ''}:${s.throwout ? 1 : 0}`)
+                .join(',')
+            : '';
+        return [
+            className,
+            ro.sailNumber || '',
+            ro.boatName || '',
+            entry.net ?? '',
+            entry.total ?? '',
+            scores
+        ].join('|');
+    }).filter((row) => row.replace(/\|/g, '').trim()).sort();
+}
+
+async function fetchClubspotClassIds(axios, regattaId) {
+    const where = JSON.stringify({
+        regattaObject: { __type: 'Pointer', className: 'regattas', objectId: regattaId }
+    });
     try {
-        const result = await pool.query(`
-            SELECT
-                COUNT(*)::int AS n,
-                COALESCE(md5(string_agg(payload, E'\\n' ORDER BY payload)), 'empty') AS digest
-            FROM (
-                SELECT CONCAT_WS('|',
-                    COALESCE(category, ''),
-                    COALESCE(position, ''),
-                    COALESCE(sail_number, ''),
-                    COALESCE(skipper, ''),
-                    COALESCE(results, ''),
-                    COALESCE(total_points, '')
-                ) AS payload
-                FROM scraped_race_results
-                WHERE LOWER(TRIM(regatta_name)) = LOWER(TRIM($1))
-                   OR LOWER(TRIM(regatta_name)) LIKE LOWER(TRIM($1)) || ' %'
-                   OR LOWER(TRIM($1)) LIKE LOWER(TRIM(regatta_name)) || ' %'
-            ) scores
-        `, [name]);
-        const row = result.rows[0] || {};
-        return `local:${row.n || 0}:${row.digest || 'empty'}`;
+        const res = await clubspotGet(axios, PARSE_BOAT_CLASSES_URL, {
+            params: { where, limit: '100', keys: 'objectId,name' },
+            headers: { 'X-Parse-Application-Id': PARSE_APP_ID }
+        }, { log: watchLog });
+        return [...new Set((res.data.results || []).map((c) => c.objectId).filter(Boolean))];
     } catch (err) {
-        console.error('[Results Watcher] Local fingerprint failed:', err.message);
-        return 'local:unavailable';
+        watchLog(`ClubSpot class lookup failed for ${regattaId}: ${err.message}`);
+        return [];
     }
 }
 
-async function fingerprintRemoteResults(axios, cheerio, url) {
-    const clean = String(url || '').split('#')[0];
-    const csId = clubspotEventIdFromUrl(clean);
-    if (csId) {
-        const response = await axios.get(`https://results.theclubspot.com/clubspot-results-v4/${encodeURIComponent(csId)}`, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 LoveSailing Results Watcher',
-                'Accept': 'application/json,text/plain,*/*'
-            },
-            timeout: 25000,
-            validateStatus: status => status >= 200 && status < 400
-        });
-        const body = typeof response.data === 'string' ? response.data : JSON.stringify(response.data || {});
-        return 'cs:' + crypto.createHash('sha256').update(body).digest('hex');
+async function snapshotClubspot(axios, eventId) {
+    const classIds = await fetchClubspotClassIds(axios, eventId);
+    const rows = [];
+    const ids = classIds.length ? classIds : [null];
+    for (const classId of ids) {
+        const config = { timeout: 25000 };
+        if (classId) config.params = { boatClassIDs: classId };
+        const res = await clubspotGet(
+            axios,
+            `${CLUBSPOT_RESULTS_API}/${encodeURIComponent(eventId)}`,
+            config,
+            { log: watchLog }
+        );
+        rows.push(...normalizeClubspotPayload(res.data));
     }
+    const unique = [...new Set(rows)].sort();
+    const text = unique.join('\n').trim();
+    if (!text) {
+        return { hash: 'empty:clubspot', detail: `clubspot:${eventId}:no-scores` };
+    }
+    return {
+        hash: 'cs:' + hashText(text),
+        detail: `clubspot:${eventId}:${unique.length}-rows`
+    };
+}
 
-    const rnId = regattaNetworkEventIdFromUrl(clean);
-    const fetchUrl = rnId ? `https://www.regattanetwork.com/event/${rnId}` : clean;
-    const response = await axios.get(fetchUrl, {
+async function snapshotHtml(axios, cheerio, url) {
+    const response = await axios.get(url, {
         headers: {
-            'User-Agent': 'Mozilla/5.0 LoveSailing Results Watcher',
+            'User-Agent': WATCH_UA,
             'Accept': 'text/html,application/xhtml+xml'
         },
         timeout: 25000,
         maxRedirects: 5,
-        validateStatus: status => status >= 200 && status < 400
+        validateStatus: () => true
     });
-    const html = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
-    return 'html:' + fingerprintHtml(cheerio, html);
+    if (response.status >= 500) {
+        throw new Error(`HTTP ${response.status} for ${url}`);
+    }
+    if (response.status === 404 || response.status === 403) {
+        return { hash: `empty:http-${response.status}`, detail: `${url} ${response.status}` };
+    }
+    const html = typeof response.data === 'string' ? response.data : JSON.stringify(response.data || {});
+    const digest = fingerprintHtml(cheerio, html);
+    const $ = cheerio.load(html);
+    const tableCount = $('table').length;
+    const bodyText = normalizeSnapshotText($('body').text() || '');
+    if (!tableCount && bodyText.length < 40) {
+        return { hash: 'empty:html', detail: `${url}:empty-page` };
+    }
+    return {
+        hash: 'html:' + digest,
+        detail: `${url}:tables=${tableCount}`
+    };
 }
 
-async function combinedWatchHash({ pool, axios, cheerio, watch }) {
-    const previous = splitStoredHash(watch.content_hash);
-    const localHash = await fingerprintLocalResults(pool, watch.regatta_name);
-    let remoteHash = previous.remote || 'remote:none';
-    try {
-        remoteHash = await fingerprintRemoteResults(axios, cheerio, watch.results_url);
-    } catch (err) {
-        console.warn(`[Results Watcher] Remote check failed for ${watch.results_url}: ${err.message}`);
-        remoteHash = previous.remote || 'remote:none';
+async function snapshotRemoteResults(axios, cheerio, url) {
+    const clean = String(url || '').split('#')[0];
+    const csId = clubspotEventIdFromUrl(clean);
+    if (csId) return snapshotClubspot(axios, csId);
+
+    const rnId = regattaNetworkEventIdFromUrl(clean);
+    if (rnId) {
+        const resultsUrl = `https://www.regattanetwork.com/clubmgmt/applet_regatta_results.php?regatta_id=${rnId}&show_divisions=1`;
+        return snapshotHtml(axios, cheerio, resultsUrl);
     }
-    return `${localHash}|${remoteHash}`;
+
+    return snapshotHtml(axios, cheerio, clean);
+}
+
+async function captureBaseline(pool, axios, cheerio, watchId, resultsUrl) {
+    try {
+        const snap = await snapshotRemoteResults(axios, cheerio, resultsUrl);
+        await pool.query(
+            `UPDATE results_watchers
+             SET content_hash = $2, last_checked = CURRENT_TIMESTAMP, last_error = NULL
+             WHERE id = $1`,
+            [watchId, snap.hash]
+        );
+        await logWatchEvent(pool, watchId, 'baseline', snap.detail);
+        watchLog(`Baseline stored for watch ${watchId}: ${snap.detail}`);
+        return snap;
+    } catch (err) {
+        await pool.query(
+            `UPDATE results_watchers
+             SET last_checked = CURRENT_TIMESTAMP, last_error = $2
+             WHERE id = $1`,
+            [watchId, String(err.message || err).slice(0, 500)]
+        );
+        await logWatchEvent(pool, watchId, 'baseline_error', err.message);
+        watchLog(`Baseline failed for watch ${watchId}: ${err.message}`);
+        return null;
+    }
 }
 
 let pollRunning = false;
@@ -432,13 +504,16 @@ async function pollActiveWatchers({ pool, axios, cheerio, emailTransporter }) {
 
         for (const watch of result.rows) {
             try {
-                const hash = await combinedWatchHash({ pool, axios, cheerio, watch });
+                const snap = await snapshotRemoteResults(axios, cheerio, watch.results_url);
                 const stored = String(watch.content_hash || '');
-                const comparable = stored.includes('|');
-                const changed = comparable && stored !== hash;
+                const hasBaseline = isUsableBaseline(stored);
+                const changed = hasBaseline && stored !== snap.hash;
                 const changedAt = new Date();
 
-                if (changed) {
+                if (!hasBaseline) {
+                    await logWatchEvent(pool, watch.id, 'baseline', snap.detail);
+                    watchLog(`First snapshot for watch ${watch.id}: ${snap.detail}`);
+                } else if (changed) {
                     await sendWatchEmail(emailTransporter, {
                         to: watch.email,
                         title: watch.regatta_name || 'Regatta results',
@@ -450,7 +525,8 @@ async function pollActiveWatchers({ pool, axios, cheerio, emailTransporter }) {
                         kind: 'updated',
                         extra: 'Alerts stop automatically after 48 hours. You can also stop them anytime below.'
                     });
-                    await logWatchEvent(pool, watch.id, 'notified', watch.regatta_name);
+                    await logWatchEvent(pool, watch.id, 'notified', `${watch.regatta_name || ''} ${snap.detail}`.trim());
+                    watchLog(`DIFF alert sent for watch ${watch.id}: ${stored.slice(0, 18)} → ${snap.hash.slice(0, 18)} (${snap.detail})`);
                 }
 
                 await pool.query(`
@@ -461,7 +537,7 @@ async function pollActiveWatchers({ pool, axios, cheerio, emailTransporter }) {
                         notify_count = CASE WHEN $3 THEN COALESCE(notify_count, 0) + 1 ELSE notify_count END,
                         last_error = NULL
                     WHERE id = $1
-                `, [watch.id, hash, changed]);
+                `, [watch.id, snap.hash, changed]);
             } catch (err) {
                 await pool.query(`
                     UPDATE results_watchers
@@ -537,6 +613,14 @@ function attachResultsWatcher(app, { pool, axios, cheerio, emailTransporter, cro
                 `, [token, email, resultsUrl, regattaName, regattaDate]);
                 watchId = inserted.rows[0].id;
                 await logWatchEvent(pool, watchId, 'created', regattaName);
+            }
+
+            const current = await pool.query(
+                `SELECT content_hash FROM results_watchers WHERE id = $1`,
+                [watchId]
+            );
+            if (!isUsableBaseline(current.rows[0] && current.rows[0].content_hash)) {
+                await captureBaseline(pool, axios, cheerio, watchId, resultsUrl);
             }
 
             const stopUrl = stopUrlForToken(token);
@@ -878,6 +962,7 @@ module.exports = {
     attachResultsWatcher,
     ensureResultsWatchersTable,
     fingerprintHtml,
+    snapshotRemoteResults,
     pollActiveWatchers,
     notifyWatchersAfterScrape
 };

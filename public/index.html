@@ -66,11 +66,11 @@
 
         .navigation {
             display: grid;
-            grid-template-columns: repeat(5, minmax(0, 1fr));
+            grid-template-columns: repeat(6, minmax(0, 1fr));
             justify-items: center;
             align-items: start;
             gap: clamp(8px, 2vw, 28px);
-            width: min(100%, 960px);
+            width: min(100%, 1100px);
             margin-top: 0;
             flex: 0 1 auto;
             min-height: 0;
@@ -110,8 +110,8 @@
 
         /* Icon card for pages without a custom image */
         .nav-icon-card {
-            width: 200px;
-            height: 140px;
+            width: min(100%, 140px);
+            height: min(22vh, 140px);
             background: rgba(255,255,255,0.1);
             border: 2px solid rgba(255,255,255,0.2);
             border-radius: 12px;
@@ -359,6 +359,7 @@
         @media (max-width: 900px) and (min-width: 769px) {
             .navigation {
                 gap: clamp(8px, 1.6vw, 18px);
+                grid-template-columns: repeat(3, minmax(0, 1fr));
             }
 
             .nav-label {
@@ -422,6 +423,12 @@
             <img src="/Images/icon-shopping.png" alt="Shopping">
             <span class="nav-label">Shopping</span>
         </a>
+        <a href="RacePlanner.html" class="nav-item">
+            <div class="nav-icon-card">
+                <span class="icon">🧭</span>
+            </div>
+            <span class="nav-label">Race Planner</span>
+        </a>
     </div>
     </div>
 
@@ -473,6 +480,7 @@
             </div>
         </div>
         <a href="Shop.html">Shopping</a>
+        <a href="RacePlanner.html">Race Planner</a>
     </div>
 
     <script>
