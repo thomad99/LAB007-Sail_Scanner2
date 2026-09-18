@@ -5,6 +5,8 @@
 
 const crypto = require('crypto');
 
+const EASTERN = 'America/New_York';
+
 function randomCode(len) {
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     const bytes = crypto.randomBytes(len);
@@ -21,6 +23,28 @@ function pmoTokenFrom(req) {
     return String((req.body && req.body.pmoToken) || req.get('X-Pmo-Token') || '').trim();
 }
 
+function codeFromName(name) {
+    const slug = String(name || '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '')
+        .slice(0, 18);
+    return slug || randomCode(6);
+}
+
+function haversine(aLat, aLng, bLat, bLng) {
+    const R = 6371000;
+    const toRad = (d) => d * Math.PI / 180;
+    const dLat = toRad(bLat - aLat);
+    const dLng = toRad(bLng - aLng);
+    const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+function isExpired(course) {
+    if (!course || !course.expires_at) return false;
+    return new Date(course.expires_at).getTime() <= Date.now();
+}
+
 async function attachRacePlanner(app, { pool }) {
     async function ensureTables() {
         await pool.query(`
@@ -32,8 +56,16 @@ async function attachRacePlanner(app, { pool }) {
                 home_lat DOUBLE PRECISION,
                 home_lng DOUBLE PRECISION,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                expires_at TIMESTAMPTZ
             )
+        `);
+        await pool.query(`ALTER TABLE race_planner_courses ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`);
+        await pool.query(`
+            UPDATE race_planner_courses
+            SET expires_at = (date_trunc('day', (created_at AT TIME ZONE '${EASTERN}')) + INTERVAL '1 day')
+                AT TIME ZONE '${EASTERN}'
+            WHERE expires_at IS NULL
         `);
         await pool.query(`
             CREATE TABLE IF NOT EXISTS race_planner_markers (
@@ -59,6 +91,17 @@ async function attachRacePlanner(app, { pool }) {
             )
         `);
         await pool.query(`
+            DELETE FROM race_planner_drops a
+            USING race_planner_drops b
+            WHERE a.marker_id IS NOT NULL
+              AND a.marker_id = b.marker_id
+              AND a.id < b.id
+        `);
+        await pool.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS race_planner_one_drop_per_mark
+            ON race_planner_drops (marker_id) WHERE marker_id IS NOT NULL
+        `);
+        await pool.query(`
             CREATE TABLE IF NOT EXISTS race_planner_positions (
                 course_id INTEGER NOT NULL REFERENCES race_planner_courses(id) ON DELETE CASCADE,
                 user_id TEXT NOT NULL,
@@ -75,6 +118,16 @@ async function attachRacePlanner(app, { pool }) {
 
     ensureTables().catch((err) => console.error('Race planner table setup:', err));
 
+    async function uniqueCourseCode(base) {
+        let code = base;
+        for (let i = 0; i < 30; i++) {
+            const exists = await pool.query('SELECT 1 FROM race_planner_courses WHERE UPPER(code) = UPPER($1)', [code]);
+            if (!exists.rows.length) return code;
+            code = `${base}${i + 2}`.slice(0, 22);
+        }
+        return `${base}${randomCode(3)}`.slice(0, 22);
+    }
+
     async function getCourseByCode(code) {
         const result = await pool.query(
             'SELECT * FROM race_planner_courses WHERE UPPER(code) = UPPER($1)',
@@ -88,6 +141,14 @@ async function attachRacePlanner(app, { pool }) {
         if (!token || token !== course.pmo_token) {
             const err = new Error('Only the Race PMO can change planned marks.');
             err.status = 403;
+            throw err;
+        }
+    }
+
+    function rejectIfExpired(course) {
+        if (isExpired(course)) {
+            const err = new Error('This course expired at the end of the day it was created.');
+            err.status = 410;
             throw err;
         }
     }
@@ -110,38 +171,58 @@ async function attachRacePlanner(app, { pool }) {
                 [course.id]
             )
         ]);
+        const droppedIds = new Set(
+            drops.rows.filter((d) => d.marker_id != null).map((d) => Number(d.marker_id))
+        );
+        const markerRows = markers.rows.map((m) => ({
+            ...m,
+            dropped: droppedIds.has(Number(m.id))
+        }));
+        const total = markerRows.length;
+        const droppedCount = markerRows.filter((m) => m.dropped).length;
         return {
             success: true,
             code: course.code,
             name: course.name || 'Race course',
+            expiresAt: course.expires_at,
             home: (course.home_lat != null && course.home_lng != null)
                 ? { lat: course.home_lat, lng: course.home_lng }
                 : null,
-            markers: markers.rows,
+            markers: markerRows,
             drops: drops.rows,
-            positions: positions.rows
+            positions: positions.rows,
+            droppedCount,
+            markerCount: total,
+            configured: total > 0 && droppedCount === total
         };
     }
 
     app.post('/api/race-planner/courses', async (req, res) => {
         try {
             await ensureTables();
-            const name = String((req.body && req.body.name) || 'Race course').slice(0, 80);
-            let code = '';
-            for (let i = 0; i < 8; i++) {
-                code = randomCode(5);
-                const exists = await pool.query('SELECT 1 FROM race_planner_courses WHERE code = $1', [code]);
-                if (!exists.rows.length) break;
-            }
+            const name = String((req.body && req.body.name) || 'Race course').trim().slice(0, 80) || 'Race course';
+            const code = await uniqueCourseCode(codeFromName(name));
             const pmoToken = randomToken();
             const homeLat = req.body && req.body.lat != null ? Number(req.body.lat) : null;
             const homeLng = req.body && req.body.lng != null ? Number(req.body.lng) : null;
-            await pool.query(
-                `INSERT INTO race_planner_courses (code, pmo_token, name, home_lat, home_lng)
-                 VALUES ($1, $2, $3, $4, $5)`,
+            const inserted = await pool.query(
+                `INSERT INTO race_planner_courses (code, pmo_token, name, home_lat, home_lng, expires_at)
+                 VALUES (
+                    $1, $2, $3, $4, $5,
+                    (date_trunc('day', (NOW() AT TIME ZONE '${EASTERN}')) + INTERVAL '1 day')
+                        AT TIME ZONE '${EASTERN}'
+                 )
+                 RETURNING id, code, name, expires_at`,
                 [code, pmoToken, name, Number.isFinite(homeLat) ? homeLat : null, Number.isFinite(homeLng) ? homeLng : null]
             );
-            res.json({ success: true, code, pmoToken, name });
+            const row = inserted.rows[0];
+            res.json({
+                success: true,
+                code: row.code,
+                pmoToken,
+                name: row.name,
+                expiresAt: row.expires_at
+            });
         } catch (err) {
             console.error('Create race course:', err);
             res.status(500).json({ success: false, error: err.message });
@@ -152,9 +233,10 @@ async function attachRacePlanner(app, { pool }) {
         try {
             const course = await getCourseByCode(req.params.code);
             if (!course) return res.status(404).json({ success: false, error: 'Course not found' });
+            rejectIfExpired(course);
             res.json(await courseState(course));
         } catch (err) {
-            res.status(500).json({ success: false, error: err.message });
+            res.status(err.status || 500).json({ success: false, error: err.message });
         }
     });
 
@@ -162,6 +244,7 @@ async function attachRacePlanner(app, { pool }) {
         try {
             const course = await getCourseByCode(req.params.code);
             if (!course) return res.status(404).json({ success: false, error: 'Course not found' });
+            rejectIfExpired(course);
             await requirePmo(req, course);
             const lat = Number(req.body.lat);
             const lng = Number(req.body.lng);
@@ -184,6 +267,7 @@ async function attachRacePlanner(app, { pool }) {
         try {
             const course = await getCourseByCode(req.params.code);
             if (!course) return res.status(404).json({ success: false, error: 'Course not found' });
+            rejectIfExpired(course);
             await requirePmo(req, course);
             const lat = Number(req.body.lat);
             const lng = Number(req.body.lng);
@@ -211,6 +295,7 @@ async function attachRacePlanner(app, { pool }) {
         try {
             const course = await getCourseByCode(req.params.code);
             if (!course) return res.status(404).json({ success: false, error: 'Course not found' });
+            rejectIfExpired(course);
             await requirePmo(req, course);
             const id = Number(req.params.id);
             const fields = [];
@@ -247,6 +332,7 @@ async function attachRacePlanner(app, { pool }) {
         try {
             const course = await getCourseByCode(req.params.code);
             if (!course) return res.status(404).json({ success: false, error: 'Course not found' });
+            rejectIfExpired(course);
             await requirePmo(req, course);
             await pool.query(
                 'DELETE FROM race_planner_markers WHERE id = $1 AND course_id = $2',
@@ -262,6 +348,7 @@ async function attachRacePlanner(app, { pool }) {
         try {
             const course = await getCourseByCode(req.params.code);
             if (!course) return res.status(404).json({ success: false, error: 'Course not found' });
+            rejectIfExpired(course);
             const userId = String(req.body.userId || '').slice(0, 80);
             const lat = Number(req.body.lat);
             const lng = Number(req.body.lng);
@@ -299,7 +386,7 @@ async function attachRacePlanner(app, { pool }) {
             }
             res.json(await courseState(course));
         } catch (err) {
-            res.status(500).json({ success: false, error: err.message });
+            res.status(err.status || 500).json({ success: false, error: err.message });
         }
     });
 
@@ -307,13 +394,41 @@ async function attachRacePlanner(app, { pool }) {
         try {
             const course = await getCourseByCode(req.params.code);
             if (!course) return res.status(404).json({ success: false, error: 'Course not found' });
+            rejectIfExpired(course);
             const lat = Number(req.body.lat);
             const lng = Number(req.body.lng);
             const userId = String(req.body.userId || '').slice(0, 80);
             if (!userId || !Number.isFinite(lat) || !Number.isFinite(lng)) {
                 return res.status(400).json({ success: false, error: 'userId, lat, lng required' });
             }
-            const markerId = req.body.markerId ? Number(req.body.markerId) : null;
+            let markerId = req.body.markerId ? Number(req.body.markerId) : null;
+            const markerRows = await pool.query(
+                'SELECT id, lat, lng FROM race_planner_markers WHERE course_id = $1',
+                [course.id]
+            );
+            const droppedRows = await pool.query(
+                'SELECT marker_id FROM race_planner_drops WHERE course_id = $1 AND marker_id IS NOT NULL',
+                [course.id]
+            );
+            const droppedIds = new Set(droppedRows.rows.map((r) => Number(r.marker_id)));
+            const belongs = markerRows.rows.some((m) => Number(m.id) === markerId);
+            if (!belongs) markerId = null;
+            if (!markerId && markerRows.rows.length) {
+                let best = null;
+                let bestD = Infinity;
+                markerRows.rows.forEach((m) => {
+                    if (droppedIds.has(Number(m.id))) return;
+                    const d = haversine(lat, lng, Number(m.lat), Number(m.lng));
+                    if (d < bestD) {
+                        bestD = d;
+                        best = m;
+                    }
+                });
+                if (best) markerId = Number(best.id);
+            }
+            if (markerId) {
+                await pool.query('DELETE FROM race_planner_drops WHERE marker_id = $1', [markerId]);
+            }
             const inserted = await pool.query(
                 `INSERT INTO race_planner_drops (course_id, marker_id, user_id, user_name, lat, lng)
                  VALUES ($1, $2, $3, $4, $5, $6)
@@ -321,6 +436,65 @@ async function attachRacePlanner(app, { pool }) {
                 [course.id, Number.isFinite(markerId) ? markerId : null, userId, String(req.body.userName || 'Committee').slice(0, 40), lat, lng]
             );
             res.json({ success: true, drop: inserted.rows[0], ...(await courseState(course)) });
+        } catch (err) {
+            res.status(err.status || 500).json({ success: false, error: err.message });
+        }
+    });
+
+    app.get('/api/race-planner/admin', async (req, res) => {
+        try {
+            await ensureTables();
+            const result = await pool.query(`
+                SELECT
+                    c.id, c.code, c.name, c.created_at, c.updated_at, c.expires_at,
+                    c.home_lat, c.home_lng,
+                    (c.expires_at IS NULL OR c.expires_at > NOW()) AS active,
+                    (SELECT COUNT(*)::int FROM race_planner_markers m WHERE m.course_id = c.id) AS marker_count,
+                    (SELECT COUNT(*)::int FROM race_planner_drops d WHERE d.course_id = c.id AND d.marker_id IS NOT NULL) AS dropped_count,
+                    (SELECT COUNT(*)::int FROM race_planner_positions p
+                     WHERE p.course_id = c.id AND p.updated_at > NOW() - INTERVAL '3 minutes') AS live_people
+                FROM race_planner_courses c
+                ORDER BY c.created_at DESC
+                LIMIT 200
+            `);
+            const rows = result.rows || [];
+            res.json({
+                success: true,
+                active: rows.filter((r) => r.active),
+                history: rows.filter((r) => !r.active)
+            });
+        } catch (err) {
+            console.error('Race planner admin list:', err);
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    app.post('/api/race-planner/admin/:id/end', async (req, res) => {
+        try {
+            await ensureTables();
+            const updated = await pool.query(
+                `UPDATE race_planner_courses
+                 SET expires_at = NOW(), updated_at = NOW()
+                 WHERE id = $1
+                 RETURNING id, code, name`,
+                [Number(req.params.id)]
+            );
+            if (!updated.rows.length) return res.status(404).json({ success: false, error: 'Course not found' });
+            res.json({ success: true, course: updated.rows[0] });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    app.delete('/api/race-planner/admin/:id', async (req, res) => {
+        try {
+            await ensureTables();
+            const deleted = await pool.query(
+                'DELETE FROM race_planner_courses WHERE id = $1 RETURNING id, code, name',
+                [Number(req.params.id)]
+            );
+            if (!deleted.rows.length) return res.status(404).json({ success: false, error: 'Course not found' });
+            res.json({ success: true, course: deleted.rows[0] });
         } catch (err) {
             res.status(500).json({ success: false, error: err.message });
         }

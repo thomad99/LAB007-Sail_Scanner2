@@ -1332,6 +1332,7 @@
             margin: 0 0 14px;
         }
         body.photos-tab-active .page-top-dashboard,
+        body.races-tab-active .page-top-dashboard,
         body:not(.dates-tab-active) #datesDashTile,
         body:not(.alerts-tab-active) #alertsDashTile {
             display: none;
@@ -1431,6 +1432,7 @@
             <button type="button" class="admin-tab active" id="tabBtnDates" onclick="showAdminTab('dates')">Regatta Dates</button>
             <button type="button" class="admin-tab" id="tabBtnResults" onclick="showAdminTab('results')">Regatta Results</button>
             <button type="button" class="admin-tab" id="tabBtnAlerts" onclick="showAdminTab('alerts')">Alerts</button>
+            <button type="button" class="admin-tab" id="tabBtnRaces" onclick="showAdminTab('races')">Race Planner</button>
             <button type="button" class="admin-tab" id="tabBtnPhotos" onclick="showAdminTab('photos')">Photo Admin</button>
         </div>
     </div>
@@ -1692,6 +1694,58 @@
         </div>
         </div>
 
+        <div id="tab-races" class="tab-panel">
+            <section class="admin-tile">
+                <h2>Active races</h2>
+                <p class="tile-sub">Courses still live today. They expire at midnight Eastern. End a race to close it early.</p>
+                <div class="dates-toolbar">
+                    <button class="action-button" onclick="loadRacePlannerAdmin()">Refresh</button>
+                    <a href="RacePlanner.html" class="action-button">Open Race Planner</a>
+                </div>
+                <div id="raceActiveCount" style="margin: 0 0 12px; color: #b7c6d8;"></div>
+                <div class="regatta-table-container" style="background: transparent; box-shadow: none; padding: 0;">
+                    <table class="regatta-table" id="raceActiveTable">
+                        <thead>
+                            <tr>
+                                <th>Course</th>
+                                <th>Code</th>
+                                <th>Marks</th>
+                                <th>Live</th>
+                                <th>Created</th>
+                                <th>Expires</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="raceActiveBody">
+                            <tr><td colspan="7">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            <section class="admin-tile upcoming-list-tile" style="margin-top: 16px;">
+                <div class="regatta-table-container">
+                    <h2>History</h2>
+                    <p class="tile-sub">Finished or expired courses, newest first.</p>
+                    <div id="raceHistoryCount" style="margin: 0 0 12px; color: #b7c6d8;"></div>
+                    <table class="regatta-table" id="raceHistoryTable">
+                        <thead>
+                            <tr>
+                                <th>Course</th>
+                                <th>Code</th>
+                                <th>Marks</th>
+                                <th>Created</th>
+                                <th>Ended</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="raceHistoryBody">
+                            <tr><td colspan="6">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
         <div id="tab-photos" class="tab-panel">
             <div class="photo-admin-frame-wrap">
                 <iframe
@@ -1762,6 +1816,7 @@
         <a href="SailScan.html">Photos</a>
         <a href="Find-regatta.html">Regatta Search</a>
         <a href="Tracker.html">Tracker</a>
+        <a href="RacePlanner.html">Race Planner</a>
         <a href="Shop.html">Shopping</a>
     </div>
 
@@ -1771,20 +1826,23 @@
                 location.replace('Chatbot.html');
                 return;
             }
-            const tab = ['dates', 'results', 'photos', 'alerts'].includes(name) ? name : 'dates';
+            const tab = ['dates', 'results', 'photos', 'alerts', 'races'].includes(name) ? name : 'dates';
             document.body.classList.toggle('photos-tab-active', tab === 'photos');
             document.body.classList.toggle('dates-tab-active', tab === 'dates');
             document.body.classList.toggle('results-tab-active', tab === 'results');
             document.body.classList.toggle('alerts-tab-active', tab === 'alerts');
+            document.body.classList.toggle('races-tab-active', tab === 'races');
 
             document.getElementById('tab-dates').classList.toggle('active', tab === 'dates');
             document.getElementById('tab-results').classList.toggle('active', tab === 'results');
             document.getElementById('tab-photos').classList.toggle('active', tab === 'photos');
             document.getElementById('tab-alerts').classList.toggle('active', tab === 'alerts');
+            document.getElementById('tab-races').classList.toggle('active', tab === 'races');
             document.getElementById('tabBtnDates').classList.toggle('active', tab === 'dates');
             document.getElementById('tabBtnResults').classList.toggle('active', tab === 'results');
             document.getElementById('tabBtnPhotos').classList.toggle('active', tab === 'photos');
             document.getElementById('tabBtnAlerts').classList.toggle('active', tab === 'alerts');
+            document.getElementById('tabBtnRaces').classList.toggle('active', tab === 'races');
             if (location.hash !== '#' + tab) {
                 history.replaceState(null, '', '#' + tab);
             }
@@ -1805,6 +1863,9 @@
             }
             if (tab === 'alerts') {
                 loadAlertStats();
+            }
+            if (tab === 'races') {
+                loadRacePlannerAdmin();
             }
         }
 
@@ -2009,6 +2070,105 @@
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;');
+        }
+
+        function formatRaceWhen(value) {
+            if (!value) return '—';
+            const d = new Date(value);
+            if (Number.isNaN(d.getTime())) return '—';
+            return d.toLocaleString('en-US', {
+                timeZone: 'America/New_York',
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit'
+            });
+        }
+
+        function raceMarksCell(row) {
+            const total = Number(row.marker_count || 0);
+            const dropped = Number(row.dropped_count || 0);
+            if (!total) return '0 marks';
+            const done = dropped >= total ? 'Configured' : (dropped + ' / ' + total + ' dropped');
+            return escapeAdminHtml(done);
+        }
+
+        async function loadRacePlannerAdmin() {
+            const activeBody = document.getElementById('raceActiveBody');
+            const historyBody = document.getElementById('raceHistoryBody');
+            const activeCount = document.getElementById('raceActiveCount');
+            const historyCount = document.getElementById('raceHistoryCount');
+            if (!activeBody) return;
+            try {
+                const response = await fetch('/api/race-planner/admin');
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Could not load races');
+                const active = data.active || [];
+                const history = data.history || [];
+                if (activeCount) {
+                    activeCount.textContent = active.length
+                        ? active.length + ' active course' + (active.length === 1 ? '' : 's')
+                        : 'No active courses right now.';
+                }
+                if (historyCount) {
+                    historyCount.textContent = history.length
+                        ? history.length + ' past course' + (history.length === 1 ? '' : 's')
+                        : 'No history yet.';
+                }
+                activeBody.innerHTML = active.length ? active.map((row) => `
+                    <tr>
+                        <td class="name">${escapeAdminHtml(row.name || 'Untitled')}</td>
+                        <td>${escapeAdminHtml(row.code)}</td>
+                        <td>${raceMarksCell(row)}</td>
+                        <td>${Number(row.live_people || 0)}</td>
+                        <td class="date">${escapeAdminHtml(formatRaceWhen(row.created_at))}</td>
+                        <td class="date">${escapeAdminHtml(formatRaceWhen(row.expires_at))}</td>
+                        <td>
+                            <button type="button" class="action-button pause" onclick="endRaceCourse(${Number(row.id)})">End</button>
+                            <button type="button" class="action-button" onclick="deleteRaceCourse(${Number(row.id)})">Delete</button>
+                        </td>
+                    </tr>
+                `).join('') : '<tr><td colspan="7">No active races.</td></tr>';
+                historyBody.innerHTML = history.length ? history.map((row) => `
+                    <tr>
+                        <td class="name">${escapeAdminHtml(row.name || 'Untitled')}</td>
+                        <td>${escapeAdminHtml(row.code)}</td>
+                        <td>${raceMarksCell(row)}</td>
+                        <td class="date">${escapeAdminHtml(formatRaceWhen(row.created_at))}</td>
+                        <td class="date">${escapeAdminHtml(formatRaceWhen(row.expires_at))}</td>
+                        <td>
+                            <button type="button" class="action-button" onclick="deleteRaceCourse(${Number(row.id)})">Delete</button>
+                        </td>
+                    </tr>
+                `).join('') : '<tr><td colspan="6">No past races.</td></tr>';
+            } catch (err) {
+                if (activeBody) activeBody.innerHTML = `<tr><td colspan="7">${escapeAdminHtml(err.message || 'Could not load races.')}</td></tr>`;
+                if (historyBody) historyBody.innerHTML = `<tr><td colspan="6">${escapeAdminHtml(err.message || 'Could not load races.')}</td></tr>`;
+            }
+        }
+
+        async function endRaceCourse(id) {
+            if (!confirm('End this course now? Committee will no longer be able to join it.')) return;
+            try {
+                const response = await fetch('/api/race-planner/admin/' + id + '/end', { method: 'POST' });
+                const data = await response.json();
+                if (!response.ok || data.error) throw new Error(data.error || 'Could not end course');
+                loadRacePlannerAdmin();
+            } catch (err) {
+                alert(err.message || 'Could not end course');
+            }
+        }
+
+        async function deleteRaceCourse(id) {
+            if (!confirm('Delete this course and all of its marks? This cannot be undone.')) return;
+            try {
+                const response = await fetch('/api/race-planner/admin/' + id, { method: 'DELETE' });
+                const data = await response.json();
+                if (!response.ok || data.error) throw new Error(data.error || 'Could not delete course');
+                loadRacePlannerAdmin();
+            } catch (err) {
+                alert(err.message || 'Could not delete course');
+            }
         }
 
         function formatAlertWhen(value) {

@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#04102b">
     <title>Race Planner - Love Sailing</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -20,6 +24,8 @@
         * { box-sizing: border-box; }
         html, body { margin: 0; height: 100%; height: 100dvh; font-family: Inter, system-ui, sans-serif; background: var(--sky); color: #14204a; }
         body { display: flex; flex-direction: column; overflow: hidden; }
+        body.kiosk .topbar { display: none; }
+        body.kiosk { background: #04102b; }
 
         .topbar {
             display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -121,11 +127,45 @@
 
         .leaflet-container { font-family: inherit; }
         .mark-label {
-            background: #1d4ed8; color: #fff; border: 0; border-radius: 8px;
+            background: #dc2626; color: #fff; border: 0; border-radius: 8px;
             padding: 2px 7px; font-weight: 800; font-size: 12px;
         }
+        .mark-label.dropped { background: #16a34a; }
         .home-label { background: #15803d; }
-        .drop-label { background: #c2410c; }
+        .drop-label { background: #16a34a; }
+        .status-ring {
+            position: absolute; inset: 0; z-index: 440; pointer-events: none;
+            border: 8px solid #dc2626;
+            box-shadow: inset 0 0 28px rgba(220, 38, 38, 0.28);
+        }
+        .status-ring.yellow {
+            border-color: #eab308;
+            box-shadow: inset 0 0 28px rgba(234, 179, 8, 0.28);
+        }
+        .status-ring.green {
+            border-color: #16a34a;
+            border-width: 10px;
+            box-shadow: inset 0 0 36px rgba(22, 163, 74, 0.38);
+        }
+        .configured-banner {
+            display: none;
+            position: absolute; top: calc(10px + env(safe-area-inset-top)); left: 50%;
+            transform: translateX(-50%);
+            z-index: 530;
+            background: #16a34a; color: #fff;
+            font-weight: 800; letter-spacing: 0.04em;
+            padding: 8px 16px; border-radius: 999px;
+            box-shadow: 0 8px 20px rgba(0,0,0,.25);
+            white-space: nowrap;
+        }
+        .configured-banner.show { display: block; }
+        .kiosk-exit {
+            display: none;
+            position: absolute; top: calc(10px + env(safe-area-inset-top)); left: 12px;
+            z-index: 540;
+        }
+        body.kiosk .kiosk-exit { display: block; }
+        .kiosk-exit .btn { min-height: 36px; padding: 6px 10px; font-size: 0.8rem; }
         .dist-label span {
             background: rgba(255,255,255,.92);
             color: #14204a;
@@ -156,9 +196,9 @@
                 <h2>Race PMO</h2>
                 <p>Your GPS is home. Draw the course, drag marks, and watch dropped positions come in.</p>
                 <div class="join-box">
-                    <input id="pmoName" placeholder="Course name (optional)">
+                    <input id="pmoName" placeholder="Course name" maxlength="80">
                     <button class="btn primary" id="createCourseBtn">Start as PMO</button>
-                    <p class="hint">Creates a share code for Race Committee.</p>
+                    <p class="hint">The course name becomes today’s join code. The course expires at midnight.</p>
                 </div>
             </div>
             <div class="role-card" id="rcCard">
@@ -166,7 +206,7 @@
                 <h2>Race Committee</h2>
                 <p>Join the PMO course, see live bearing to each mark, and pin it when you drop it in the water.</p>
                 <div class="join-box">
-                    <input id="joinCode" placeholder="Course code" maxlength="8" autocomplete="off" style="text-transform:uppercase">
+                    <input id="joinCode" placeholder="Course name / code" maxlength="28" autocomplete="off" style="text-transform:uppercase">
                     <input id="rcName" placeholder="Your name or boat">
                     <button class="btn primary" id="joinBtn">Join course</button>
                 </div>
@@ -179,6 +219,9 @@
         <div class="map-wrap">
             <div id="map"></div>
             <canvas class="degree-canvas" id="degreeCanvas"></canvas>
+            <div class="status-ring" id="statusRing"></div>
+            <div class="configured-banner" id="configuredBanner">Course Configured</div>
+            <button type="button" class="btn ghost kiosk-exit" id="exitKioskBtn">Exit kiosk</button>
             <div class="hud">
                 <div class="compass" title="North">
                     <div class="compass-rose" id="compassRose">
@@ -210,6 +253,8 @@
         let watchId = null;
         let pollTimer = null;
         let dragging = false;
+        let kioskOn = false;
+        let wakeLock = null;
 
         function $(id) { return document.getElementById(id); }
         function toRad(d) { return d * Math.PI / 180; }
@@ -276,6 +321,48 @@
                 map.on('click', onMapClick);
                 setTimeout(() => { map.invalidateSize(); drawDegrees(); }, 250);
             }
+            if (window.matchMedia('(max-width: 900px), (pointer: coarse)').matches) {
+                enterKiosk();
+            }
+        }
+
+        async function enterKiosk() {
+            kioskOn = true;
+            document.body.classList.add('kiosk');
+            const el = document.documentElement;
+            try {
+                if (el.requestFullscreen) await el.requestFullscreen();
+                else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+            } catch (_err) {}
+            try {
+                if (navigator.wakeLock && navigator.wakeLock.request) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                }
+            } catch (_err) {}
+            setTimeout(() => { if (map) { map.invalidateSize(); drawDegrees(); } }, 250);
+        }
+
+        async function exitKiosk() {
+            kioskOn = false;
+            document.body.classList.remove('kiosk');
+            try {
+                if (document.fullscreenElement && document.exitFullscreen) await document.exitFullscreen();
+                else if (document.webkitFullscreenElement && document.webkitExitFullscreen) document.webkitExitFullscreen();
+            } catch (_err) {}
+            try { if (wakeLock) { await wakeLock.release(); wakeLock = null; } } catch (_err) {}
+            setTimeout(() => { if (map) { map.invalidateSize(); drawDegrees(); } }, 250);
+        }
+
+        function updateCourseStatus() {
+            const ring = $('statusRing');
+            const banner = $('configuredBanner');
+            if (!ring) return;
+            const total = (state && state.markerCount) || (state && state.markers && state.markers.length) || 0;
+            const dropped = (state && state.droppedCount) || 0;
+            ring.classList.remove('yellow', 'green');
+            if (total > 0 && dropped >= total) ring.classList.add('green');
+            else if (dropped > 0) ring.classList.add('yellow');
+            if (banner) banner.classList.toggle('show', Boolean(state && state.configured));
         }
 
         function icon(color, letter) {
@@ -335,13 +422,19 @@
             }
 
             (state.markers || []).forEach((m) => {
+                const dropped = Boolean(m.dropped);
+                const color = dropped ? '#16a34a' : (selectedMarkerId === m.id ? '#b91c1c' : '#dc2626');
                 const mk = L.marker([m.lat, m.lng], {
-                    icon: icon(selectedMarkerId === m.id ? '#7c3aed' : '#1d4ed8', (m.label || 'M').slice(0, 1)),
-                    draggable: role === 'pmo'
+                    icon: icon(color, (m.label || 'M').slice(0, 1)),
+                    draggable: role === 'pmo' && !dropped
                 }).addTo(layers.marks);
-                mk.bindTooltip(m.label, { permanent: true, direction: 'top', className: 'mark-label' });
+                mk.bindTooltip(m.label + (dropped ? ' · dropped' : ''), {
+                    permanent: true,
+                    direction: 'top',
+                    className: 'mark-label' + (dropped ? ' dropped' : '')
+                });
                 mk.on('click', () => { selectedMarkerId = m.id; renderToolbar(); renderState(); });
-                if (role === 'pmo') {
+                if (role === 'pmo' && !dropped) {
                     mk.on('dragstart', () => { dragging = true; });
                     mk.on('dragend', async () => {
                         const p = mk.getLatLng();
@@ -357,7 +450,11 @@
                     });
                 }
                 if (home) {
-                    L.polyline([[home.lat, home.lng], [m.lat, m.lng]], { color: '#1d4ed8', weight: 2, dashArray: '6 6' }).addTo(layers.lines);
+                    L.polyline([[home.lat, home.lng], [m.lat, m.lng]], {
+                        color: dropped ? '#16a34a' : '#dc2626',
+                        weight: 2,
+                        dashArray: '6 6'
+                    }).addTo(layers.lines);
                     const mid = [(home.lat + m.lat) / 2, (home.lng + m.lng) / 2];
                     L.marker(mid, {
                         interactive: false,
@@ -372,7 +469,8 @@
             });
 
             (state.drops || []).forEach((d) => {
-                L.marker([d.lat, d.lng], { icon: icon('#c2410c', 'D'), draggable: false })
+                if (d.marker_id) return;
+                L.marker([d.lat, d.lng], { icon: icon('#16a34a', 'D'), draggable: false })
                     .bindTooltip('Dropped' + (d.user_name ? ' · ' + d.user_name : ''), { permanent: true, direction: 'bottom', className: 'drop-label' })
                     .addTo(layers.drops);
             });
@@ -390,6 +488,7 @@
                     .addTo(layers.people);
             }
             drawDegrees();
+            updateCourseStatus();
             renderToolbar();
         }
 
@@ -401,21 +500,27 @@
             const box = $('toolbar');
             const home = state && state.home;
             const mark = selectedMark();
+            const courseName = (state && state.name) || courseCode;
             let html = '<div class="row"><h3>' + (role === 'pmo' ? 'Race PMO' : 'Race Committee') +
-                ' · Code <b>' + courseCode + '</b></h3></div>';
+                ' · <b>' + courseName + '</b></h3></div>';
+            if (state && state.configured) {
+                html += '<div class="stat"><b>Course Configured</b> — all marks are in the water.</div>';
+            } else if (state && state.markerCount) {
+                html += '<div class="stat">Marks in water: <b>' + (state.droppedCount || 0) + ' / ' + state.markerCount + '</b></div>';
+            }
             if (role === 'pmo') {
                 html += '<div class="row">';
                 MARK_TYPES.forEach((t) => {
                     html += '<button type="button" class="chip' + (nextLabel === t ? ' on' : '') + '" data-label="' + t + '">' + t + '</button>';
                 });
-                html += '</div><p class="hint">Tap the map to add a ' + nextLabel + '. Drag a mark to move it.</p>';
+                html += '</div><p class="hint">Tap the map to add a ' + nextLabel + '. Red = planned. Green = dropped in the water.</p>';
                 html += '<button class="btn ghost" id="copyCode">Copy course code ' + courseCode + '</button>';
                 if (mark) {
-                    html += '<div class="stat">Selected: <b>' + mark.label + '</b></div>';
-                    html += '<button class="btn ghost" id="delMark">Remove this mark</button>';
+                    html += '<div class="stat">Selected: <b>' + mark.label + '</b>' + (mark.dropped ? ' (dropped)' : ' (waiting)') + '</div>';
+                    if (!mark.dropped) html += '<button class="btn ghost" id="delMark">Remove this mark</button>';
                 }
             } else {
-                html += '<p class="hint">Select a planned mark, then steer to it. Tap Marker Dropped when it is in the water.</p>';
+                html += '<p class="hint">Select a red mark, then steer to it. Tap Marker Dropped when it is in the water — it turns green for everyone.</p>';
             }
             if (myPos && mark) {
                 const brg = bearing(myPos.lat, myPos.lng, mark.lat, mark.lng);
@@ -431,6 +536,7 @@
             if (role === 'committee') {
                 html += '<button class="btn warn" id="dropBtn"' + (myPos ? '' : ' disabled') + '>Marker Dropped</button>';
             }
+            html += '<button class="btn ghost" id="kioskBtn">' + (kioskOn ? 'Exit kiosk' : 'Kiosk full screen') + '</button>';
             box.innerHTML = html;
             box.querySelectorAll('.chip').forEach((btn) => {
                 btn.onclick = () => { nextLabel = btn.getAttribute('data-label'); renderToolbar(); };
@@ -449,7 +555,9 @@
             };
             const drop = $('dropBtn');
             if (drop) drop.onclick = dropMark;
-            $('topMeta').textContent = courseCode ? (role === 'pmo' ? 'PMO · ' : 'Committee · ') + courseCode : '';
+            const kioskBtn = $('kioskBtn');
+            if (kioskBtn) kioskBtn.onclick = () => { kioskOn ? exitKiosk() : enterKiosk(); renderToolbar(); };
+            $('topMeta').textContent = courseCode ? ((role === 'pmo' ? 'PMO · ' : 'Committee · ') + courseName) : '';
         }
 
         async function onMapClick(e) {
@@ -512,7 +620,8 @@
             try {
                 const pos = await gps();
                 myPos = pos;
-                const name = $('pmoName').value.trim() || 'Race course';
+                const name = $('pmoName').value.trim();
+                if (!name) throw new Error('Enter a course name. That name is the join code for today.');
                 const created = await api('/courses', { method: 'POST', body: JSON.stringify({ name, lat: pos.lat, lng: pos.lng }) });
                 courseCode = created.code;
                 pmoToken = created.pmoToken;
@@ -536,7 +645,7 @@
         async function joinCommittee() {
             $('landingErr').textContent = '';
             try {
-                courseCode = $('joinCode').value.trim().toUpperCase();
+                courseCode = $('joinCode').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
                 userName = $('rcName').value.trim() || 'Committee';
                 localStorage.setItem('rp_name', userName);
                 if (!courseCode) throw new Error('Enter the course code from the PMO.');
@@ -559,6 +668,12 @@
 
         $('createCourseBtn').onclick = startPmo;
         $('joinBtn').onclick = joinCommittee;
+        $('exitKioskBtn').onclick = () => { exitKiosk(); renderToolbar(); };
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement && kioskOn) {
+                document.body.classList.add('kiosk');
+            }
+        });
         window.addEventListener('resize', () => { if (map) { map.invalidateSize(); drawDegrees(); } });
     </script>
 </body>

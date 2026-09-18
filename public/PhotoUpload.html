@@ -467,13 +467,29 @@
             padding: 11px 14px;
         }
 
-        #imageInput {
-            position: absolute;
-            width: 1px;
-            height: 1px;
-            opacity: 0;
+        .choose-wrap {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             overflow: hidden;
-            clip: rect(0, 0, 0, 0);
+            border-radius: 10px;
+            min-height: 44px;
+        }
+
+        .choose-wrap .choose-btn {
+            pointer-events: none;
+        }
+
+        .choose-file {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+            font-size: 80px;
+            z-index: 2;
         }
 
         .thumbs-block {
@@ -897,12 +913,14 @@
                         </svg>
                     </div>
                     <h3>Drop photos here</h3>
-                    <p>or choose them from your device</p>
-                    <label class="choose-btn" for="imageInput">Choose photos</label>
+                    <p>or choose them from your device — they will upload right away</p>
+                    <div class="choose-wrap">
+                        <input type="file" id="imageInput" class="choose-file" accept="image/*" multiple>
+                        <span class="choose-btn">Choose photos</span>
+                    </div>
                     <p class="hint" id="chooseStatus"></p>
                 </div>
             </div>
-            <input type="file" id="imageInput" accept="image/*,image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.png,.heic,.heif,.webp" multiple>
 
             <div class="thumbs-block" id="thumbsBlock" hidden>
                 <p class="thumbs-label" id="thumbsLabel">0 photos selected</p>
@@ -1021,6 +1039,7 @@
         function isImageFile(file) {
             if (!file) return false;
             const type = String(file.type || '').toLowerCase();
+            if (!type || type === 'application/octet-stream') return true;
             if (type.startsWith('image/')) return true;
             return /\.(jpe?g|png|gif|webp|heic|heif|bmp|tif{1,2})$/i.test(file.name || '');
         }
@@ -1028,38 +1047,11 @@
         function updateSelectionUI() {
             const count = selectedItems.length;
             const hasPhotos = count > 0;
-            dropWrap.hidden = hasPhotos;
-            thumbsBlock.hidden = !hasPhotos;
-            cardFooter.hidden = !hasPhotos;
+            thumbsBlock.hidden = true;
+            cardFooter.hidden = true;
+            dropWrap.hidden = scanning;
             uploadBtn.disabled = !hasPhotos || scanning;
-            uploadBtn.textContent = hasPhotos ? ('Upload ' + count + ' photo' + (count === 1 ? '' : 's')) : 'Upload photos';
-            footerHint.textContent = hasPhotos
-                ? (count + ' photo' + (count === 1 ? '' : 's') + ' selected')
-                : 'Photos ready. Details are optional.';
             thumbsLabel.textContent = count + ' photo' + (count === 1 ? '' : 's') + ' selected';
-            if (chooseStatus) {
-                chooseStatus.textContent = hasPhotos ? '' : '';
-            }
-            thumbs.innerHTML = '';
-            selectedItems.forEach((item, index) => {
-                const el = document.createElement('div');
-                el.className = 'thumb';
-                el.innerHTML = '<img alt=""><button type="button" class="thumb-remove" aria-label="Remove photo">&times;</button>';
-                el.querySelector('img').src = item.url;
-                el.querySelector('button').addEventListener('click', (evt) => {
-                    evt.preventDefault();
-                    evt.stopPropagation();
-                    removeSelected(index);
-                });
-                thumbs.appendChild(el);
-            });
-            if (hasPhotos) {
-                const add = document.createElement('label');
-                add.className = 'add-more';
-                add.setAttribute('for', 'imageInput');
-                add.innerHTML = '<span>+</span>Add more';
-                thumbs.appendChild(add);
-            }
         }
 
         function removeSelected(index) {
@@ -1076,13 +1068,13 @@
             updateSelectionUI();
         }
 
-        function addFiles(fileList) {
+        function addFiles(fileList, autoStart) {
             const files = Array.from(fileList || []);
-            if (!files.length) return;
+            if (!files.length) return 0;
             const incoming = files.filter(isImageFile);
             if (!incoming.length) {
                 if (chooseStatus) chooseStatus.textContent = 'Those files could not be used. Please choose photo files.';
-                return;
+                return 0;
             }
             const existing = new Set(selectedItems.map((item) => fileKey(item.file)));
             incoming.forEach((file) => {
@@ -1090,8 +1082,14 @@
                 existing.add(fileKey(file));
                 selectedItems.push({ file, url: URL.createObjectURL(file) });
             });
-            updateSelectionUI();
             if (incoming[0]) populateFromExif(incoming[0]);
+            if (autoStart !== false && selectedItems.length && !scanning) {
+                if (chooseStatus) chooseStatus.textContent = 'Uploading ' + selectedItems.length + ' photo' + (selectedItems.length === 1 ? '' : 's') + '…';
+                startUpload();
+            } else {
+                updateSelectionUI();
+            }
+            return incoming.length;
         }
 
         function applyRegattaMatch(event) {
@@ -1490,30 +1488,31 @@
             lastSailFound = '';
             showOverlay();
             updateDashboard();
-
             files.forEach((file) => resultsList.appendChild(createResultCard(file)));
 
             try {
-                await fetch('/api/cleanup', { method: 'POST' });
-            } catch (err) {
-                console.log('Cleanup skipped:', err);
-            }
+                try {
+                    await fetch('/api/cleanup', { method: 'POST' });
+                } catch (err) {
+                    console.log('Cleanup skipped:', err);
+                }
 
-            for (const file of files) {
-                await processFile(file);
-                completedFiles++;
-                updateDashboard();
+                for (const file of files) {
+                    await processFile(file);
+                    completedFiles++;
+                    updateDashboard();
+                }
+            } finally {
+                scanning = false;
+                scanPanel.classList.add('done');
+                scanTitle.textContent = 'Inspected ' + completedFiles + ' of ' + totalFiles + ' photos';
+                scanFileName.textContent = '';
+                scanHint.textContent = sailNumbersFound
+                    ? (sailNumbersFound + ' sail number' + (sailNumbersFound === 1 ? '' : 's') + ' found')
+                    : 'No sail numbers found in this batch.';
+                scanProgressFill.style.width = '100%';
+                updateSelectionUI();
             }
-
-            scanning = false;
-            scanPanel.classList.add('done');
-            scanTitle.textContent = 'Inspected ' + completedFiles + ' of ' + totalFiles + ' photos';
-            scanFileName.textContent = '';
-            scanHint.textContent = sailNumbersFound
-                ? (sailNumbersFound + ' sail number' + (sailNumbersFound === 1 ? '' : 's') + ' found')
-                : 'No sail numbers found in this batch.';
-            scanProgressFill.style.width = '100%';
-            updateSelectionUI();
         }
 
         function resetForMore() {
@@ -1542,10 +1541,17 @@
             });
         }
 
+        function takeInputFiles(input) {
+            const files = Array.from((input && input.files) || []);
+            if (!files.length) return false;
+            addFiles(files, true);
+            try { input.value = ''; } catch (_err) {}
+            return true;
+        }
+
         imageInput.addEventListener('change', (e) => {
-            const files = Array.from(e.target.files || []);
-            addFiles(files);
-            e.target.value = '';
+            if (takeInputFiles(e.target)) return;
+            setTimeout(() => takeInputFiles(e.target), 100);
         });
         cancelBtn.addEventListener('click', clearSelected);
         uploadBtn.addEventListener('click', startUpload);
