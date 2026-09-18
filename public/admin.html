@@ -711,6 +711,21 @@
             background-color: rgba(255, 255, 255, 0.1);
         }
 
+        #tab-races .regatta-table tbody tr.race-open-row {
+            cursor: pointer;
+        }
+
+        #tab-races .regatta-table .name a {
+            color: #ffffff;
+            text-decoration: none;
+            font-weight: 700;
+        }
+
+        #tab-races .regatta-table .name a:hover {
+            color: #7ec8ff;
+            text-decoration: underline;
+        }
+
         .regatta-table tbody tr:last-child td {
             border-bottom: none;
         }
@@ -1697,7 +1712,7 @@
         <div id="tab-races" class="tab-panel">
             <section class="admin-tile">
                 <h2>Active races</h2>
-                <p class="tile-sub">Courses still live today. They expire at midnight Eastern. End a race to close it early.</p>
+                <p class="tile-sub">Click a course to open it in PMO view. They expire at midnight Eastern. End a race to close it early.</p>
                 <div class="dates-toolbar">
                     <button class="action-button" onclick="loadRacePlannerAdmin()">Refresh</button>
                     <a href="RacePlanner.html" class="action-button">Open Race Planner</a>
@@ -1725,7 +1740,7 @@
             <section class="admin-tile upcoming-list-tile" style="margin-top: 16px;">
                 <div class="regatta-table-container">
                     <h2>History</h2>
-                    <p class="tile-sub">Finished or expired courses, newest first.</p>
+                    <p class="tile-sub">Finished or expired courses, newest first. Click one to open the PMO map.</p>
                     <div id="raceHistoryCount" style="margin: 0 0 12px; color: #b7c6d8;"></div>
                     <table class="regatta-table" id="raceHistoryTable">
                         <thead>
@@ -2093,6 +2108,19 @@
             return escapeAdminHtml(done);
         }
 
+        function racePmoHref(row) {
+            if (!row || !row.code || !row.pmo_token) return '';
+            return 'RacePlanner.html?code=' + encodeURIComponent(row.code) +
+                '&pmo=' + encodeURIComponent(row.pmo_token) +
+                '&from=admin';
+        }
+
+        function openRacePlannerRow(event, rowEl) {
+            if (event.target.closest('button, a')) return;
+            const href = rowEl && rowEl.getAttribute('data-href');
+            if (href) window.location.href = href;
+        }
+
         async function loadRacePlannerAdmin() {
             const activeBody = document.getElementById('raceActiveBody');
             const historyBody = document.getElementById('raceHistoryBody');
@@ -2115,9 +2143,14 @@
                         ? history.length + ' past course' + (history.length === 1 ? '' : 's')
                         : 'No history yet.';
                 }
-                activeBody.innerHTML = active.length ? active.map((row) => `
-                    <tr>
-                        <td class="name">${escapeAdminHtml(row.name || 'Untitled')}</td>
+                activeBody.innerHTML = active.length ? active.map((row) => {
+                    const href = racePmoHref(row);
+                    const nameHtml = href
+                        ? `<a href="${href}">${escapeAdminHtml(row.name || 'Untitled')}</a>`
+                        : escapeAdminHtml(row.name || 'Untitled');
+                    return `
+                    <tr class="race-open-row" data-href="${href}" onclick="openRacePlannerRow(event, this)">
+                        <td class="name">${nameHtml}</td>
                         <td>${escapeAdminHtml(row.code)}</td>
                         <td>${raceMarksCell(row)}</td>
                         <td>${Number(row.live_people || 0)}</td>
@@ -2127,11 +2160,16 @@
                             <button type="button" class="action-button pause" onclick="endRaceCourse(${Number(row.id)})">End</button>
                             <button type="button" class="action-button" onclick="deleteRaceCourse(${Number(row.id)})">Delete</button>
                         </td>
-                    </tr>
-                `).join('') : '<tr><td colspan="7">No active races.</td></tr>';
-                historyBody.innerHTML = history.length ? history.map((row) => `
-                    <tr>
-                        <td class="name">${escapeAdminHtml(row.name || 'Untitled')}</td>
+                    </tr>`;
+                }).join('') : '<tr><td colspan="7">No active races.</td></tr>';
+                historyBody.innerHTML = history.length ? history.map((row) => {
+                    const href = racePmoHref(row);
+                    const nameHtml = href
+                        ? `<a href="${href}">${escapeAdminHtml(row.name || 'Untitled')}</a>`
+                        : escapeAdminHtml(row.name || 'Untitled');
+                    return `
+                    <tr class="race-open-row" data-href="${href}" onclick="openRacePlannerRow(event, this)">
+                        <td class="name">${nameHtml}</td>
                         <td>${escapeAdminHtml(row.code)}</td>
                         <td>${raceMarksCell(row)}</td>
                         <td class="date">${escapeAdminHtml(formatRaceWhen(row.created_at))}</td>
@@ -2139,8 +2177,8 @@
                         <td>
                             <button type="button" class="action-button" onclick="deleteRaceCourse(${Number(row.id)})">Delete</button>
                         </td>
-                    </tr>
-                `).join('') : '<tr><td colspan="6">No past races.</td></tr>';
+                    </tr>`;
+                }).join('') : '<tr><td colspan="6">No past races.</td></tr>';
             } catch (err) {
                 if (activeBody) activeBody.innerHTML = `<tr><td colspan="7">${escapeAdminHtml(err.message || 'Could not load races.')}</td></tr>`;
                 if (historyBody) historyBody.innerHTML = `<tr><td colspan="6">${escapeAdminHtml(err.message || 'Could not load races.')}</td></tr>`;

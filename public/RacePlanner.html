@@ -32,6 +32,12 @@
         }
         .brand { display: flex; align-items: center; gap: 8px; color: #fff; text-decoration: none; font-weight: 800; font-size: 0.95rem; }
         .brand img { height: 28px; }
+        .admin-back {
+            margin-left: auto;
+            color: #c9dcff; text-decoration: none; font-size: 0.8rem; font-weight: 700;
+            white-space: nowrap;
+        }
+        .admin-back:hover { text-decoration: underline; }
         .topbar-meta { font-size: 0.78rem; opacity: 0.88; text-align: right; line-height: 1.25; }
 
         .screen { display: none; flex: 1; min-height: 0; flex-direction: column; }
@@ -212,6 +218,7 @@
             <img src="/Images/Sail_Logo_Trans.PNG" alt="">
             Race Planner
         </a>
+        <a class="admin-back" id="adminBack" href="/admin#races" hidden>← Admin</a>
         <div class="topbar-meta" id="topMeta"></div>
     </header>
 
@@ -304,6 +311,7 @@
         let dragging = false;
         let lastPush = 0;
         let orientOn = false;
+        let fromAdmin = false;
 
         function $(id) { return document.getElementById(id); }
         function toRad(d) { return d * Math.PI / 180; }
@@ -573,7 +581,7 @@
                 const color = dropped ? '#16a34a' : (selectedMarkerId === m.id ? '#b91c1c' : '#dc2626');
                 const mk = L.marker([m.lat, m.lng], {
                     icon: icon(color, (m.label || 'M').slice(0, 1)),
-                    draggable: role === 'pmo'
+                    draggable: role === 'pmo' && !isViewOnly()
                 }).addTo(layers.marks);
                 mk.bindTooltip(m.label + (dropped ? ' · in water' : ''), {
                     permanent: true,
@@ -587,7 +595,7 @@
                     renderState();
                     updateLiveHud();
                 });
-                if (role === 'pmo') {
+                if (role === 'pmo' && !isViewOnly()) {
                     mk.on('dragstart', () => { dragging = true; });
                     mk.on('drag', () => {
                         const p = mk.getLatLng();
@@ -655,6 +663,12 @@
                     const drop = $('dropBtn');
                     if (drop) drop.onclick = dropMark;
                 }
+            } else if (isViewOnly()) {
+                box.innerHTML = '<button class="btn ghost" id="copyCode">Copy ' + courseCode + '</button>';
+                const copyOnly = $('copyCode');
+                if (copyOnly) copyOnly.onclick = async () => {
+                    try { await navigator.clipboard.writeText(courseCode); copyOnly.textContent = 'Copied'; } catch (e) { alert(courseCode); }
+                };
             } else {
                 let html = '<div class="row">';
                 MARK_TYPES.forEach((t) => {
@@ -680,11 +694,18 @@
                     } catch (err) { alert(err.message); }
                 };
             }
-            $('topMeta').textContent = courseCode ? ((role === 'pmo' ? 'PMO' : 'Committee') + ' · ' + courseName) : '';
+            const ended = isViewOnly() ? ' · ended' : '';
+            $('topMeta').textContent = courseCode ? ((role === 'pmo' ? 'PMO' : 'Committee') + ' · ' + courseName + ended) : '';
+            const back = $('adminBack');
+            if (back) back.hidden = !fromAdmin;
+        }
+
+        function isViewOnly() {
+            return Boolean(state && state.expired);
         }
 
         async function onMapClick(e) {
-            if (role !== 'pmo') return;
+            if (role !== 'pmo' || isViewOnly()) return;
             try {
                 state = await api('/courses/' + courseCode + '/markers', {
                     method: 'POST',
@@ -734,7 +755,7 @@
         }
 
         async function pushPosition() {
-            if (!courseCode || !myPos) return;
+            if (!courseCode || !myPos || isViewOnly()) return;
             const now = Date.now();
             if (now - lastPush < 2000) return;
             lastPush = now;
@@ -765,6 +786,75 @@
             }, (err) => console.log(err), { enableHighAccuracy: true, maximumAge: 800, timeout: 15000 });
         }
 
+        function startPoll() {
+            if (pollTimer) return;
+            pollTimer = setInterval(async () => {
+                if (dragging || !courseCode) return;
+                try { state = await api('/courses/' + courseCode); renderState(); } catch (e) {}
+            }, 2500);
+        }
+
+        function fitToCourse() {
+            if (!map || !state) return;
+            const pts = [];
+            if (state.home && Number.isFinite(Number(state.home.lat)) && Number.isFinite(Number(state.home.lng))) {
+                pts.push([Number(state.home.lat), Number(state.home.lng)]);
+            }
+            (state.markers || []).forEach((m) => {
+                if (Number.isFinite(Number(m.lat)) && Number.isFinite(Number(m.lng))) {
+                    pts.push([Number(m.lat), Number(m.lng)]);
+                }
+            });
+            if (pts.length >= 2) {
+                map.fitBounds(pts, { padding: [48, 48], maxZoom: 16 });
+            } else if (pts.length === 1) {
+                map.setView(pts[0], 16);
+            }
+        }
+
+        async function attachLiveGps() {
+            try {
+                await enableCompass();
+                const pos = await gps();
+                myPos = pos;
+                if (Number.isFinite(pos.heading)) applyHeading(pos.heading);
+                updateYouMarker();
+                startWatch();
+                if (!isViewOnly()) await pushPosition();
+            } catch (_err) {}
+        }
+
+        async function openAsPmo(code, token, admin) {
+            $('landingErr').textContent = '';
+            fromAdmin = Boolean(admin);
+            const back = $('adminBack');
+            if (back) back.hidden = !fromAdmin;
+            courseCode = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+            pmoToken = String(token || '').trim();
+            role = 'pmo';
+            userName = 'PMO';
+            if (!courseCode || !pmoToken) {
+                $('landingErr').textContent = 'Missing course code.';
+                return;
+            }
+            localStorage.setItem('rp_pmo_' + courseCode, pmoToken);
+            showMap();
+            map.setView([41.3, -72.4], 9);
+            try {
+                state = await api('/courses/' + courseCode);
+            } catch (err) {
+                $('mapScreen').classList.remove('active');
+                $('landing').classList.add('active');
+                document.body.classList.remove('role-pmo');
+                $('landingErr').textContent = err.message || 'Could not open this course.';
+                return;
+            }
+            fitToCourse();
+            renderState();
+            startPoll();
+            attachLiveGps();
+        }
+
         async function startPmo() {
             $('landingErr').textContent = '';
             try {
@@ -785,10 +875,7 @@
                 startWatch();
                 state = await api('/courses/' + courseCode);
                 renderState();
-                pollTimer = setInterval(async () => {
-                    if (dragging) return;
-                    try { state = await api('/courses/' + courseCode); renderState(); } catch (e) {}
-                }, 2500);
+                startPoll();
             } catch (err) {
                 $('landingErr').textContent = err.message || 'Could not start PMO. Allow location access.';
             }
@@ -811,10 +898,7 @@
                 map.setView([pos.lat, pos.lng], 16);
                 startWatch();
                 await pushPosition();
-                pollTimer = setInterval(async () => {
-                    if (dragging) return;
-                    try { state = await api('/courses/' + courseCode); renderState(); } catch (e) {}
-                }, 2500);
+                startPoll();
             } catch (err) {
                 $('landingErr').textContent = err.message || 'Could not join. Check the code and location permission.';
             }
@@ -823,6 +907,12 @@
         $('createCourseBtn').onclick = startPmo;
         $('joinBtn').onclick = joinCommittee;
         window.addEventListener('resize', () => { if (map) { map.invalidateSize(); drawDegrees(); } });
+        (function bootFromQuery() {
+            const params = new URLSearchParams(location.search);
+            const code = String(params.get('code') || '').trim();
+            const token = String(params.get('pmo') || '').trim();
+            if (code && token) openAsPmo(code, token, params.get('from') === 'admin');
+        })();
     </script>
 </body>
 </html>

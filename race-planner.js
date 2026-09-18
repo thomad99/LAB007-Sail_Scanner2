@@ -184,6 +184,7 @@ async function attachRacePlanner(app, { pool }) {
             success: true,
             code: course.code,
             name: course.name || 'Race course',
+            expired: isExpired(course),
             expiresAt: course.expires_at,
             home: (course.home_lat != null && course.home_lng != null)
                 ? { lat: course.home_lat, lng: course.home_lng }
@@ -233,7 +234,9 @@ async function attachRacePlanner(app, { pool }) {
         try {
             const course = await getCourseByCode(req.params.code);
             if (!course) return res.status(404).json({ success: false, error: 'Course not found' });
-            rejectIfExpired(course);
+            if (isExpired(course) && pmoTokenFrom(req) !== course.pmo_token) {
+                rejectIfExpired(course);
+            }
             res.json(await courseState(course));
         } catch (err) {
             res.status(err.status || 500).json({ success: false, error: err.message });
@@ -476,7 +479,7 @@ async function attachRacePlanner(app, { pool }) {
             await ensureTables();
             const result = await pool.query(`
                 SELECT
-                    c.id, c.code, c.name, c.created_at, c.updated_at, c.expires_at,
+                    c.id, c.code, c.name, c.pmo_token, c.created_at, c.updated_at, c.expires_at,
                     c.home_lat, c.home_lng,
                     (c.expires_at IS NULL OR c.expires_at > NOW()) AS active,
                     (SELECT COUNT(*)::int FROM race_planner_markers m WHERE m.course_id = c.id) AS marker_count,
