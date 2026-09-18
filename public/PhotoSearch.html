@@ -7,7 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <meta name="description"
         content="Search, view, and purchase high-quality regatta sailing photos. Find images of sailboats, yacht clubs, sailing events, championships, dinghies, offshore races, and more. The ultimate sailing photo search engine for sailors, photographers, and regatta fans.">
     <meta name="keywords"
@@ -518,54 +518,176 @@
             border-color: rgba(0, 102, 204, 0.3);
         }
 
-        /* Action button image styling */
-        .action-button-image {
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border-radius: 8px;
-        }
-
-        .action-button-image:hover {
-            transform: scale(1.05);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-        }
-
-        .action-button-image:active {
-            transform: scale(0.98);
-        }
-
         .modal-metadata {
-            padding: 20px;
-            background: #f8f9fa;
-            max-height: 30vh;
+            padding: 28px 28px 24px;
+            background: #fff;
+            max-height: 40vh;
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
         }
 
-        .modal-metadata h3 {
-            margin: 0 0 15px 0;
-            color: #0066cc;
+        .detail-head {
+            text-align: center;
+            margin-bottom: 18px;
+        }
+
+        .detail-head h3 {
+            margin: 0;
+            color: #14204a;
+            font-size: clamp(1.55rem, 3vw, 2rem);
+            letter-spacing: -0.03em;
+            font-weight: 800;
+        }
+
+        .detail-head p {
+            margin: 8px 0 0;
+            color: #7b8aa0;
+            font-size: 1rem;
+        }
+
+        .detail-actions {
+            display: flex;
+            gap: 12px;
+            margin: 0 0 8px;
+        }
+
+        .detail-btn {
+            flex: 1 1 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-height: 48px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font: inherit;
+            font-size: 0.98rem;
+            font-weight: 700;
+            cursor: pointer;
+            border: 1.5px solid transparent;
+            white-space: nowrap;
+        }
+
+        .detail-btn svg {
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+        }
+
+        .detail-btn.primary {
+            background: #1d4ed8;
+            color: #fff;
+        }
+
+        .detail-btn.primary:hover { background: #1e40af; }
+
+        .detail-btn.outline {
+            background: #fff;
+            color: #1d4ed8;
+            border-color: #c9d7f5;
+        }
+
+        .detail-btn.outline:hover { background: #f5f8ff; }
+
+        .detail-rows {
+            border-top: 1px solid #eef2f7;
+            margin-top: 18px;
+            padding-top: 8px;
+        }
+
+        .detail-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            padding: 14px 0;
+        }
+
+        .detail-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            background: #eef4ff;
+            color: #1d4ed8;
+            display: grid;
+            place-items: center;
+            flex-shrink: 0;
+        }
+
+        .detail-icon svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .detail-text { min-width: 0; }
+
+        .detail-label {
+            color: #8b97ab;
+            font-size: 0.86rem;
+            font-weight: 500;
+        }
+
+        .detail-value {
+            color: #14204a;
+            font-size: 1.12rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin-top: 2px;
+            overflow-wrap: anywhere;
+        }
+
+        .detail-value a {
+            color: #1d4ed8;
+            text-decoration: none;
+        }
+
+        .detail-sub {
+            color: #7b8aa0;
+            font-size: 0.92rem;
+            margin-top: 2px;
+        }
+
+        .share-toast {
+            position: fixed;
+            right: 18px;
+            bottom: 18px;
+            z-index: 3000;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            background: #fff;
+            color: #14204a;
+            border-radius: 12px;
+            box-shadow: 0 12px 30px rgba(15, 40, 80, 0.16);
+            padding: 12px 14px;
+            font-weight: 700;
+        }
+
+        .share-toast.show { display: flex; }
+
+        .share-toast .toast-check {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #16a34a;
+            color: #fff;
+            display: grid;
+            place-items: center;
+            font-size: 13px;
+        }
+
+        .share-toast button {
+            border: 0;
+            background: transparent;
+            color: #94a3b8;
             font-size: 18px;
+            cursor: pointer;
+            line-height: 1;
+            margin-left: auto;
         }
 
-        .metadata-item {
-            padding: 10px;
-            background: white;
-            border-radius: 8px;
-            border-left: 4px solid #0066cc;
-            margin-bottom: 8px;
-        }
-
-        .metadata-item strong {
-            color: #0066cc;
-            font-weight: 600;
-            font-size: 14px;
-        }
-
-        .metadata-item .value {
-            color: #333;
-            margin-left: 5px;
-            font-size: 14px;
+        .detail-icon.hash {
+            font-size: 1.15rem;
+            font-weight: 800;
         }
 
 
@@ -650,7 +772,8 @@
             }
 
             .modal-metadata {
-                min-width: 300px;
+                min-width: 340px;
+                max-width: 420px;
                 max-height: none;
             }
         }
@@ -693,84 +816,35 @@
             }
 
             .modal-metadata {
-                max-height: 40vh;
+                max-height: 42vh;
                 overflow-y: auto;
                 -webkit-overflow-scrolling: touch;
-                padding: 12px;
+                padding: 18px 16px 16px;
             }
 
-            .metadata-item {
-                padding: 8px;
-                margin-bottom: 6px;
-                font-size: 14px;
+            .detail-head h3 { font-size: 1.45rem; }
+
+            .detail-actions {
+                gap: 8px;
             }
 
-            .metadata-item strong {
-                font-size: 13px;
+            .detail-btn {
+                min-height: 44px;
+                padding: 10px 8px;
+                font-size: 0.88rem;
+                gap: 6px;
             }
 
-            .metadata-item .value {
-                font-size: 13px;
+            .detail-icon {
+                width: 40px;
+                height: 40px;
             }
 
-            /* Mobile-specific styling for basic metadata */
-            #basicMetadata {
-                padding: 10px !important;
-                margin-top: 10px !important;
-            }
-
-            #basicMetadataContent>div {
-                margin-bottom: 6px !important;
-                font-size: 13px !important;
-                line-height: 1.4;
-                word-wrap: break-word;
-                overflow-wrap: break-word;
-            }
-
-            #basicMetadataContent strong {
-                font-size: 12px !important;
-                display: block;
-                margin-bottom: 2px;
-            }
-
-            #basicMetadataContent span {
-                font-size: 13px !important;
-                margin-left: 0 !important;
-                display: block;
-            }
-
-            /* Ensure buttons are side-by-side on mobile */
-            #modalActions {
-                flex-direction: row !important;
-                flex-wrap: nowrap !important;
-            }
-
-            #modalActions button {
-                flex: 1 !important;
-                min-width: unset !important;
-                margin: 0 5px;
-            }
-
-            /* Mobile action button sizing */
-            .action-button-image {
-                max-width: 180px;
-                height: 50px;
-            }
-        }
-
-        /* Desktop action button sizing */
-        @media (min-width: 769px) {
-            .action-button-image {
-                max-width: 220px;
-                height: 60px;
-            }
-        }
-
-        /* Large desktop action button sizing */
-        @media (min-width: 1200px) {
-            .action-button-image {
-                max-width: 250px;
-                height: 70px;
+            .share-toast {
+                left: 12px;
+                right: 12px;
+                bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+                justify-content: flex-start;
             }
         }
 
@@ -948,23 +1022,37 @@
                 <img id="modalImage" class="modal-image" src="" alt="Preview">
             </div>
             <div class="modal-metadata" id="modalMetadata">
-                <div id="modalActions"
-                    style="margin: 0 0 12px 0; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
-                    <img id="downloadBtn" src="Images/Download_button.jpg" alt="Download" class="action-button-image"
-                        onclick="downloadCurrentPhoto()"
-                        style="cursor: pointer; flex: 1; min-width: 140px; max-width: 250px; height: auto; object-fit: contain; transition: transform 0.2s ease;">
-                    <img id="shareBtn" src="Images/share_button.jpg" alt="Share" class="action-button-image"
-                        onclick="sharePhotoLink()"
-                        style="cursor: pointer; flex: 1; min-width: 140px; max-width: 250px; height: auto; object-fit: contain; transition: transform 0.2s ease;">
+                <div class="detail-head">
+                    <h3>Photo details</h3>
+                    <p>Save this photo or share it with others.</p>
                 </div>
-                <div id="basicMetadata"
-                    style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                    <div id="basicMetadataContent">
-                        <!-- Basic metadata will be populated here -->
-                    </div>
+                <div id="modalActions" class="detail-actions">
+                    <button type="button" id="downloadBtn" class="detail-btn primary" onclick="downloadCurrentPhoto()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 4v12"></path>
+                            <path d="M7 11l5 5 5-5"></path>
+                            <path d="M5 20h14"></path>
+                        </svg>
+                        Download photo
+                    </button>
+                    <button type="button" id="shareBtn" class="detail-btn outline" onclick="sharePhotoLink()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"></path>
+                            <path d="M16 6l-4-4-4 4"></path>
+                            <path d="M12 2v14"></path>
+                        </svg>
+                        Share photo
+                    </button>
                 </div>
+                <div id="basicMetadataContent" class="detail-rows"></div>
             </div>
         </div>
+    </div>
+
+    <div id="shareToast" class="share-toast" role="status">
+        <span class="toast-check">✓</span>
+        Link copied
+        <button type="button" aria-label="Dismiss" onclick="hideShareToast()">&times;</button>
     </div>
 
     <script>
@@ -1345,41 +1433,46 @@
             // Clear previous metadata
             basicMetadataContent.innerHTML = '';
 
-            // Populate basic metadata (always visible)
+            const icons = {
+                hash: '#',
+                pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"></path><circle cx="12" cy="10" r="2.5"></circle></svg>',
+                camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>',
+                flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 21V4h9l-1.5 4L14 12H5"></path></svg>',
+                globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"></path></svg>'
+            };
+
+            function addDetailRow(icon, label, value, sub, extraClass) {
+                if (value == null || value === '' || value === 'null' || value === 'undefined' || value === '—') return;
+                const row = document.createElement('div');
+                row.className = 'detail-row';
+                row.innerHTML =
+                    '<div class="detail-icon' + (extraClass ? ' ' + extraClass : '') + '">' + icon + '</div>' +
+                    '<div class="detail-text">' +
+                    '<div class="detail-label">' + label + '</div>' +
+                    '<div class="detail-value">' + value + '</div>' +
+                    (sub ? '<div class="detail-sub">' + sub + '</div>' : '') +
+                    '</div>';
+                basicMetadataContent.appendChild(row);
+            }
+
             const allSailNums = getAllSailNumbers(photo);
-            const sailDisplay = allSailNums.length ? allSailNums.join(', ') : (photo.sail_number || '—');
-            const basicFields = [
-                { key: 'regatta_name', label: 'Regatta Name' },
-                { key: '_sail_numbers', label: allSailNums.length > 1 ? 'Sail Numbers' : 'Sail Number', value: sailDisplay },
-                { key: 'location', label: 'Location' },
-                { key: 'photographer_name', label: 'Photographer' },
-                {
-                    key: 'photographer_website', label: 'Photographer Website', formatter: (value) => {
-                        if (value && value !== 'null' && value !== 'undefined' && value !== '') {
-                            // Check if the URL already has http:// or https://
-                            const url = value.startsWith('http://') || value.startsWith('https://') ? value : `https://${value}`;
-                            return `<a href="${url}" target="_blank" style="color: #0066cc; text-decoration: underline;">${value}</a>`;
-                        }
-                        return value;
-                    }
-                }
-            ];
+            const sailDisplay = allSailNums.length ? allSailNums.join(', ') : (photo.sail_number || '');
+            addDetailRow(icons.hash, allSailNums.length > 1 ? 'Sail numbers' : 'Sail number', escapeHtml(sailDisplay), '', 'hash');
 
-            basicFields.forEach(field => {
-                const value = field.value !== undefined ? field.value : photo[field.key];
-                const formattedValue = field.formatter ? field.formatter(value) : value;
+            const locationRaw = String(photo.location || '').trim();
+            if (locationRaw) {
+                const parts = locationRaw.split(',').map((p) => p.trim()).filter(Boolean);
+                addDetailRow(icons.pin, 'Location', escapeHtml(parts[0]), parts.length > 1 ? escapeHtml(parts.slice(1).join(', ')) : '');
+            }
 
-                if (formattedValue != null && formattedValue !== '' && formattedValue !== 'null' && formattedValue !== 'undefined') {
-                    const basicItem = document.createElement('div');
-                    const isMobile = window.innerWidth <= 768;
-                    basicItem.style.cssText = isMobile ? 'margin-bottom: 6px; font-size: 13px; line-height: 1.4;' : 'margin-bottom: 8px; font-size: 16px;';
-                    basicItem.innerHTML = `
-                        <strong style="color: #0066cc; font-weight: 600; ${isMobile ? 'display: block; margin-bottom: 2px; font-size: 12px;' : ''}">${field.label}:</strong>
-                        <span style="color: #333; ${isMobile ? 'display: block; margin-left: 0; font-size: 13px;' : 'margin-left: 8px;'}">${formattedValue}</span>
-                    `;
-                    basicMetadataContent.appendChild(basicItem);
-                }
-            });
+            addDetailRow(icons.camera, 'Photographer', escapeHtml(photo.photographer_name || ''));
+            addDetailRow(icons.flag, 'Regatta', escapeHtml(photo.regatta_name || ''));
+
+            const site = String(photo.photographer_website || '').trim();
+            if (site && site !== 'null' && site !== 'undefined') {
+                const url = site.startsWith('http://') || site.startsWith('https://') ? site : ('https://' + site);
+                addDetailRow(icons.globe, 'Photographer website', '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">' + escapeHtml(site) + '</a>');
+            }
 
             modal.style.display = 'flex';
         }
@@ -1387,6 +1480,26 @@
         function closeModal() {
             document.getElementById('imageModal').style.display = 'none';
             currentModalPhoto = null;
+        }
+
+        function escapeHtml(s) {
+            if (s == null) return '';
+            const d = document.createElement('div');
+            d.textContent = String(s);
+            return d.innerHTML;
+        }
+
+        let shareToastTimer = null;
+        function showShareToast() {
+            const toast = document.getElementById('shareToast');
+            if (!toast) return;
+            toast.classList.add('show');
+            clearTimeout(shareToastTimer);
+            shareToastTimer = setTimeout(hideShareToast, 2800);
+        }
+        function hideShareToast() {
+            const toast = document.getElementById('shareToast');
+            if (toast) toast.classList.remove('show');
         }
 
         function clearSearch() {
@@ -1593,20 +1706,9 @@
                 // Fallback: copy to clipboard
                 try {
                     await navigator.clipboard.writeText(photoUrl);
-
-                    // Show success feedback by briefly changing opacity
-                    const shareBtn = document.getElementById('shareBtn');
-                    const originalOpacity = shareBtn.style.opacity;
-
-                    shareBtn.style.opacity = '0.5';
-
-                    setTimeout(() => {
-                        shareBtn.style.opacity = originalOpacity || '1';
-                    }, 300);
-
+                    showShareToast();
                 } catch (clipboardErr) {
-                    // Final fallback: show URL in alert
-                    alert(`Photo URL:\n${photoUrl}\n\nCopy this link to share the photo.`);
+                    alert('Photo URL:\n' + photoUrl + '\n\nCopy this link to share the photo.');
                 }
 
             } catch (err) {
