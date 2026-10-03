@@ -2,6 +2,7 @@
 <html>
 
 <head>
+    <meta charset="UTF-8">
     <title>LAB007 - Photo Administration</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
@@ -269,6 +270,254 @@
         .success {
             color: #28a745;
         }
+
+        body.fit-app > .main-container {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: auto;
+            box-sizing: border-box;
+        }
+
+        .hist-section {
+            text-align: left;
+        }
+
+        .hist-section > p {
+            color: #555;
+            margin: 0 0 14px;
+        }
+
+        .hist-controls {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .hist-grain {
+            background: #fff;
+            color: #0066cc;
+            border: 2px solid #0066cc;
+            padding: 8px 16px;
+            border-radius: 999px;
+            cursor: pointer;
+            font-weight: 600;
+            min-width: 0;
+        }
+
+        .hist-grain.active {
+            background: #0066cc;
+            color: #fff;
+        }
+
+        .hist-summary {
+            color: #444;
+            font-size: 0.95em;
+            margin-bottom: 10px;
+            min-height: 1.2em;
+        }
+
+        .hist-chart {
+            display: flex;
+            align-items: flex-end;
+            gap: 4px;
+            overflow-x: auto;
+            padding: 8px 8px 4px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: #f8f9fa;
+            min-height: 230px;
+        }
+
+        .hist-col {
+            flex: 0 0 58px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            border: 0;
+            background: transparent;
+            cursor: pointer;
+            padding: 4px 0;
+            border-radius: 6px;
+            color: inherit;
+            font: inherit;
+        }
+
+        .hist-col:hover {
+            background: rgba(0, 102, 204, 0.08);
+        }
+
+        .hist-col.selected {
+            background: rgba(40, 167, 69, 0.12);
+        }
+
+        .hist-count {
+            font-size: 11px;
+            color: #333;
+            height: 14px;
+            line-height: 14px;
+        }
+
+        .hist-plot {
+            width: 100%;
+            height: 150px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+        }
+
+        .hist-bar {
+            width: 26px;
+            background: #0066cc;
+            border-radius: 4px 4px 0 0;
+            min-height: 2px;
+        }
+
+        .hist-col.selected .hist-bar {
+            background: #1e8e3e;
+        }
+
+        .hist-col.is-empty .hist-bar {
+            background: #c5d0dc;
+        }
+
+        .hist-label {
+            font-size: 10px;
+            line-height: 1.2;
+            color: #555;
+            text-align: center;
+            height: 26px;
+            white-space: pre-line;
+        }
+
+        .hist-gallery {
+            margin-top: 16px;
+        }
+
+        .hist-gallery-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .hist-gallery-head h3 {
+            margin: 0 0 4px;
+            color: #0066cc;
+        }
+
+        .hist-gallery-head p {
+            margin: 0;
+            color: #555;
+        }
+
+        .hist-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 12px;
+        }
+
+        .hist-card {
+            appearance: none;
+            display: block;
+            width: 100%;
+            padding: 0;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: #fff;
+            overflow: hidden;
+            cursor: pointer;
+            text-align: left;
+            color: inherit;
+            font: inherit;
+        }
+
+        .hist-card:hover {
+            border-color: #0066cc;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+        }
+
+        .hist-card img,
+        .hist-card .hist-missing {
+            width: 100%;
+            height: 140px;
+            object-fit: cover;
+            background: #e9ecef;
+        }
+
+        .hist-card img {
+            display: block;
+        }
+
+        .hist-card .hist-missing {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #777;
+            font-size: 0.85em;
+        }
+
+        .hist-card-meta {
+            padding: 8px 10px 10px;
+            font-size: 0.85em;
+            line-height: 1.35;
+        }
+
+        .hist-card-meta strong {
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        .hist-more {
+            margin-top: 14px;
+        }
+
+        .hist-lightbox {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            background: rgba(0, 0, 0, 0.88);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 16px 16px;
+        }
+
+        .hist-lightbox[hidden] {
+            display: none;
+        }
+
+        .hist-lightbox img {
+            max-width: min(96vw, 1200px);
+            max-height: 78vh;
+            object-fit: contain;
+            background: #111;
+        }
+
+        .hist-lightbox-caption {
+            color: #fff;
+            margin-top: 12px;
+            text-align: center;
+            max-width: 800px;
+            line-height: 1.4;
+        }
+
+        .hist-lightbox-close {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: #fff;
+            border: 0;
+            border-radius: 999px;
+            width: 36px;
+            height: 36px;
+            font-size: 22px;
+            cursor: pointer;
+            line-height: 1;
+        }
     </style>
     <link rel="stylesheet" href="/fit-screen.css">
 </head>
@@ -297,6 +546,19 @@
     <div class="main-container">
         <div class="admin-section">
             <h2>Photo Administration</h2>
+
+            <div class="admin-section hist-section" style="margin-top: 10px;">
+                <h2>Photos added over time</h2>
+                <p>How many photos were uploaded each week, month, or year. Click a bar to see the photos from that period.</p>
+                <div class="hist-controls" role="group" aria-label="Histogram period">
+                    <button type="button" class="hist-grain active" data-grain="week" onclick="setUploadHistogramGrain('week')">Week</button>
+                    <button type="button" class="hist-grain" data-grain="month" onclick="setUploadHistogramGrain('month')">Month</button>
+                    <button type="button" class="hist-grain" data-grain="year" onclick="setUploadHistogramGrain('year')">Year</button>
+                </div>
+                <div id="histSummary" class="hist-summary">Loading…</div>
+                <div id="histChart" class="hist-chart" role="group" aria-label="Photos added"></div>
+                <div id="histGallery" class="hist-gallery" hidden></div>
+            </div>
 
             <div class="stats-container">
                 <div class="stat-card">
@@ -528,6 +790,12 @@
         </div>
     </div>
 
+    <div id="histLightbox" class="hist-lightbox" hidden>
+        <button type="button" class="hist-lightbox-close" onclick="closeHistLightbox()" aria-label="Close photo">×</button>
+        <img id="histLightboxImg" alt="">
+        <div id="histLightboxCaption" class="hist-lightbox-caption"></div>
+    </div>
+
     <div class="footer">
         <a href="https://thomad99.wixstudio.com/lab007" target="_blank">
             <img src="LAB007-FOOTER.JPG" alt="LAB007 Footer">
@@ -685,11 +953,357 @@
                     document.getElementById('deviceCount').className = 'stat-value error';
                 }
 
+                loadUploadHistogram();
             } catch (err) {
                 console.error('Error loading stats:', err);
                 showStatus('Error loading statistics', 'error');
             }
         }
+
+        const HIST_PAGE = 48;
+        const HIST_WINDOW = { week: 104, month: 48, year: 20 };
+        let histGrain = 'week';
+        let histSelectedStart = null;
+        let histSelectedBucket = null;
+        let histPhotoToken = 0;
+        let histChartToken = 0;
+
+        function parseYmd(value) {
+            const [year, month, day] = value.split('-').map(Number);
+            return new Date(year, month - 1, day);
+        }
+
+        function formatYmd(date) {
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${date.getFullYear()}-${month}-${day}`;
+        }
+
+        function shiftGrain(date, grain, direction) {
+            const next = new Date(date.getTime());
+            if (grain === 'week') next.setDate(next.getDate() + (7 * direction));
+            else if (grain === 'month') next.setMonth(next.getMonth() + direction);
+            else next.setFullYear(next.getFullYear() + direction);
+            return next;
+        }
+
+        function bucketRangeLabel(startStr, endStr, grain) {
+            const start = parseYmd(startStr);
+            const endInclusive = parseYmd(endStr);
+            endInclusive.setDate(endInclusive.getDate() - 1);
+            if (grain === 'year') return String(start.getFullYear());
+            if (grain === 'month') {
+                return start.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+            }
+            const opts = { month: 'short', day: 'numeric' };
+            const startText = start.toLocaleDateString(undefined, opts);
+            const endText = endInclusive.toLocaleDateString(undefined, { ...opts, year: 'numeric' });
+            return `${startText} – ${endText}`;
+        }
+
+        function bucketAxisLabel(startStr, grain) {
+            const start = parseYmd(startStr);
+            if (grain === 'year') return String(start.getFullYear());
+            if (grain === 'month') {
+                const month = start.toLocaleDateString(undefined, { month: 'short' });
+                return `${month}\n'${String(start.getFullYear()).slice(2)}`;
+            }
+            const month = start.toLocaleDateString(undefined, { month: 'short' });
+            return `${month} ${start.getDate()}\n'${String(start.getFullYear()).slice(2)}`;
+        }
+
+        function buildHistogramWindow(rawBuckets, grain) {
+            if (!rawBuckets.length) return { buckets: [], truncated: false };
+            const counts = new Map(rawBuckets.map((bucket) => [bucket.start, bucket.count]));
+            const first = parseYmd(rawBuckets[0].start);
+            const last = parseYmd(rawBuckets[rawBuckets.length - 1].start);
+            const maxBars = HIST_WINDOW[grain] || 104;
+            let start = new Date(last.getTime());
+            let steps = 1;
+            while (steps < maxBars) {
+                const prev = shiftGrain(start, grain, -1);
+                if (prev < first) break;
+                start = prev;
+                steps += 1;
+            }
+            const buckets = [];
+            let cursor = start;
+            while (cursor <= last && buckets.length <= maxBars) {
+                const next = shiftGrain(cursor, grain, 1);
+                const key = formatYmd(cursor);
+                buckets.push({
+                    start: key,
+                    end: formatYmd(next),
+                    count: counts.get(key) || 0
+                });
+                cursor = next;
+            }
+            return { buckets, truncated: start > first };
+        }
+
+        function setUploadHistogramGrain(grain) {
+            histGrain = grain;
+            histSelectedStart = null;
+            histSelectedBucket = null;
+            document.querySelectorAll('.hist-grain').forEach((button) => {
+                button.classList.toggle('active', button.dataset.grain === grain);
+            });
+            loadUploadHistogram();
+        }
+
+        function sailNumbersLabel(photo) {
+            const fromList = Array.isArray(photo.sail_numbers)
+                ? photo.sail_numbers.map((entry) => (entry && typeof entry === 'object' ? entry.number : entry))
+                : [];
+            const numbers = [...new Set([photo.sail_number, ...fromList].filter(Boolean).map(String))];
+            return numbers.length ? numbers.join(', ') : 'No sail number';
+        }
+
+        async function loadUploadHistogram() {
+            const token = ++histChartToken;
+            const summary = document.getElementById('histSummary');
+            const chart = document.getElementById('histChart');
+            summary.textContent = 'Loading…';
+            try {
+                const response = await fetch(`/api/photo-added-histogram?grain=${encodeURIComponent(histGrain)}`);
+                const data = await response.json();
+                if (token !== histChartToken) return;
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || 'Could not load histogram');
+                }
+                const { buckets, truncated } = buildHistogramWindow(data.buckets || [], histGrain);
+                renderUploadHistogram(buckets, data.total || 0, truncated);
+                const stillSelected = histSelectedStart && buckets.some((bucket) => bucket.start === histSelectedStart);
+                if (!stillSelected) {
+                    const newest = [...buckets].reverse().find((bucket) => bucket.count > 0) || null;
+                    if (newest) selectHistogramBucket(newest);
+                    else clearHistogramGallery();
+                }
+            } catch (err) {
+                if (token !== histChartToken) return;
+                console.error('Error loading upload histogram:', err);
+                summary.textContent = 'Could not load the upload histogram.';
+                chart.textContent = '';
+            }
+        }
+
+        function renderUploadHistogram(buckets, allTime, truncated) {
+            const summary = document.getElementById('histSummary');
+            const chart = document.getElementById('histChart');
+            chart.textContent = '';
+            if (!buckets.length) {
+                summary.textContent = 'No photos have been added yet.';
+                return;
+            }
+            const visible = buckets.reduce((sum, bucket) => sum + bucket.count, 0);
+            const unit = histGrain === 'week' ? 'weeks' : histGrain === 'month' ? 'months' : 'years';
+            summary.textContent = truncated
+                ? `${visible.toLocaleString()} photos in the latest ${buckets.length} ${unit} · ${allTime.toLocaleString()} all time`
+                : `${visible.toLocaleString()} photos across ${buckets.length} ${unit}`;
+
+            const max = Math.max(...buckets.map((bucket) => bucket.count), 1);
+            buckets.forEach((bucket) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'hist-col' + (bucket.count === 0 ? ' is-empty' : '');
+                if (bucket.start === histSelectedStart) button.classList.add('selected');
+                button.dataset.start = bucket.start;
+                const range = bucketRangeLabel(bucket.start, bucket.end, histGrain);
+                button.title = `${range}: ${bucket.count.toLocaleString()} photo${bucket.count === 1 ? '' : 's'}`;
+                button.setAttribute('aria-label', button.title);
+
+                const count = document.createElement('span');
+                count.className = 'hist-count';
+                count.textContent = bucket.count ? String(bucket.count) : '';
+
+                const plot = document.createElement('div');
+                plot.className = 'hist-plot';
+                const bar = document.createElement('div');
+                bar.className = 'hist-bar';
+                const pct = bucket.count === 0 ? 0 : Math.max(4, (bucket.count / max) * 100);
+                bar.style.height = bucket.count === 0 ? '2px' : `${pct}%`;
+                plot.appendChild(bar);
+
+                const label = document.createElement('span');
+                label.className = 'hist-label';
+                label.textContent = bucketAxisLabel(bucket.start, histGrain);
+
+                button.append(count, plot, label);
+                button.addEventListener('click', () => selectHistogramBucket(bucket));
+                chart.appendChild(button);
+            });
+            const selected = chart.querySelector('.hist-col.selected');
+            if (selected) {
+                chart.scrollLeft = Math.max(0, selected.offsetLeft - (chart.clientWidth - selected.offsetWidth) / 2);
+            } else {
+                chart.scrollLeft = chart.scrollWidth;
+            }
+        }
+
+        function clearHistogramGallery() {
+            histSelectedStart = null;
+            histSelectedBucket = null;
+            const gallery = document.getElementById('histGallery');
+            gallery.hidden = true;
+            gallery.textContent = '';
+        }
+
+        function selectHistogramBucket(bucket) {
+            histSelectedStart = bucket.start;
+            histSelectedBucket = bucket;
+            document.querySelectorAll('.hist-col').forEach((column) => {
+                column.classList.toggle('selected', column.dataset.start === bucket.start);
+            });
+            const selected = document.querySelector(`.hist-col[data-start="${bucket.start}"]`);
+            if (selected) {
+                const chart = document.getElementById('histChart');
+                const left = selected.offsetLeft - (chart.clientWidth - selected.offsetWidth) / 2;
+                chart.scrollLeft = Math.max(0, left);
+            }
+            loadHistogramPhotos(true);
+        }
+
+        async function loadHistogramPhotos(reset) {
+            const bucket = histSelectedBucket;
+            if (!bucket) return;
+            const token = ++histPhotoToken;
+            const gallery = document.getElementById('histGallery');
+            gallery.hidden = false;
+            if (reset) gallery.textContent = '';
+
+            let grid = gallery.querySelector('.hist-grid');
+            if (!grid) {
+                const head = document.createElement('div');
+                head.className = 'hist-gallery-head';
+                const titles = document.createElement('div');
+                const heading = document.createElement('h3');
+                heading.textContent = bucketRangeLabel(bucket.start, bucket.end, histGrain);
+                const detail = document.createElement('p');
+                detail.id = 'histGalleryDetail';
+                detail.textContent = 'Loading photos…';
+                titles.append(heading, detail);
+                head.appendChild(titles);
+                gallery.appendChild(head);
+
+                grid = document.createElement('div');
+                grid.className = 'hist-grid';
+                gallery.appendChild(grid);
+            } else {
+                const detail = document.getElementById('histGalleryDetail');
+                if (detail) detail.textContent = 'Loading photos…';
+            }
+
+            const offset = reset ? 0 : grid.querySelectorAll('.hist-card').length;
+            try {
+                const response = await fetch(
+                    `/api/photo-added?start=${encodeURIComponent(bucket.start)}&end=${encodeURIComponent(bucket.end)}&limit=${HIST_PAGE}&offset=${offset}`
+                );
+                const data = await response.json();
+                if (token !== histPhotoToken) return;
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || 'Could not load photos');
+                }
+                const detail = document.getElementById('histGalleryDetail');
+                const shownAfter = offset + data.photos.length;
+                if (detail) {
+                    detail.textContent = data.total === 0
+                        ? 'No photos were added in this period.'
+                        : `Showing ${shownAfter.toLocaleString()} of ${data.total.toLocaleString()} photo${data.total === 1 ? '' : 's'}, newest first.`;
+                }
+                data.photos.forEach((photo) => grid.appendChild(createHistogramCard(photo)));
+
+                const existingMore = gallery.querySelector('.hist-more');
+                if (existingMore) existingMore.remove();
+                if (shownAfter < data.total) {
+                    const more = document.createElement('button');
+                    more.type = 'button';
+                    more.className = 'action-button hist-more';
+                    more.textContent = `Show next ${Math.min(HIST_PAGE, data.total - shownAfter)}`;
+                    more.addEventListener('click', () => loadHistogramPhotos(false));
+                    gallery.appendChild(more);
+                }
+            } catch (err) {
+                if (token !== histPhotoToken) return;
+                console.error('Error loading histogram photos:', err);
+                const detail = document.getElementById('histGalleryDetail');
+                if (detail) detail.textContent = 'Could not load photos for this period.';
+            }
+        }
+
+        function createHistogramCard(photo) {
+            const card = document.createElement('button');
+            card.type = 'button';
+            card.className = 'hist-card';
+
+            if (photo.url) {
+                const img = document.createElement('img');
+                img.alt = sailNumbersLabel(photo);
+                img.loading = 'lazy';
+                img.src = photo.url;
+                img.addEventListener('error', () => {
+                    const missing = document.createElement('div');
+                    missing.className = 'hist-missing';
+                    missing.textContent = 'Image unavailable';
+                    img.replaceWith(missing);
+                });
+                card.appendChild(img);
+            } else {
+                const missing = document.createElement('div');
+                missing.className = 'hist-missing';
+                missing.textContent = 'Image unavailable';
+                card.appendChild(missing);
+            }
+
+            const meta = document.createElement('div');
+            meta.className = 'hist-card-meta';
+            const sail = document.createElement('strong');
+            sail.textContent = sailNumbersLabel(photo);
+            meta.appendChild(sail);
+            const bits = [photo.regatta_name, photo.location].filter(Boolean);
+            if (bits.length) {
+                const where = document.createElement('div');
+                where.textContent = bits.join(' · ');
+                meta.appendChild(where);
+            }
+            if (photo.added_at) {
+                const added = document.createElement('div');
+                added.textContent = `Added ${photo.added_at}`;
+                meta.appendChild(added);
+            }
+            card.appendChild(meta);
+            card.addEventListener('click', () => openHistLightbox(photo, card));
+            return card;
+        }
+
+        function openHistLightbox(photo, card) {
+            const img = card.querySelector('img');
+            if (!img || !img.src) return;
+            const lightbox = document.getElementById('histLightbox');
+            const full = document.getElementById('histLightboxImg');
+            const caption = document.getElementById('histLightboxCaption');
+            full.src = img.src;
+            full.alt = sailNumbersLabel(photo);
+            const parts = [sailNumbersLabel(photo)];
+            if (photo.regatta_name) parts.push(photo.regatta_name);
+            if (photo.location) parts.push(photo.location);
+            if (photo.added_at) parts.push(`Added ${photo.added_at}`);
+            if (photo.original_filename || photo.filename) parts.push(photo.original_filename || photo.filename);
+            caption.textContent = parts.join(' · ');
+            lightbox.hidden = false;
+        }
+
+        function closeHistLightbox() {
+            const lightbox = document.getElementById('histLightbox');
+            lightbox.hidden = true;
+            document.getElementById('histLightboxImg').removeAttribute('src');
+        }
+
+        document.getElementById('histLightbox').addEventListener('click', (event) => {
+            if (event.target.id === 'histLightbox') closeHistLightbox();
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') closeHistLightbox();
+        });
 
         async function cleanDatabase() {
             if (!confirm('Are you sure you want to clean the database? This will remove all photo entries.')) {

@@ -2455,6 +2455,109 @@ app.get('/api/recent-upload', async (req, res) => {
     }
 });
 
+// When a photo was added: client upload time, or the row's created time if that is missing.
+const PHOTO_ADDED_AT = 'COALESCE(upload_timestamp, created_at)';
+const PHOTO_ADDED_GRAINS = { week: 'week', month: 'month', year: 'year' };
+
+// Counts of photos added, bucketed by week (Monday), month, or year.
+app.get('/api/photo-added-histogram', async (req, res) => {
+    try {
+        const grain = PHOTO_ADDED_GRAINS[req.query.grain] || 'week';
+        const result = await pool.query(`
+            SELECT
+                to_char(date_trunc('${grain}', ${PHOTO_ADDED_AT}), 'YYYY-MM-DD') AS start,
+                COUNT(*)::int AS count
+            FROM photo_metadata
+            WHERE ${PHOTO_ADDED_AT} IS NOT NULL
+            GROUP BY 1
+            ORDER BY 1
+        `);
+        const totalResult = await pool.query(`
+            SELECT COUNT(*)::int AS total
+            FROM photo_metadata
+            WHERE ${PHOTO_ADDED_AT} IS NOT NULL
+        `);
+        res.json({
+            success: true,
+            grain,
+            total: totalResult.rows[0].total || 0,
+            buckets: result.rows.map((row) => ({
+                start: row.start,
+                count: row.count
+            }))
+        });
+    } catch (err) {
+        console.error('Error building photo histogram:', err);
+        res.status(500).json({ success: false, error: 'Error building photo histogram' });
+    }
+});
+
+// Photos added in a half-open range [start, end), both YYYY-MM-DD.
+app.get('/api/photo-added', async (req, res) => {
+    try {
+        const { start, end } = req.query;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(start || '') || !/^\d{4}-\d{2}-\d{2}$/.test(end || '') || start >= end) {
+            return res.status(400).json({
+                success: false,
+                error: 'start and end must be YYYY-MM-DD, with end after start'
+            });
+        }
+
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 48, 1), 100);
+        const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+        const params = [start, end];
+        const where = `${PHOTO_ADDED_AT} >= $1::timestamp AND ${PHOTO_ADDED_AT} < $2::timestamp`;
+
+        const countResult = await pool.query(
+            `SELECT COUNT(*)::int AS total FROM photo_metadata WHERE ${where}`,
+            params
+        );
+
+        const result = await pool.query(
+            `
+            SELECT
+                id,
+                filename,
+                original_filename,
+                sail_number,
+                sail_numbers,
+                to_char(date, 'YYYY-MM-DD') AS date,
+                regatta_name,
+                location,
+                photographer_name,
+                to_char(${PHOTO_ADDED_AT}, 'YYYY-MM-DD HH24:MI') AS added_at
+            FROM photo_metadata
+            WHERE ${where}
+            ORDER BY ${PHOTO_ADDED_AT} DESC, id DESC
+            LIMIT $3 OFFSET $4
+            `,
+            [...params, limit, offset]
+        );
+
+        const photos = await Promise.all(result.rows.map(async (photo) => {
+            if (!photo.filename) return { ...photo, url: null };
+            try {
+                const url = await getS3SignedUrl(`processed/${photo.filename}`);
+                return { ...photo, url };
+            } catch (err) {
+                console.error(`Error generating signed URL for ${photo.filename}:`, err);
+                return { ...photo, url: null };
+            }
+        }));
+
+        res.json({
+            success: true,
+            total: countResult.rows[0].total || 0,
+            offset,
+            limit,
+            photos
+        });
+    } catch (err) {
+        console.error('Error listing photos added in range:', err);
+        res.status(500).json({ success: false, error: 'Error listing photos' });
+    }
+});
+
 // Preview bulk photo metadata update by upload date (admin)
 app.get('/api/photo-bulk-preview', async (req, res) => {
     try {
