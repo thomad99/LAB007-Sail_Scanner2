@@ -34,8 +34,8 @@ const {
     ensureScrapedResultsTable,
     ensureStatsSnapshotTable,
     ensureRaceResultsStatsIndexes,
-    refreshRaceResultsStatsSnapshot,
-    refreshRaceResultsStatsIfStale
+    readRaceResultsStatsSnapshot,
+    refreshRaceResultsStatsSnapshot
 } = require('./race-results-scraper');
 const { canonicalClubSql, yachtClubMatchSql } = require('./yacht-club-aliases');
 const { attachRaceResultsScheduler } = require('./race-results-scheduler');
@@ -5141,20 +5141,20 @@ app.get('/Images/favicon.ico', (req, res) => {
 // Weekly upcoming-regatta scrape is owned by attachRegattaDatesScheduler (admin-controlled).
 
 function setupDailyRaceResultsStats() {
-    cron.schedule('0 3 * * *', async () => {
-        console.log('[race-results] Daily stats snapshot starting (03:00 UTC)...');
+    cron.schedule('0 0 * * *', async () => {
+        console.log('[race-results] Midnight stats snapshot starting (America/New_York)...');
         try {
             const snapshot = await refreshRaceResultsStatsSnapshot(pool);
             console.log(
-                '[race-results] Daily stats snapshot complete:',
+                '[race-results] Midnight stats snapshot complete:',
                 snapshot && snapshot.total_sailors, 'sailors,',
                 snapshot && snapshot.total_regattas, 'regattas'
             );
         } catch (err) {
-            console.error('[race-results] Daily stats snapshot failed:', err.message);
+            console.error('[race-results] Midnight stats snapshot failed:', err.message);
         }
-    });
-    console.log('[race-results] Daily stats snapshot enabled (03:00 UTC)');
+    }, { timezone: 'America/New_York' });
+    console.log('[race-results] Daily stats snapshot enabled (midnight America/New_York)');
 }
 setupDailyRaceResultsStats();
 
@@ -6007,19 +6007,25 @@ async function initializeServer() {
         ensureRaceResultsStatsIndexes(pool)
             .catch((err) => {
                 console.error('[race-results] startup index create failed:', err.message);
-            })
-            .then(() => refreshRaceResultsStatsIfStale(pool))
-            .then((snapshot) => {
-                if (snapshot && snapshot.computed_at) {
-                    console.log(
-                        '[race-results] stats snapshot ready:',
-                        snapshot.total_sailors, 'sailors,',
-                        snapshot.total_regattas, 'regattas'
-                    );
-                }
-            }).catch((err) => {
-                console.error('[race-results] startup stats snapshot failed:', err.message);
             });
+        try {
+            const snapshot = await readRaceResultsStatsSnapshot(pool);
+            if (snapshot && snapshot.computed_at) {
+                console.log(
+                    '[race-results] serving stored stats snapshot:',
+                    snapshot.total_sailors, 'sailors,',
+                    snapshot.total_regattas, 'regattas,',
+                    'computed_at=', snapshot.computed_at
+                );
+            } else {
+                console.log('[race-results] no stats snapshot yet — computing once in the background');
+                refreshRaceResultsStatsSnapshot(pool).catch((err) => {
+                    console.error('[race-results] initial stats snapshot failed:', err.message);
+                });
+            }
+        } catch (err) {
+            console.error('[race-results] startup stats snapshot failed:', err.message);
+        }
         await ensureResultsWatchersTable(pool);
         await createTrackerTables();
         await createPiTables();

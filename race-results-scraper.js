@@ -568,14 +568,22 @@ async function ensureStatsSnapshotTable(pool) {
     `);
 }
 
-async function readRaceResultsStatsSnapshot(pool) {
+async function readRaceResultsStatsSnapshot(pool, options) {
+    const force = Boolean(options && options.force);
+    if (!force && memoryStatsSnapshot && memoryStatsSnapshot.computed_at) {
+        return memoryStatsSnapshot;
+    }
     await ensureStatsSnapshotTable(pool);
     const r = await pool.query(`SELECT * FROM ${STATS_SNAPSHOT_TABLE} WHERE id = 1`);
-    return r.rows[0] ? formatStatsSnapshot(r.rows[0]) : null;
+    const snapshot = r.rows[0] ? formatStatsSnapshot(r.rows[0]) : null;
+    if (snapshot && snapshot.computed_at) memoryStatsSnapshot = snapshot;
+    return snapshot;
 }
 
 let statsRefreshPromise = null;
 let statsIndexPromise = null;
+/** Last midnight snapshot, served to every visitor without recounting. */
+let memoryStatsSnapshot = null;
 
 async function ensureRaceResultsStatsIndexes(pool) {
     if (statsIndexPromise) return statsIndexPromise;
@@ -703,7 +711,7 @@ async function refreshRaceResultsStatsSnapshot(pool) {
                 STATS_LOGIC_VERSION
             ]
         );
-        const snapshot = await readRaceResultsStatsSnapshot(pool);
+        const snapshot = await readRaceResultsStatsSnapshot(pool, { force: true });
         console.log(
             '[race-results] stats snapshot stored:',
             snapshot.total_sailors, 'sailors,',
@@ -733,18 +741,6 @@ async function refreshRaceResultsStatsIfStale(pool) {
         console.error('[race-results] stats snapshot refresh failed:', err.message);
         return null;
     }
-}
-
-function kickStaleStatsRefresh(pool, snapshot) {
-    if (snapshotIsFresh(snapshot)) return;
-    if (!snapshot || !snapshot.computed_at) {
-        console.warn('[race-results] stats snapshot missing — serving zeros and starting background refresh');
-    } else {
-        console.log('[race-results] stats snapshot stale (computed_at=', snapshot.computed_at, ') — serving stored snapshot and starting background refresh');
-    }
-    refreshRaceResultsStatsSnapshot(pool).catch((err) => {
-        console.error('[race-results] background stats snapshot failed:', err.message);
-    });
 }
 
 /** Optional heavy cleanup — only after scrapes, never on dashboard reads. */
@@ -1988,15 +1984,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
     app.get('/api/race-results/stats', async (req, res) => {
         try {
             const snapshot = await readRaceResultsStatsSnapshot(pool);
-            if (snapshot && snapshot.computed_at) {
-                console.log(
-                    '[race-results] /stats serving snapshot computed_at=',
-                    snapshot.computed_at,
-                    'sailors=', snapshot.total_sailors,
-                    'regattas=', snapshot.total_regattas
-                );
-            }
-            kickStaleStatsRefresh(pool, snapshot);
+            res.set('Cache-Control', 'public, max-age=60');
             res.json(snapshot || emptyStatsSnapshot());
         } catch (e) {
             console.error('race-results stats error:', e);
@@ -2158,7 +2146,6 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
             `);
 
             const snapshot = await readRaceResultsStatsSnapshot(pool);
-            kickStaleStatsRefresh(pool, snapshot);
             const dataYearsRows = (snapshot && snapshot.dataYears) || [];
             if (snapshot && snapshot.computed_at) {
                 console.log(
@@ -2303,7 +2290,6 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
 
             if (intent === 'data_summary') {
                 const snapshot = await readRaceResultsStatsSnapshot(pool);
-                kickStaleStatsRefresh(pool, snapshot);
                 const row = snapshot || emptyStatsSnapshot();
                 const src = (row.bySource || []).map(x => {
                     const events = x.events != null ? x.events : x.regattas;

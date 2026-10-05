@@ -1032,8 +1032,7 @@
         }
 
         @media (max-width: 768px) {
-            .site-bar { padding: 6px 14px; }
-            .brand img { height: 38px; }
+            .site-bar { display: none; }
             .page {
                 padding: 0;
             }
@@ -1087,6 +1086,9 @@
         }
 
         @media (max-width: 768px) {
+            body.fit-app > .site-bar {
+                display: none;
+            }
             html,
             body.fit-app {
                 height: 100dvh !important;
@@ -1185,13 +1187,30 @@
             return Number.isFinite(n) ? n.toLocaleString() : '—';
         }
 
+        const HEADER_STATS_KEY = 'sailbotHeaderStats';
+
+        function paintHeaderStats(data) {
+            if (!data) return;
+            document.getElementById('sailorCount').textContent = formatCount(data.total_sailors);
+            document.getElementById('regattaCount').textContent = formatCount(data.total_regattas);
+        }
+
+        try {
+            paintHeaderStats(JSON.parse(localStorage.getItem(HEADER_STATS_KEY) || 'null'));
+        } catch (_err) {
+            /* ignore a bad saved total */
+        }
+
         async function loadHeaderStats() {
             try {
                 const res = await fetch('/api/race-results/stats');
                 const data = await res.json();
-                if (!data || !data.success) return;
-                document.getElementById('sailorCount').textContent = formatCount(data.total_sailors);
-                document.getElementById('regattaCount').textContent = formatCount(data.total_regattas);
+                if (!data || !data.success || !data.computed_at) return;
+                paintHeaderStats(data);
+                localStorage.setItem(HEADER_STATS_KEY, JSON.stringify({
+                    total_sailors: data.total_sailors,
+                    total_regattas: data.total_regattas
+                }));
             } catch (_err) {
                 /* leave placeholders */
             }
