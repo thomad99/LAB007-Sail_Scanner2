@@ -741,23 +741,35 @@ function markerSpans(text, pattern) {
 function countryCodeSailNumbers(lineTexts) {
     const joined = (lineTexts || []).filter(Boolean).join('\n');
     const found = [];
-    const add = (number) => {
-        if (number && !found.includes(number)) found.push(number);
-    };
-    const addNear = (spans, reverse, lookBefore) => {
+    const forward = [];
+    const backward = [];
+    const addNear = (spans, reverse, lookBefore, bucket) => {
         for (const span of spans) {
-            const after = acceptedDigitRuns(joined.slice(span.end, span.end + 32), reverse)[0];
-            if (after) add(after);
+            // Every number after the country code can be another boat in the same photo.
+            acceptedDigitRuns(joined.slice(span.end, span.end + 48), reverse).forEach((number) => bucket.push(number));
             if (lookBefore) {
-                const beforeRuns = acceptedDigitRuns(joined.slice(Math.max(0, span.at - 16), span.at), reverse);
-                const before = beforeRuns[beforeRuns.length - 1];
-                if (before) add(before);
+                const beforeRuns = acceptedDigitRuns(joined.slice(Math.max(0, span.at - 24), span.at), reverse);
+                const closest = beforeRuns[beforeRuns.length - 1];
+                if (closest) bucket.push(closest);
             }
         }
     };
-    addNear(markerSpans(joined, '(^|[^A-Z])(U\\s*\\.?\\s*S\\s*\\.?\\s*A\\.?)(?![A-Z])'), false, false);
-    addNear(markerSpans(joined, '(^|[^A-Z])(A\\s*\\.?\\s*S\\s*\\.?\\s*U\\.?)(?![A-Z])'), true, true);
+    addNear(markerSpans(joined, '(^|[^A-Z])(U\\s*\\.?\\s*S\\s*\\.?\\s*A\\.?)(?![A-Z])'), false, false, forward);
+    addNear(markerSpans(joined, '(^|[^A-Z])(A\\s*\\.?\\s*S\\s*\\.?\\s*U\\.?)(?![A-Z])'), true, true, backward);
+    const add = (number) => {
+        if (!number || found.includes(number)) return;
+        // The other side of the same sail is the digits backwards, not a second boat.
+        if (found.some((kept) => kept !== number && reverseDigits(kept) === number)) return;
+        found.push(number);
+    };
+    forward.forEach(add);
+    backward.forEach(add);
     return found;
+}
+
+function isMirroredSailNumber(number, others) {
+    const mirror = reverseDigits(number);
+    return mirror !== number && others.some((other) => String(other) === mirror);
 }
 
 // Add this helper function
@@ -1144,7 +1156,10 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                 if (highConfidenceNumbers.length > 0) {
                     for (const sailData of highConfidenceNumbers) {
                         try {
-                            const sailorInfo = await lookupSailorInDatabase(sailData.number);
+                            const sailorInfo = await lookupSailorInDatabase(sailData.number, {
+                                regattaName: metadata.regatta_name,
+                                date: metadata.date
+                            });
                             const sailorName = sailorInfo ? sanitizeForFilename(sailorInfo.sailorName) : 'NONAME';
                             const newFilename = `${sailData.number}_${sailorName}_${originalFilename}`;
                             const s3Key = `processed/${newFilename}`;
@@ -1361,7 +1376,10 @@ app.post('/api/scan2', upload.single('image'), async (req, res) => {
         if (validSails.length > 0) {
             for (const sailData of validSails) {
                 try {
-                    const sailorInfo = await lookupSailorInDatabase(sailData.number);
+                    const sailorInfo = await lookupSailorInDatabase(sailData.number, {
+                        regattaName: metadata.regatta_name,
+                        date: metadata.date
+                    });
                     const sailorName = sailorInfo ? sanitizeForFilename(sailorInfo.sailorName) : 'NONAME';
                     const newFilename = `${sailData.number}_${sailorName}_${originalFilename}`;
                     const s3Key = `processed/${newFilename}`;
@@ -1751,7 +1769,8 @@ function extractSailNumbersFromDocumentIntelligence(analyzeResult) {
         const lines = page.lines || [];
         const digitLines = []; // digit-only fragments for merge pass
 
-        const countryNumbers = countryCodeSailNumbers(lines.map((line) => (line.content || line.text || '').trim()));
+        const lineTexts = lines.map((line) => (line.content || line.text || '').trim());
+        const countryNumbers = countryCodeSailNumbers(lineTexts);
         if (countryNumbers.length) {
             for (const number of countryNumbers) {
                 const reversed = reverseDigits(number);
@@ -1763,7 +1782,6 @@ function extractSailNumbersFromDocumentIntelligence(analyzeResult) {
                 const boundingBox = polygon ? polygonToBoundingBox(Array.isArray(polygon) ? polygon : [polygon]) : null;
                 candidates.push({ number, confidence: 0.99, boundingBox, preferred: true });
             }
-            continue;
         }
 
         for (const line of lines) {
@@ -1778,6 +1796,7 @@ function extractSailNumbersFromDocumentIntelligence(analyzeResult) {
             // Case 1: pure digit string (1–8 digits) — direct match
             if (/^\d{1,8}$/.test(raw)) {
                 if (isClassMarkingText(raw)) continue;
+                if (countryNumbers.includes(raw) || isMirroredSailNumber(raw, countryNumbers)) continue;
                 candidates.push({ number: raw, confidence: line.confidence ?? 0.9, boundingBox });
                 digitLines.push({ number: raw, confidence: line.confidence ?? 0.9, boundingBox });
                 continue;
@@ -1788,6 +1807,7 @@ function extractSailNumbersFromDocumentIntelligence(analyzeResult) {
             const stripped = raw.replace(/\s+/g, '');
             if (/^\d{2,8}$/.test(stripped)) {
                 if (isClassMarkingText(raw) || isClassMarkingText(stripped)) continue;
+                if (countryNumbers.includes(stripped) || isMirroredSailNumber(stripped, countryNumbers)) continue;
                 candidates.push({ number: stripped, confidence: (line.confidence ?? 0.9) * 0.9, boundingBox });
                 digitLines.push({ number: stripped, confidence: (line.confidence ?? 0.9) * 0.9, boundingBox });
             }
@@ -1878,7 +1898,8 @@ function extractSailNumbers(azureResults) {
     if (azureResults && azureResults.readResults) {
         for (const page of azureResults.readResults) {
             const lines = page.lines || [];
-            const countryNumbers = countryCodeSailNumbers(lines.map((line) => String(line.text || '').trim()));
+            const lineTexts = lines.map((line) => String(line.text || '').trim());
+            const countryNumbers = countryCodeSailNumbers(lineTexts);
             if (countryNumbers.length) {
                 for (const number of countryNumbers) {
                     const reversed = reverseDigits(number);
@@ -1893,19 +1914,21 @@ function extractSailNumbers(azureResults) {
                         preferred: true
                     });
                 }
-                continue;
             }
             for (const line of lines) {
-                // Check if the text matches a sail number pattern (1-6 digits)
-                const text = line.text.trim();
+                const text = String(line.text || '').trim();
                 if (isClassMarkingText(text)) continue;
-                if (/^\d{1,6}$/.test(text) && !IGNORED_NUMBERS.includes(text)) {
-                    numbers.push({
-                        number: text,
-                        confidence: line.words[0].confidence,
-                        boundingBox: line.boundingBox
-                    });
-                }
+                const stripped = text.replace(/[ \t]+/g, '');
+                if (!/^\d{2,8}$/.test(stripped) || !acceptSailNumber(stripped)) continue;
+                if (countryNumbers.includes(stripped) || isMirroredSailNumber(stripped, countryNumbers)) continue;
+                const wordConfidence = line.words && line.words[0] ? line.words[0].confidence : 0.95;
+                const entry = {
+                    number: stripped,
+                    confidence: countryNumbers.length ? Math.max(wordConfidence || 0, 0.91) : wordConfidence,
+                    boundingBox: line.boundingBox
+                };
+                if (countryNumbers.length) preferred.push(entry);
+                else numbers.push(entry);
             }
         }
     }
@@ -1988,9 +2011,103 @@ app.get('/photoAdmin', (req, res) => {
     res.redirect(301, '/admin#photos');
 });
 
+const REGATTA_NAME_STOP_WORDS = new Set([
+    'the', 'a', 'an', 'of', 'and', 'at', 'for', 'regatta', 'cup', 'championship',
+    'championships', 'champs', 'series', 'sailing', 'race', 'races', 'weekend',
+    'open', 'national', 'nationals', 'invitational'
+]);
+
+function photoDateOnly(value) {
+    if (!value) return null;
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        return value.toISOString().slice(0, 10);
+    }
+    const match = String(value).trim().match(/^(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : null;
+}
+
+function normalizedSailNumber(value) {
+    return String(value || '').toUpperCase().replace(/[\s-]+/g, '').replace(/^USA/, '');
+}
+
+function regattaNameTokens(name) {
+    return String(name || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .split(/\s+/)
+        .filter((word) => word.length >= 4 && !REGATTA_NAME_STOP_WORDS.has(word) && !/^\d+$/.test(word));
+}
+
+function regattaNameOverlapScore(photoName, resultName) {
+    const photoTokens = regattaNameTokens(photoName);
+    const resultTokens = regattaNameTokens(resultName);
+    if (!photoTokens.length || !resultTokens.length) return 0;
+    const resultSet = new Set(resultTokens);
+    const resultText = String(resultName || '').toLowerCase();
+    const photoText = String(photoName || '').toLowerCase();
+    let score = 0;
+    for (const token of photoTokens) {
+        if (resultSet.has(token)) score += 2;
+        else if (resultText.includes(token)) score += 1;
+    }
+    for (const token of resultTokens) {
+        if (token.length >= 5 && photoText.includes(token) && !photoTokens.includes(token)) score += 1;
+    }
+    return score;
+}
+
+function plainSailorName(value) {
+    return String(value || '')
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/&[a-z]+;|&#\d+;|&#x[0-9a-f]+;/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+// Match a photo sail number to a scraped regatta result: same date, and part of the regatta name in common.
+async function lookupSailorInScrapedResults(sailNumber, context) {
+    const sail = normalizedSailNumber(sailNumber);
+    const date = photoDateOnly(context && context.date);
+    const regattaName = context && context.regattaName;
+    if (!sail || !date || !String(regattaName || '').trim()) return null;
+
+    const result = await pool.query(
+        `
+        SELECT regatta_name, skipper, sail_number
+        FROM scraped_race_results
+        WHERE regatta_date = $2::date
+          AND TRIM(COALESCE(skipper, '')) <> ''
+          AND (
+            UPPER(REGEXP_REPLACE(TRIM(COALESCE(sail_number, '')), '[\\s-]+', '', 'g')) = $1
+            OR UPPER(REGEXP_REPLACE(TRIM(COALESCE(sail_number, '')), '[\\s-]+', '', 'g')) = 'USA' || $1
+            OR REGEXP_REPLACE(UPPER(REGEXP_REPLACE(TRIM(COALESCE(sail_number, '')), '[\\s-]+', '', 'g')), '^USA', '') = $1
+          )
+        `,
+        [sail, date]
+    );
+
+    let best = null;
+    let bestScore = 0;
+    for (const row of result.rows) {
+        const score = regattaNameOverlapScore(regattaName, row.regatta_name);
+        if (score > bestScore) {
+            bestScore = score;
+            best = row;
+        }
+    }
+    if (!best || bestScore < 2) return null;
+    const sailorName = plainSailorName(best.skipper);
+    if (!sailorName) return null;
+    console.log(`Matched sail ${sail} at ${best.regatta_name} on ${date} to ${sailorName}`);
+    return { sailNumber: sail, sailorName };
+}
+
 // Add this helper function to look up skipper info
-async function lookupSailorInDatabase(sailNumber) {
+async function lookupSailorInDatabase(sailNumber, context) {
     try {
+        const scraped = await lookupSailorInScrapedResults(sailNumber, context);
+        if (scraped) return scraped;
+
         console.log(`Looking up sailor for number: ${sailNumber}`);
 
         const query = `
@@ -3109,7 +3226,10 @@ app.post('/api/photo-rescan', async (req, res) => {
                             continue;
                         }
 
-                        const sailorInfo = await lookupSailorInDatabase(sailNumber);
+                        const sailorInfo = await lookupSailorInDatabase(sailNumber, {
+                            regattaName: regatta_name,
+                            date
+                        });
                         const sailorName = sailorInfo ? sanitizeForFilename(sailorInfo.sailorName) : 'NONAME';
                         const newFilename = `${sailNumber}_${sailorName}_${originalFilename}`;
                         const newS3Key = `processed/${newFilename}`;
@@ -5008,8 +5128,11 @@ async function processAnalysisJob(jobId) {
                     for (const sailData of sailNumbers) {
                         try {
                             // Look up sailor name in database
-                            const sailorInfo = await lookupSailorInDatabase(sailData.number);
-                            const sailorName = sailorInfo ? sailorInfo.sailorName : 'NONAME';
+                            const sailorInfo = await lookupSailorInDatabase(sailData.number, {
+                                regattaName: job.metadata && job.metadata.regatta_name,
+                                date: job.metadata && job.metadata.date
+                            });
+                            const sailorName = sailorInfo ? sanitizeForFilename(sailorInfo.sailorName) : 'NONAME';
 
                             const processedFilename = `${sailData.number}_${sailorName}_${file.originalName}`;
                             const processedS3Key = `processed/${processedFilename}`;
@@ -5127,14 +5250,17 @@ async function updatePhotoMetadataWithSailNumbers(tempFilename, sailNumbers) {
             // Get the highest confidence sail number
             const primarySailNumber = sailNumbers.sort((a, b) => b.confidence - a.confidence)[0];
 
-            // Look up sailor name
-            const sailorInfo = await lookupSailorInDatabase(primarySailNumber.number);
-            const sailorName = sailorInfo ? sailorInfo.sailorName : 'NONAME';
-
-            // Get original filename from database
-            const originalRecord = await pool.query('SELECT original_filename FROM photo_metadata WHERE new_filename = $1', [tempFilename]);
+            // Look up sailor name from this photo's regatta and date
+            const originalRecord = await pool.query(
+                'SELECT original_filename, regatta_name, date FROM photo_metadata WHERE new_filename = $1',
+                [tempFilename]
+            );
             const originalFilename = originalRecord.rows[0]?.original_filename || 'unknown.jpg';
-
+            const sailorInfo = await lookupSailorInDatabase(primarySailNumber.number, {
+                regattaName: originalRecord.rows[0]?.regatta_name,
+                date: originalRecord.rows[0]?.date
+            });
+            const sailorName = sailorInfo ? sanitizeForFilename(sailorInfo.sailorName) : 'NONAME';
             const processedFilename = `${primarySailNumber.number}_${sailorName}_${originalFilename}`;
 
             const query = `
@@ -6121,6 +6247,7 @@ if (puppeteer) {
 }
 
 const CLASS_MARKING_RESCAN_JOB = 'rescan-usa-sail-numbers-last-3-days';
+const EXTRA_BOAT_RESCAN_JOB = 'rescan-add-second-boat-last-3-days';
 
 async function ensureOneTimeJobsTable() {
     await pool.query(`
@@ -6194,7 +6321,10 @@ async function rescanRecentPhotosIgnoringClassMarkings(days) {
                         (detected || []).filter((item) => item && preferredNumbers.includes(String(item.number)))
                     );
                     if (String(keeper.sail_number) !== primary) {
-                        const sailorInfo = await lookupSailorInDatabase(primary);
+                        const sailorInfo = await lookupSailorInDatabase(primary, {
+                            regattaName: sample.regatta_name,
+                            date: sample.date
+                        });
                         const sailorName = sailorInfo ? sanitizeForFilename(sailorInfo.sailorName) : 'NONAME';
                         const newFilename = `${primary}_${sailorName}_${originalFilename}`;
                         await uploadToS3(buffer, `processed/${newFilename}`, contentType || 'image/jpeg');
@@ -6217,7 +6347,10 @@ async function rescanRecentPhotosIgnoringClassMarkings(days) {
                         removedClassMarks += extraIds.length;
                     }
                     for (const sailNumber of preferredNumbers.slice(1)) {
-                        const sailorInfo = await lookupSailorInDatabase(sailNumber);
+                        const sailorInfo = await lookupSailorInDatabase(sailNumber, {
+                            regattaName: sample.regatta_name,
+                            date: sample.date
+                        });
                         const sailorName = sailorInfo ? sanitizeForFilename(sailorInfo.sailorName) : 'NONAME';
                         const newFilename = `${sailNumber}_${sailorName}_${originalFilename}`;
                         await uploadToS3(buffer, `processed/${newFilename}`, contentType || 'image/jpeg');
@@ -6276,7 +6409,10 @@ async function rescanRecentPhotosIgnoringClassMarkings(days) {
 
             if (classRows.length > 0) {
                 const primary = fresh[0];
-                const sailorInfo = await lookupSailorInDatabase(primary);
+                const sailorInfo = await lookupSailorInDatabase(primary, {
+                    regattaName: sample.regatta_name,
+                    date: sample.date
+                });
                 const sailorName = sailorInfo ? sanitizeForFilename(sailorInfo.sailorName) : 'NONAME';
                 const newFilename = `${primary}_${sailorName}_${originalFilename}`;
                 await uploadToS3(buffer, `processed/${newFilename}`, contentType || 'image/jpeg');
@@ -6301,7 +6437,10 @@ async function rescanRecentPhotosIgnoringClassMarkings(days) {
             }
 
             for (const sailNumber of toInsert) {
-                const sailorInfo = await lookupSailorInDatabase(sailNumber);
+                const sailorInfo = await lookupSailorInDatabase(sailNumber, {
+                    regattaName: sample.regatta_name,
+                    date: sample.date
+                });
                 const sailorName = sailorInfo ? sanitizeForFilename(sailorInfo.sailorName) : 'NONAME';
                 const newFilename = `${sailNumber}_${sailorName}_${originalFilename}`;
                 await uploadToS3(buffer, `processed/${newFilename}`, contentType || 'image/jpeg');
@@ -6400,6 +6539,135 @@ async function startRecentClassMarkingRescan() {
     }
 }
 
+async function addExtraBoatsFromRecentPhotos(days) {
+    const rows = await pool.query(
+        `
+        SELECT id, filename, sail_number, file_checksum,
+               date, regatta_name, photographer_name, photographer_website,
+               location, photo_timestamp, gps_latitude, gps_longitude, gps_altitude,
+               device_fingerprint, device_type, user_agent, screen_resolution, timezone,
+               upload_timestamp, original_filename
+        FROM photo_metadata
+        WHERE COALESCE(upload_timestamp, created_at) >= NOW() - ($1 * INTERVAL '1 day')
+        ORDER BY COALESCE(upload_timestamp, created_at) ASC, id ASC
+        `,
+        [days]
+    );
+
+    const groups = new Map();
+    for (const row of rows.rows) {
+        const checksum = row.file_checksum ? String(row.file_checksum).split('::')[0] : '';
+        const key = checksum || `file:${row.filename}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(row);
+    }
+
+    let analyzed = 0;
+    let added = 0;
+    let failed = 0;
+
+    for (const group of groups.values()) {
+        const sample = group.find((row) => row.filename) || group[0];
+        if (!sample || !sample.filename) continue;
+        analyzed += 1;
+        try {
+            const { buffer, contentType } = await downloadS3ObjectToBuffer(`processed/${sample.filename}`);
+            const detected = await analyzeImageWithAzure(buffer);
+            const found = [];
+            for (const item of detected || []) {
+                const number = item && String(item.number);
+                if (!acceptSailNumber(number) || found.includes(number)) continue;
+                if (isMirroredSailNumber(number, found)) continue;
+                found.push(number);
+            }
+            const stored = group.map((row) => String(row.sail_number));
+            const missing = found.filter((number) => !stored.includes(number) && !isMirroredSailNumber(number, stored));
+            if (missing.length === 0) continue;
+
+            const originalFilename = sample.original_filename || originalNameFromProcessed(sample.filename);
+            for (const sailNumber of missing) {
+                const sailorInfo = await lookupSailorInDatabase(sailNumber, {
+                    regattaName: sample.regatta_name,
+                    date: sample.date
+                });
+                const sailorName = sailorInfo ? sanitizeForFilename(sailorInfo.sailorName) : 'NONAME';
+                const newFilename = `${sailNumber}_${sailorName}_${originalFilename}`;
+                await uploadToS3(buffer, `processed/${newFilename}`, contentType || 'image/jpeg');
+                const baseChecksum = sample.file_checksum ? String(sample.file_checksum).split('::')[0] : '';
+                const rowChecksum = baseChecksum ? `${baseChecksum}::${newFilename}` : null;
+                await pool.query(
+                    `
+                    INSERT INTO photo_metadata (
+                        filename, sail_number, date, regatta_name,
+                        photographer_name, photographer_website,
+                        location, additional_tags, file_checksum, photo_timestamp,
+                        gps_latitude, gps_longitude, gps_altitude,
+                        device_fingerprint, device_type, user_agent,
+                        screen_resolution, timezone, upload_timestamp, original_filename
+                    ) VALUES (
+                        $1, $2, $3, $4,
+                        $5, $6,
+                        $7, $8, $9, $10,
+                        $11, $12, $13,
+                        $14, $15, $16,
+                        $17, $18, $19, $20
+                    )
+                    `,
+                    [
+                        newFilename, sailNumber, sample.date || null, sample.regatta_name || null,
+                        sample.photographer_name || null, sample.photographer_website || null,
+                        sample.location || null, [], rowChecksum, sample.photo_timestamp || null,
+                        sample.gps_latitude || null, sample.gps_longitude || null, sample.gps_altitude || null,
+                        sample.device_fingerprint || null, sample.device_type || null, sample.user_agent || null,
+                        sample.screen_resolution || null, sample.timezone || null,
+                        sample.upload_timestamp || new Date().toISOString(), originalFilename
+                    ]
+                );
+                added += 1;
+            }
+            console.log(`[photo-rescan] ${sample.filename}: added second boat ${missing.join(', ')}`);
+        } catch (err) {
+            failed += 1;
+            console.error(`[photo-rescan] ${sample.filename}:`, err.message);
+        }
+    }
+
+    return { photos: groups.size, analyzed, addedSailNumbers: added, failed };
+}
+
+async function startExtraBoatRescan() {
+    await ensureOneTimeJobsTable();
+    const existing = await pool.query(
+        'SELECT finished_at FROM one_time_jobs WHERE name = $1',
+        [EXTRA_BOAT_RESCAN_JOB]
+    );
+    if (existing.rows[0] && existing.rows[0].finished_at) {
+        console.log('[photo-rescan] second-boat rescan already completed');
+        return;
+    }
+    if (!existing.rows[0]) {
+        await pool.query(
+            'INSERT INTO one_time_jobs (name, started_at) VALUES ($1, NOW())',
+            [EXTRA_BOAT_RESCAN_JOB]
+        );
+    } else {
+        console.log('[photo-rescan] resuming unfinished second-boat rescan');
+    }
+
+    console.log('[photo-rescan] adding any extra sail numbers from photos uploaded in the last 3 days');
+    try {
+        const result = await addExtraBoatsFromRecentPhotos(3);
+        await pool.query(
+            'UPDATE one_time_jobs SET finished_at = NOW(), result = $2::jsonb WHERE name = $1',
+            [EXTRA_BOAT_RESCAN_JOB, JSON.stringify(result)]
+        );
+        console.log('[photo-rescan] second-boat pass finished', result);
+    } catch (err) {
+        await pool.query('DELETE FROM one_time_jobs WHERE name = $1 AND finished_at IS NULL', [EXTRA_BOAT_RESCAN_JOB]);
+        throw err;
+    }
+}
+
 // Initialize asynchronously in background (don't await)
 setTimeout(() => {
     initializeServer().catch(err => {
@@ -6446,6 +6714,9 @@ async function initializeServer() {
         console.log('✓ Server initialization complete');
         startRecentClassMarkingRescan().catch((err) => {
             console.error('[photo-rescan] one-time class-marking rescan failed:', err.message);
+        });
+        startExtraBoatRescan().catch((err) => {
+            console.error('[photo-rescan] second-boat rescan failed:', err.message);
         });
     } catch (startupError) {
         console.error('Error during server initialization:', startupError);
