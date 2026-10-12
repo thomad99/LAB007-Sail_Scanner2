@@ -1431,10 +1431,7 @@ async function listClubspotEvents(axios, window) {
         if (r.city && r.state) location = `${r.city}, ${r.state}`;
         else if (r.city) location = r.city;
         else if (club.name) location = club.name;
-        const subdomain = (club.subdomain || '').replace(/[^a-zA-Z0-9-]/g, '');
-        const resultsUrl = subdomain
-            ? `https://${subdomain}.theclubspot.com/regatta/${r.objectId}/results`
-            : `https://www.theclubspot.com/regatta/${r.objectId}/results`;
+        const resultsUrl = `https://theclubspot.com/regatta/${r.objectId}/results`;
         events.push({
             source_event_id: r.objectId,
             regatta_name: r.name,

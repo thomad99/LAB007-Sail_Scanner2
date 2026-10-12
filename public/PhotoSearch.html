@@ -935,10 +935,57 @@
             overflow: visible;
         }
 
-        body.fit-app #resultsTab {
-            flex: 1 1 auto;
-            min-height: 0;
-            overflow: auto;
+        @media (max-width: 768px) {
+            body.fit-app #resultsTab {
+                flex: 1 1 auto;
+                min-height: 0;
+                overflow: auto;
+            }
+        }
+
+        @media (min-width: 769px) {
+            html,
+            body.fit-app {
+                height: auto !important;
+                min-height: 100dvh;
+                overflow: auto !important;
+            }
+
+            body.fit-app > main.page {
+                display: block;
+                height: auto;
+                overflow: visible;
+                padding-bottom: 48px;
+            }
+
+            body.fit-app .page-inner {
+                width: 100%;
+                max-width: none;
+                display: block;
+                overflow: visible;
+                min-height: 0;
+            }
+
+            body.fit-app .search-section {
+                width: min(1120px, calc(100% - 40px));
+                margin-left: auto;
+                margin-right: auto;
+            }
+
+            body.fit-app #resultsTab,
+            body.fit-app .results-section,
+            body.fit-app #results {
+                width: 100%;
+                max-width: none;
+                height: auto;
+                overflow: visible;
+            }
+
+            body.fit-app .photo-count,
+            body.fit-app .photo-grid {
+                padding-left: 28px;
+                padding-right: 28px;
+            }
         }
     </style>
 </head>

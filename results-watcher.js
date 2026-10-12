@@ -292,6 +292,7 @@ function watchEmailBodies({ title, intro, resultsUrl, stopUrl, extra, changedAt,
 
 async function sendWatchEmail(emailTransporter, { to, title, intro, resultsUrl, stopUrl, extra, subject, changedAt, kind }) {
     if (!emailTransporter) throw new Error('Email is not configured');
+    resultsUrl = canonicalResultsPageUrl(resultsUrl);
     const attachment = watchLogoAttachment();
     const bodies = watchEmailBodies({
         title,
@@ -320,6 +321,14 @@ function stopUrlForToken(token) {
 function clubspotEventIdFromUrl(url) {
     const match = String(url || '').match(/theclubspot\.com\/regatta\/([^/?#]+)/i);
     return match ? match[1] : null;
+}
+
+/** Club subdomain hosts do not serve results. The public page is always theclubspot.com. */
+function canonicalResultsPageUrl(url) {
+    const text = String(url || '').trim();
+    const eventId = clubspotEventIdFromUrl(text);
+    if (!eventId) return text;
+    return `https://theclubspot.com/regatta/${eventId}/results`;
 }
 
 function regattaNetworkEventIdFromUrl(url) {
@@ -566,7 +575,7 @@ function attachResultsWatcher(app, { pool, axios, cheerio, emailTransporter, cro
         try {
             await ensureResultsWatchersTable(pool);
             const email = normalizeEmail(req.body && req.body.email);
-            const resultsUrl = normalizeUrl(req.body && (req.body.resultsUrl || req.body.websiteUrl));
+            const resultsUrl = canonicalResultsPageUrl(normalizeUrl(req.body && (req.body.resultsUrl || req.body.websiteUrl)));
             const regattaName = String((req.body && req.body.regattaName) || '').trim().slice(0, 200) || null;
             const regattaDate = normalizeRegattaDate(req.body && (req.body.regattaDate || req.body.regatta_date));
 

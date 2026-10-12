@@ -2018,7 +2018,10 @@
             } else {
                 const altUrl = regatta.event_website_url || regatta.registrants_url;
                 if (regatta.source === 'clubspot' && regatta.event_website_url) {
-                    resultsUrl = regatta.event_website_url.replace(/\/?$/, '') + '/results';
+                    const clubspotId = /theclubspot\.com\/regatta\/([^/?#]+)/i.exec(regatta.event_website_url);
+                    resultsUrl = clubspotId
+                        ? `https://theclubspot.com/regatta/${clubspotId[1]}/results`
+                        : regatta.event_website_url.replace(/\/?$/, '') + '/results';
                 } else {
                     resultsUrl = altUrl;
                 }
