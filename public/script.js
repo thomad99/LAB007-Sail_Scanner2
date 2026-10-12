@@ -181,10 +181,10 @@ async function scanFrame() {
         return;
     }
 
-    // Implement throttling - check if it's been at least 30 seconds since last scan
+    // The server spaces Azure calls. This only keeps live scans from stacking.
     const now = Date.now();
     const timeSinceLastScan = now - lastScanTime;
-    const throttleTime = 30000; // 30 seconds in milliseconds
+    const throttleTime = 3000;
 
     if (timeSinceLastScan < throttleTime && lastScanTime > 0) {
         const waitTime = throttleTime - timeSinceLastScan;
@@ -342,7 +342,7 @@ async function scanFrame() {
         }
 
         if (resultDiv) resultDiv.textContent = `Scan #${imageCounter} complete. Found ${data.sailNumbers?.numbers?.length || 0} sail numbers. Total images: ${imageCounter}`;
-        addDebugMessage(`Scan #${imageCounter} complete. Waiting 30 seconds for next scan...`, '⏱️');
+        addDebugMessage(`Scan #${imageCounter} complete. Next scan in ${throttleTime / 1000} seconds...`, '⏱️');
 
         // Next scan will be triggered by timeout due to throttling
 
@@ -352,15 +352,12 @@ async function scanFrame() {
         addDebugMessage(errorMsg, '❌');
         if (resultDiv) resultDiv.textContent = errorMsg;
 
-        // Even on error, we maintain the throttle
-        addDebugMessage(`Waiting 30 seconds before attempting next scan...`, '⏱️');
+        addDebugMessage(`Waiting ${throttleTime / 1000} seconds before attempting next scan...`, '⏱️');
     }
 
-    // Schedule next scan respecting the throttle
     if (isScanning) {
-        addDebugMessage(`Scheduling next scan in 30 seconds...`, '⏱️');
-        // Wait for the full 30 seconds before next scan
-        setTimeout(() => scanFrame(), 30000);
+        addDebugMessage(`Scheduling next scan in ${throttleTime / 1000} seconds...`, '⏱️');
+        setTimeout(() => scanFrame(), throttleTime);
     }
 }
 

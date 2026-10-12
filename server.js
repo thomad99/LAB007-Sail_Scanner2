@@ -282,9 +282,15 @@ const SAVE_TO_SERVER = true; // Set to false if you don't want server copies
 const IGNORED_NUMBERS = ['15', '420']; // Class markings, not sail numbers (Nacra 15, Club 420)
 const validSailNumbers = [13, 118, 9610, 5318, 8008]; // Valid sail numbers
 
-// Add these constants at the top of your file
-const RATE_LIMIT_DELAY = 30000; // 30 seconds
+// Azure Vision Read limits (Microsoft Learn, Read how-to and Vision FAQ):
+// free tier is 20 calls per minute, and result polls count as calls.
+// Paid S1 is about 20 transactions per second (FAQ) or 30 requests per second (Read guide).
+// One call every 3 seconds is the free-tier ceiling. Set AZURE_VISION_MIN_INTERVAL_MS
+// lower, for example 100, when this Vision resource is on a paid tier.
+const AZURE_MIN_INTERVAL_MS = Math.max(0, parseInt(process.env.AZURE_VISION_MIN_INTERVAL_MS || '3000', 10));
+const AZURE_POLL_INTERVAL_MS = 1500;
 let lastAzureCallTime = 0;
+let azureLimitChain = Promise.resolve();
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 const PROCESSED_DIR = path.join(__dirname, 'processed_images');
 const LIVEVIEW_FRAMES_DIR = path.join(__dirname, 'liveview_frames');
@@ -696,6 +702,64 @@ function isClassMarkingText(text) {
     return false;
 }
 
+function reverseDigits(digits) {
+    return String(digits || '').split('').reverse().join('');
+}
+
+function acceptSailNumber(number) {
+    const value = String(number || '');
+    return isValidSailNumber(value) && !isClassMarkingText(value);
+}
+
+function acceptedDigitRuns(text, reverse) {
+    const runs = String(text || '').match(/\d(?:[ \t]*\d){1,7}/g) || [];
+    const numbers = [];
+    for (const run of runs) {
+        const digits = run.replace(/\s+/g, '');
+        const number = reverse ? reverseDigits(digits) : digits;
+        if (acceptSailNumber(number) && !numbers.includes(number)) numbers.push(number);
+    }
+    return numbers;
+}
+
+function markerSpans(text, pattern) {
+    const spans = [];
+    const re = new RegExp(pattern, 'gi');
+    let match;
+    while ((match = re.exec(text))) {
+        spans.push({
+            at: match.index + match[1].length,
+            end: match.index + match[0].length
+        });
+        if (match[0].length === 0) re.lastIndex += 1;
+    }
+    return spans;
+}
+
+// USA ahead of the digits is the country code on this boat. The other side of the
+// sail is the same text backwards, so OCR may read "ASU" and a reversed number.
+function countryCodeSailNumbers(lineTexts) {
+    const joined = (lineTexts || []).filter(Boolean).join('\n');
+    const found = [];
+    const add = (number) => {
+        if (number && !found.includes(number)) found.push(number);
+    };
+    const addNear = (spans, reverse, lookBefore) => {
+        for (const span of spans) {
+            const after = acceptedDigitRuns(joined.slice(span.end, span.end + 32), reverse)[0];
+            if (after) add(after);
+            if (lookBefore) {
+                const beforeRuns = acceptedDigitRuns(joined.slice(Math.max(0, span.at - 16), span.at), reverse);
+                const before = beforeRuns[beforeRuns.length - 1];
+                if (before) add(before);
+            }
+        }
+    };
+    addNear(markerSpans(joined, '(^|[^A-Z])(U\\s*\\.?\\s*S\\s*\\.?\\s*A\\.?)(?![A-Z])'), false, false);
+    addNear(markerSpans(joined, '(^|[^A-Z])(A\\s*\\.?\\s*S\\s*\\.?\\s*U\\.?)(?![A-Z])'), true, true);
+    return found;
+}
+
 // Add this helper function
 async function saveFile(buffer, filename, originalFilename) {
     console.log('Starting file save operations...');
@@ -1051,8 +1115,6 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
             let operationResult;
             let attempts = 0;
             const maxAttempts = 30;
-            const delayMs = 1000;
-
             do {
                 attempts++;
                 console.log(`Checking Azure results - Attempt ${attempts}...`);
@@ -1062,7 +1124,7 @@ app.post('/api/scan', upload.single('image'), async (req, res) => {
                 );
 
                 if (operationResult.status === 'running' || operationResult.status === 'notStarted') {
-                    await new Promise(resolve => setTimeout(resolve, delayMs));
+                    await new Promise(resolve => setTimeout(resolve, AZURE_POLL_INTERVAL_MS));
                 }
             } while ((operationResult.status === 'running' || operationResult.status === 'notStarted') && attempts < maxAttempts);
 
@@ -1689,6 +1751,21 @@ function extractSailNumbersFromDocumentIntelligence(analyzeResult) {
         const lines = page.lines || [];
         const digitLines = []; // digit-only fragments for merge pass
 
+        const countryNumbers = countryCodeSailNumbers(lines.map((line) => (line.content || line.text || '').trim()));
+        if (countryNumbers.length) {
+            for (const number of countryNumbers) {
+                const reversed = reverseDigits(number);
+                const line = lines.find((item) => {
+                    const compact = String(item.content || item.text || '').replace(/[^0-9]/g, '');
+                    return compact.includes(number) || compact.includes(reversed);
+                }) || lines[0];
+                const polygon = line.polygon || line.boundingPolygon || line.boundingBox;
+                const boundingBox = polygon ? polygonToBoundingBox(Array.isArray(polygon) ? polygon : [polygon]) : null;
+                candidates.push({ number, confidence: 0.99, boundingBox, preferred: true });
+            }
+            continue;
+        }
+
         for (const line of lines) {
             const raw = (line.content || line.text || '').trim();
             const normalized = raw.toLowerCase();
@@ -1796,10 +1873,29 @@ function areLinesNearby(line1, line2) {
 // Helper function to extract sail numbers from Azure results
 function extractSailNumbers(azureResults) {
     const numbers = [];
+    const preferred = [];
 
     if (azureResults && azureResults.readResults) {
         for (const page of azureResults.readResults) {
-            for (const line of page.lines) {
+            const lines = page.lines || [];
+            const countryNumbers = countryCodeSailNumbers(lines.map((line) => String(line.text || '').trim()));
+            if (countryNumbers.length) {
+                for (const number of countryNumbers) {
+                    const reversed = reverseDigits(number);
+                    const line = lines.find((item) => {
+                        const compact = String(item.text || '').replace(/[^0-9]/g, '');
+                        return compact.includes(number) || compact.includes(reversed);
+                    }) || lines[0];
+                    preferred.push({
+                        number,
+                        confidence: 0.99,
+                        boundingBox: line && line.boundingBox,
+                        preferred: true
+                    });
+                }
+                continue;
+            }
+            for (const line of lines) {
                 // Check if the text matches a sail number pattern (1-6 digits)
                 const text = line.text.trim();
                 if (isClassMarkingText(text)) continue;
@@ -1813,7 +1909,7 @@ function extractSailNumbers(azureResults) {
             }
         }
     }
-    return numbers;
+    return preferred.length ? preferred : numbers;
 }
 
 // Helper function to create a filename-safe string
@@ -1966,17 +2062,19 @@ app.get('/api/scans', async (req, res) => {
     }
 });
 
-// Helper function to wait for rate limit
-async function waitForRateLimit() {
-    const now = Date.now();
-    const timeSinceLastCall = now - lastAzureCallTime;
-
-    if (timeSinceLastCall < RATE_LIMIT_DELAY) {
-        const waitTime = RATE_LIMIT_DELAY - timeSinceLastCall;
-        console.log(`Rate limit cooling down. Waiting ${waitTime / 1000} seconds...`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-    }
-    lastAzureCallTime = Date.now();
+// Space Computer Vision calls so analyze and result polls stay inside the published limit.
+function waitForRateLimit() {
+    const run = azureLimitChain.then(async () => {
+        const elapsed = Date.now() - lastAzureCallTime;
+        if (lastAzureCallTime && elapsed < AZURE_MIN_INTERVAL_MS) {
+            const waitTime = AZURE_MIN_INTERVAL_MS - elapsed;
+            console.log(`Rate limit cooling down. Waiting ${(waitTime / 1000).toFixed(1)} seconds...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+        lastAzureCallTime = Date.now();
+    });
+    azureLimitChain = run.then(() => {}, () => {});
+    return run;
 }
 
 // Update your processImage function
@@ -2009,6 +2107,7 @@ async function processImage(file) {
                     attempts++;
                     console.log(`Checking Azure results - Attempt ${attempts}...`);
 
+                    await waitForRateLimit();
                     const getResults = await computerVisionClient.getReadResult(operationId);
 
                     if (getResults.status === 'succeeded') {
@@ -2019,8 +2118,8 @@ async function processImage(file) {
                     }
 
                     console.log(`Status: ${getResults.status}`);
-                    console.log('Waiting 1000ms before next check...');
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    console.log(`Waiting ${AZURE_POLL_INTERVAL_MS}ms before next check...`);
+                    await new Promise(resolve => setTimeout(resolve, AZURE_POLL_INTERVAL_MS));
                 }
                 throw new Error('Timeout waiting for Azure processing');
             },
@@ -2104,9 +2203,9 @@ async function processBatch(files) {
                 error: err.message
             });
 
-            // If it's a rate limit error, wait before continuing
+            // The shared Vision limiter already spaces the next file. A 429 still backs off once.
             if (err.message && err.message.includes('rate limit')) {
-                await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY));
+                await new Promise(resolve => setTimeout(resolve, BASE_RETRY_DELAY));
             }
         }
     }
@@ -4966,11 +5065,6 @@ async function processAnalysisJob(jobId) {
                 job.completedFiles++;
             }
 
-            // Rate limiting - wait 26 seconds between API calls (Azure free tier limit)
-            if (i < job.files.length - 1) {
-                console.log('Waiting 26 seconds before next analysis (rate limiting)...');
-                await new Promise(resolve => setTimeout(resolve, 26000));
-            }
         }
 
         job.status = 'completed';
@@ -5093,7 +5187,6 @@ async function analyzeImageWithAzure(imageBuffer) {
         let operationResult;
         let attempts = 0;
         const maxAttempts = 30;
-        const delayMs = 1000;
 
         do {
             attempts++;
@@ -5104,7 +5197,7 @@ async function analyzeImageWithAzure(imageBuffer) {
             );
 
             if (operationResult.status === 'running' || operationResult.status === 'notStarted') {
-                await new Promise(resolve => setTimeout(resolve, delayMs));
+                await new Promise(resolve => setTimeout(resolve, AZURE_POLL_INTERVAL_MS));
             }
         } while ((operationResult.status === 'running' || operationResult.status === 'notStarted') && attempts < maxAttempts);
 
@@ -6027,7 +6120,7 @@ if (puppeteer) {
     console.warn('⚠ Puppeteer is NOT loaded - Clubspot scraping will be disabled');
 }
 
-const CLASS_MARKING_RESCAN_JOB = 'rescan-ignore-15-last-3-days';
+const CLASS_MARKING_RESCAN_JOB = 'rescan-usa-sail-numbers-last-3-days';
 
 async function ensureOneTimeJobsTable() {
     await pool.query(`
@@ -6082,6 +6175,88 @@ async function rescanRecentPhotosIgnoringClassMarkings(days) {
         try {
             const { buffer, contentType } = await downloadS3ObjectToBuffer(`processed/${sample.filename}`);
             const detected = await analyzeImageWithAzure(buffer);
+            const preferredNumbers = [...new Set(
+                (detected || [])
+                    .filter((item) => item && item.preferred && acceptSailNumber(item.number))
+                    .map((item) => String(item.number))
+            )];
+            if (preferredNumbers.length) {
+                const have = group.map((row) => String(row.sail_number));
+                const alreadyExact = preferredNumbers.length === group.length
+                    && preferredNumbers.every((number) => have.includes(number));
+                if (!alreadyExact) {
+                    const originalFilename = sample.original_filename || originalNameFromProcessed(sample.filename);
+                    const keeper = group.find((row) => preferredNumbers.includes(String(row.sail_number)))
+                        || group.find((row) => isClassMarkingText(row.sail_number) || row.sail_number === 'NOSAIL')
+                        || group[0];
+                    const primary = preferredNumbers[0];
+                    const sailNumbersJson = JSON.stringify(
+                        (detected || []).filter((item) => item && preferredNumbers.includes(String(item.number)))
+                    );
+                    if (String(keeper.sail_number) !== primary) {
+                        const sailorInfo = await lookupSailorInDatabase(primary);
+                        const sailorName = sailorInfo ? sanitizeForFilename(sailorInfo.sailorName) : 'NONAME';
+                        const newFilename = `${primary}_${sailorName}_${originalFilename}`;
+                        await uploadToS3(buffer, `processed/${newFilename}`, contentType || 'image/jpeg');
+                        await pool.query(
+                            `
+                            UPDATE photo_metadata
+                            SET filename = $1,
+                                sail_number = $2,
+                                sail_numbers = $3,
+                                analysis_timestamp = NOW()
+                            WHERE id = $4
+                            `,
+                            [newFilename, primary, sailNumbersJson, keeper.id]
+                        );
+                        updated += 1;
+                    }
+                    const extraIds = group.filter((row) => row.id !== keeper.id).map((row) => row.id);
+                    if (extraIds.length) {
+                        await pool.query('DELETE FROM photo_metadata WHERE id = ANY($1::int[])', [extraIds]);
+                        removedClassMarks += extraIds.length;
+                    }
+                    for (const sailNumber of preferredNumbers.slice(1)) {
+                        const sailorInfo = await lookupSailorInDatabase(sailNumber);
+                        const sailorName = sailorInfo ? sanitizeForFilename(sailorInfo.sailorName) : 'NONAME';
+                        const newFilename = `${sailNumber}_${sailorName}_${originalFilename}`;
+                        await uploadToS3(buffer, `processed/${newFilename}`, contentType || 'image/jpeg');
+                        const baseChecksum = sample.file_checksum ? String(sample.file_checksum).split('::')[0] : '';
+                        const rowChecksum = baseChecksum ? `${baseChecksum}::${newFilename}` : null;
+                        await pool.query(
+                            `
+                            INSERT INTO photo_metadata (
+                                filename, sail_number, date, regatta_name,
+                                photographer_name, photographer_website,
+                                location, additional_tags, file_checksum, photo_timestamp,
+                                gps_latitude, gps_longitude, gps_altitude,
+                                device_fingerprint, device_type, user_agent,
+                                screen_resolution, timezone, upload_timestamp, original_filename
+                            ) VALUES (
+                                $1, $2, $3, $4,
+                                $5, $6,
+                                $7, $8, $9, $10,
+                                $11, $12, $13,
+                                $14, $15, $16,
+                                $17, $18, $19, $20
+                            )
+                            `,
+                            [
+                                newFilename, sailNumber, sample.date || null, sample.regatta_name || null,
+                                sample.photographer_name || null, sample.photographer_website || null,
+                                sample.location || null, [], rowChecksum, sample.photo_timestamp || null,
+                                sample.gps_latitude || null, sample.gps_longitude || null, sample.gps_altitude || null,
+                                sample.device_fingerprint || null, sample.device_type || null, sample.user_agent || null,
+                                sample.screen_resolution || null, sample.timezone || null,
+                                sample.upload_timestamp || new Date().toISOString(), originalFilename
+                            ]
+                        );
+                        added += 1;
+                    }
+                    console.log(`[photo-rescan] ${sample.filename}: USA sail ${preferredNumbers.join(', ')}`);
+                }
+                continue;
+            }
             const realNumbers = (detected || [])
                 .map((item) => item && String(item.number))
                 .filter((number) => number && !isClassMarkingText(number));
@@ -6211,7 +6386,7 @@ async function startRecentClassMarkingRescan() {
         console.log('[photo-rescan] resuming unfinished class-marking rescan');
     }
 
-    console.log('[photo-rescan] inspecting photos uploaded in the last 3 days, ignoring class marking 15');
+    console.log('[photo-rescan] inspecting photos uploaded in the last 3 days, using USA sail numbers and ignoring class marking 15');
     try {
         const result = await rescanRecentPhotosIgnoringClassMarkings(3);
         await pool.query(
