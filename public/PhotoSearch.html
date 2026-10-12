@@ -289,6 +289,7 @@
             margin-bottom: 4px;
             text-align: center;
             display: flex;
+            flex-wrap: wrap;
             gap: 12px;
             justify-content: flex-start;
             grid-column: 1 / -1;
@@ -1082,7 +1083,8 @@
                         <div class="search-buttons">
                             <button class="search-button" id="searchBtn"
                                 onclick="console.log('Search button onclick triggered'); searchPhotos();">Search</button>
-                            <button class="clear-button" onclick="clearSearch()">Clear</button>
+                            <button class="clear-button" type="button" onclick="shareCurrentSearch()">Share search</button>
+                            <button class="clear-button" type="button" onclick="clearSearch()">Clear</button>
                         </div>
                     </div>
                 </div>
@@ -1148,7 +1150,7 @@
 
     <div id="shareToast" class="share-toast" role="status">
         <span class="toast-check">✓</span>
-        Link copied
+        <span id="shareToastText">Link copied</span>
         <button type="button" aria-label="Dismiss" onclick="hideShareToast()">&times;</button>
     </div>
 
@@ -1186,6 +1188,32 @@
             if (event && event.target) {
                 event.target.classList.add('active');
             }
+        }
+
+        const SEARCH_URL_FIELDS = [
+            ['sailNumber', 'sail_number'],
+            ['date', 'date'],
+            ['regattaName', 'regatta_name'],
+            ['yachtClub', 'yacht_club'],
+            ['photographerName', 'photographer_name'],
+            ['location', 'location']
+        ];
+
+        function currentSearchParams() {
+            const params = new URLSearchParams();
+            SEARCH_URL_FIELDS.forEach(([id, key]) => {
+                const el = document.getElementById(id);
+                const value = el ? el.value.trim() : '';
+                if (value) params.set(key, value);
+            });
+            return params;
+        }
+
+        function syncSearchUrl() {
+            const query = currentSearchParams().toString();
+            const next = query ? `${location.pathname}?${query}` : location.pathname;
+            history.replaceState(null, '', next);
+            return location.origin + next;
         }
 
         function applySearchFromUrl() {
@@ -1342,14 +1370,8 @@
                     }, 300);
                 }
 
-                const params = new URLSearchParams({
-                    sail_number: document.getElementById('sailNumber').value,
-                    date: document.getElementById('date').value,
-                    regatta_name: document.getElementById('regattaName').value,
-                    yacht_club: document.getElementById('yachtClub').value,
-                    photographer_name: document.getElementById('photographerName').value,
-                    location: document.getElementById('location').value
-                });
+                const params = currentSearchParams();
+                syncSearchUrl();
 
                 try {
                     console.log('Fetching from:', `/api/search-photos?${params}`);
@@ -1590,8 +1612,10 @@
         }
 
         let shareToastTimer = null;
-        function showShareToast() {
+        function showShareToast(message) {
             const toast = document.getElementById('shareToast');
+            const text = document.getElementById('shareToastText');
+            if (text && message) text.textContent = message;
             if (!toast) return;
             toast.classList.add('show');
             clearTimeout(shareToastTimer);
@@ -1613,6 +1637,29 @@
 
             // Clear the results
             document.getElementById('results').innerHTML = '';
+            history.replaceState(null, '', location.pathname);
+        }
+
+        async function shareCurrentSearch() {
+            if (![...currentSearchParams().keys()].length) {
+                showShareToast('Add a date or filter first');
+                return;
+            }
+            const url = syncSearchUrl();
+            if (navigator.share && isLikelyMobile()) {
+                try {
+                    await navigator.share({ title: 'Sailing photo search', url });
+                    return;
+                } catch (err) {
+                    if (err.name === 'AbortError') return;
+                }
+            }
+            try {
+                await navigator.clipboard.writeText(url);
+                showShareToast('Search link copied');
+            } catch (err) {
+                alert('Search link:\n' + url);
+            }
         }
 
         // Close modal when clicking outside
@@ -1667,108 +1714,16 @@
         function isLikelyMobile() {
             return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         }
-        function isIOS() {
-            return /iP(hone|od|ad)/i.test(navigator.userAgent) ||
-                (navigator.userAgent.includes('Mac') && 'ontouchend' in document);
-        }
 
-        async function downloadCurrentPhoto() {
-            try {
-                if (!currentModalPhoto || !currentModalPhoto.url) {
-                    return;
-                }
-
-                const filename = currentModalPhoto.filename || 'photo.jpg';
-
-                // iOS-specific handling: try to save directly to Photos app
-                if (isIOS()) {
-                    try {
-                        // First, try to fetch the image as a blob
-                        const response = await fetch(currentModalPhoto.url, { mode: 'cors', credentials: 'omit' });
-                        if (!response.ok) throw new Error('Failed to fetch image');
-                        const blob = await response.blob();
-                        const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
-
-                        // Try Web Share API with file for direct save to Photos
-                        if (navigator.share && navigator.canShare) {
-                            try {
-                                await navigator.share({
-                                    files: [file],
-                                    title: `Sail ${getAllSailNumbers(currentModalPhoto).join(', ') || currentModalPhoto.sail_number || ''} - Sailing Photo`,
-                                    text: `Sailing photo from ${currentModalPhoto.location || 'regatta'}`
-                                });
-                                return;
-                            } catch (e) {
-                                console.log('Web Share with file failed, trying URL share');
-                            }
-                        }
-
-                        // Fallback: try sharing URL with instructions
-                        if (navigator.share) {
-                            try {
-                                await navigator.share({
-                                    title: 'Save Sailing Photo to Camera Roll',
-                                    text: `Tap and hold the image link to save to your camera roll: ${currentModalPhoto.url}`,
-                                    url: currentModalPhoto.url
-                                });
-                                return;
-                            } catch (e) {
-                                console.log('Web Share API failed');
-                            }
-                        }
-
-                        // Final fallback: open in new tab with instructions
-                        const newWindow = window.open(currentModalPhoto.url, '_blank');
-                        if (newWindow) {
-                            // Show a brief instruction
-                            setTimeout(() => {
-                                alert('To save to your camera roll:\n1. Tap and hold the image\n2. Select "Add to Photos" or "Save to Photos"');
-                            }, 500);
-                        }
-                        return;
-                    } catch (err) {
-                        console.error('iOS download error:', err);
-                        // Ultimate fallback
-                        window.open(currentModalPhoto.url, '_blank');
-                        setTimeout(() => {
-                            alert('To save to your camera roll:\n1. Tap and hold the image\n2. Select "Add to Photos"');
-                        }, 500);
-                        return;
-                    }
-                }
-
-                // Non-iOS: try fetching and downloading as file
-                const response = await fetch(currentModalPhoto.url, { mode: 'cors', credentials: 'omit' });
-                if (!response.ok) throw new Error('Failed to fetch image');
-                const blob = await response.blob();
-                const fileType = blob.type || 'image/jpeg';
-
-                // Prefer Web Share API with files on Android mobile to save to gallery
-                if (isLikelyMobile() && navigator.share && navigator.canShare) {
-                    const file = new File([blob], filename, { type: fileType });
-                    if (navigator.canShare({ files: [file] })) {
-                        try {
-                            await navigator.share({ files: [file], title: 'Sailing Photo' });
-                            return;
-                        } catch (e) {
-                            // fall through to local download
-                        }
-                    }
-                }
-
-                // Desktop and general fallback: trigger a local download
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            } catch (err) {
-                console.error('Download error:', err);
-                try { window.open(currentModalPhoto.url, '_blank'); } catch (e) { /* ignore */ }
-            }
+        function downloadCurrentPhoto() {
+            if (!currentModalPhoto || !currentModalPhoto.filename) return;
+            const filename = currentModalPhoto.filename;
+            const a = document.createElement('a');
+            a.href = '/api/photo-download?filename=' + encodeURIComponent(filename);
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
         }
 
         // Share photo link

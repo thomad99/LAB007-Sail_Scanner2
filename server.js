@@ -279,7 +279,7 @@ async function downloadS3ObjectToBuffer(key) {
 // Add these near the top of server.js
 const LOCAL_SAVE_PATH = process.env.LOCAL_SAVE_PATH || path.join(process.cwd(), 'local_saves');
 const SAVE_TO_SERVER = true; // Set to false if you don't want server copies
-const IGNORED_NUMBERS = ['420']; // Numbers to ignore (boat class markings)
+const IGNORED_NUMBERS = ['15', '420']; // Class markings, not sail numbers (Nacra 15, Club 420)
 const validSailNumbers = [13, 118, 9610, 5318, 8008]; // Valid sail numbers
 
 // Add these constants at the top of your file
@@ -683,7 +683,18 @@ const documentIntelligenceEndpoint = process.env.AZURE_DOCUMENT_INTELLIGENCE_END
 const documentIntelligenceKey = process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY || '';
 const DOC_INTEL_API_VERSION = '2024-11-30';
 // Standard text on sails to ignore when detecting sail number
-const SAIL_TEXT_TO_IGNORE = new Set(['c420', 'usa', 'nacra15', 'us']);
+const SAIL_TEXT_TO_IGNORE = new Set(['c420', 'usa', 'nacra15', 'nacra 15', 'us', '15']);
+
+function isClassMarkingText(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return false;
+    const compact = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (SAIL_TEXT_TO_IGNORE.has(raw.toLowerCase()) || SAIL_TEXT_TO_IGNORE.has(compact)) return true;
+    if (IGNORED_NUMBERS.includes(raw)) return true;
+    // "Nacra 15" painted on the hull or at the head of the sail is the boat class.
+    if (/nacra/.test(compact) && /15/.test(compact) && !/\d{3,}/.test(compact)) return true;
+    return false;
+}
 
 // Add this helper function
 async function saveFile(buffer, filename, originalFilename) {
@@ -1689,6 +1700,7 @@ function extractSailNumbersFromDocumentIntelligence(analyzeResult) {
 
             // Case 1: pure digit string (1–8 digits) — direct match
             if (/^\d{1,8}$/.test(raw)) {
+                if (isClassMarkingText(raw)) continue;
                 candidates.push({ number: raw, confidence: line.confidence ?? 0.9, boundingBox });
                 digitLines.push({ number: raw, confidence: line.confidence ?? 0.9, boundingBox });
                 continue;
@@ -1698,6 +1710,7 @@ function extractSailNumbersFromDocumentIntelligence(analyzeResult) {
             // e.g. Azure returns "1 2 3 4 5" for "12345" painted large on a sail
             const stripped = raw.replace(/\s+/g, '');
             if (/^\d{2,8}$/.test(stripped)) {
+                if (isClassMarkingText(raw) || isClassMarkingText(stripped)) continue;
                 candidates.push({ number: stripped, confidence: (line.confidence ?? 0.9) * 0.9, boundingBox });
                 digitLines.push({ number: stripped, confidence: (line.confidence ?? 0.9) * 0.9, boundingBox });
             }
@@ -1712,7 +1725,7 @@ function extractSailNumbersFromDocumentIntelligence(analyzeResult) {
                 const r1 = bbRect(digitLines[i].boundingBox), r2 = bbRect(digitLines[j].boundingBox);
                 const [first, second] = r1.minX <= r2.minX ? [digitLines[i], digitLines[j]] : [digitLines[j], digitLines[i]];
                 const merged = first.number + second.number;
-                if (/^\d{2,8}$/.test(merged) && isValidSailNumber(merged)) {
+                if (/^\d{2,8}$/.test(merged) && isValidSailNumber(merged) && !isClassMarkingText(merged)) {
                     candidates.push({
                         number: merged,
                         confidence: Math.min(first.confidence, second.confidence) * 0.95,
@@ -1789,7 +1802,8 @@ function extractSailNumbers(azureResults) {
             for (const line of page.lines) {
                 // Check if the text matches a sail number pattern (1-6 digits)
                 const text = line.text.trim();
-                if (/^\d{1,6}$/.test(text)) {
+                if (isClassMarkingText(text)) continue;
+                if (/^\d{1,6}$/.test(text) && !IGNORED_NUMBERS.includes(text)) {
                     numbers.push({
                         number: text,
                         confidence: line.words[0].confidence,
@@ -2201,6 +2215,32 @@ app.post('/api/numbers/clear', async (req, res) => {
             success: false,
             error: 'Failed to clear sail numbers from database'
         });
+    }
+});
+
+function safePhotoDownloadName(name) {
+    const base = String(name || '').replace(/\\/g, '/').split('/').pop().trim();
+    if (!base || base.length > 300 || base.includes('..') || /[\0\r\n"]/.test(base)) return null;
+    if (!/\.(jpe?g|png|gif|webp)$/i.test(base)) return null;
+    return base;
+}
+
+// Same-origin download so the browser saves the file instead of opening the image.
+app.get('/api/photo-download', async (req, res) => {
+    try {
+        const filename = safePhotoDownloadName(req.query.filename);
+        if (!filename) {
+            return res.status(400).json({ success: false, error: 'Invalid filename' });
+        }
+        const { buffer, contentType } = await downloadS3ObjectToBuffer(`processed/${filename}`);
+        const encoded = encodeURIComponent(filename);
+        res.setHeader('Content-Type', contentType || 'application/octet-stream');
+        res.setHeader('Content-Length', buffer.length);
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${encoded}`);
+        res.send(buffer);
+    } catch (err) {
+        console.error('Photo download error:', err);
+        res.status(404).json({ success: false, error: 'Photo not found' });
     }
 });
 
@@ -5987,6 +6027,204 @@ if (puppeteer) {
     console.warn('⚠ Puppeteer is NOT loaded - Clubspot scraping will be disabled');
 }
 
+const CLASS_MARKING_RESCAN_JOB = 'rescan-ignore-15-last-3-days';
+
+async function ensureOneTimeJobsTable() {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS one_time_jobs (
+            name TEXT PRIMARY KEY,
+            started_at TIMESTAMPTZ,
+            finished_at TIMESTAMPTZ,
+            result JSONB
+        )
+    `);
+}
+
+function originalNameFromProcessed(filename) {
+    const parts = String(filename || '').split('_');
+    if (parts.length >= 3) return parts.slice(2).join('_');
+    return filename;
+}
+
+async function rescanRecentPhotosIgnoringClassMarkings(days) {
+    const rows = await pool.query(
+        `
+        SELECT id, filename, sail_number, file_checksum,
+               date, regatta_name, photographer_name, photographer_website,
+               location, photo_timestamp, gps_latitude, gps_longitude, gps_altitude,
+               device_fingerprint, device_type, user_agent, screen_resolution, timezone,
+               upload_timestamp, original_filename
+        FROM photo_metadata
+        WHERE COALESCE(upload_timestamp, created_at) >= NOW() - ($1 * INTERVAL '1 day')
+        ORDER BY COALESCE(upload_timestamp, created_at) ASC, id ASC
+        `,
+        [days]
+    );
+
+    const groups = new Map();
+    for (const row of rows.rows) {
+        const checksum = row.file_checksum ? String(row.file_checksum).split('::')[0] : '';
+        const key = checksum || `file:${row.filename}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(row);
+    }
+
+    let analyzed = 0;
+    let updated = 0;
+    let added = 0;
+    let removedClassMarks = 0;
+    let failed = 0;
+
+    for (const group of groups.values()) {
+        const sample = group.find((row) => row.filename) || group[0];
+        if (!sample || !sample.filename) continue;
+        analyzed += 1;
+        try {
+            const { buffer, contentType } = await downloadS3ObjectToBuffer(`processed/${sample.filename}`);
+            const detected = await analyzeImageWithAzure(buffer);
+            const realNumbers = (detected || [])
+                .map((item) => item && String(item.number))
+                .filter((number) => number && !isClassMarkingText(number));
+            const uniqueReal = [...new Set(realNumbers)];
+            const existingReal = new Set(
+                group
+                    .map((row) => row.sail_number)
+                    .filter((number) => number && number !== 'NOSAIL' && !isClassMarkingText(number))
+                    .map(String)
+            );
+            const fresh = uniqueReal.filter((number) => !existingReal.has(number));
+            if (fresh.length === 0) continue;
+
+            const classRows = group.filter((row) => isClassMarkingText(row.sail_number) || row.sail_number === 'NOSAIL');
+            const originalFilename = sample.original_filename || originalNameFromProcessed(sample.filename);
+            let toInsert = fresh;
+
+            if (classRows.length > 0) {
+                const primary = fresh[0];
+                const sailorInfo = await lookupSailorInDatabase(primary);
+                const sailorName = sailorInfo ? sanitizeForFilename(sailorInfo.sailorName) : 'NONAME';
+                const newFilename = `${primary}_${sailorName}_${originalFilename}`;
+                await uploadToS3(buffer, `processed/${newFilename}`, contentType || 'image/jpeg');
+                await pool.query(
+                    `
+                    UPDATE photo_metadata
+                    SET filename = $1,
+                        sail_number = $2,
+                        sail_numbers = $3,
+                        analysis_timestamp = NOW()
+                    WHERE id = $4
+                    `,
+                    [newFilename, primary, JSON.stringify(detected.filter((item) => item && !isClassMarkingText(item.number))), classRows[0].id]
+                );
+                updated += 1;
+                toInsert = fresh.slice(1);
+                const extraClassIds = classRows.slice(1).map((row) => row.id);
+                if (extraClassIds.length) {
+                    await pool.query('DELETE FROM photo_metadata WHERE id = ANY($1::int[])', [extraClassIds]);
+                    removedClassMarks += extraClassIds.length;
+                }
+            }
+
+            for (const sailNumber of toInsert) {
+                const sailorInfo = await lookupSailorInDatabase(sailNumber);
+                const sailorName = sailorInfo ? sanitizeForFilename(sailorInfo.sailorName) : 'NONAME';
+                const newFilename = `${sailNumber}_${sailorName}_${originalFilename}`;
+                await uploadToS3(buffer, `processed/${newFilename}`, contentType || 'image/jpeg');
+                const baseChecksum = sample.file_checksum ? String(sample.file_checksum).split('::')[0] : '';
+                const rowChecksum = baseChecksum ? `${baseChecksum}::${newFilename}` : null;
+                await pool.query(
+                    `
+                    INSERT INTO photo_metadata (
+                        filename, sail_number, date, regatta_name,
+                        photographer_name, photographer_website,
+                        location, additional_tags, file_checksum, photo_timestamp,
+                        gps_latitude, gps_longitude, gps_altitude,
+                        device_fingerprint, device_type, user_agent,
+                        screen_resolution, timezone, upload_timestamp, original_filename
+                    ) VALUES (
+                        $1, $2, $3, $4,
+                        $5, $6,
+                        $7, $8, $9, $10,
+                        $11, $12, $13,
+                        $14, $15, $16,
+                        $17, $18, $19, $20
+                    )
+                    `,
+                    [
+                        newFilename,
+                        sailNumber,
+                        sample.date || null,
+                        sample.regatta_name || null,
+                        sample.photographer_name || null,
+                        sample.photographer_website || null,
+                        sample.location || null,
+                        [],
+                        rowChecksum,
+                        sample.photo_timestamp || null,
+                        sample.gps_latitude || null,
+                        sample.gps_longitude || null,
+                        sample.gps_altitude || null,
+                        sample.device_fingerprint || null,
+                        sample.device_type || null,
+                        sample.user_agent || null,
+                        sample.screen_resolution || null,
+                        sample.timezone || null,
+                        sample.upload_timestamp || new Date().toISOString(),
+                        originalFilename
+                    ]
+                );
+                added += 1;
+            }
+            console.log(`[photo-rescan] ${sample.filename}: found ${fresh.join(', ')}`);
+        } catch (err) {
+            failed += 1;
+            console.error(`[photo-rescan] ${sample.filename}:`, err.message);
+        }
+    }
+
+    return {
+        photos: groups.size,
+        analyzed,
+        updatedFromClassMarking: updated,
+        addedSailNumbers: added,
+        removedExtraClassMarks: removedClassMarks,
+        failed
+    };
+}
+
+async function startRecentClassMarkingRescan() {
+    await ensureOneTimeJobsTable();
+    const existing = await pool.query(
+        'SELECT finished_at FROM one_time_jobs WHERE name = $1',
+        [CLASS_MARKING_RESCAN_JOB]
+    );
+    if (existing.rows[0] && existing.rows[0].finished_at) {
+        console.log('[photo-rescan] class-marking rescan already completed');
+        return;
+    }
+    if (!existing.rows[0]) {
+        await pool.query(
+            'INSERT INTO one_time_jobs (name, started_at) VALUES ($1, NOW())',
+            [CLASS_MARKING_RESCAN_JOB]
+        );
+    } else {
+        console.log('[photo-rescan] resuming unfinished class-marking rescan');
+    }
+
+    console.log('[photo-rescan] inspecting photos uploaded in the last 3 days, ignoring class marking 15');
+    try {
+        const result = await rescanRecentPhotosIgnoringClassMarkings(3);
+        await pool.query(
+            'UPDATE one_time_jobs SET finished_at = NOW(), result = $2::jsonb WHERE name = $1',
+            [CLASS_MARKING_RESCAN_JOB, JSON.stringify(result)]
+        );
+        console.log('[photo-rescan] finished', result);
+    } catch (err) {
+        await pool.query('DELETE FROM one_time_jobs WHERE name = $1 AND finished_at IS NULL', [CLASS_MARKING_RESCAN_JOB]);
+        throw err;
+    }
+}
+
 // Initialize asynchronously in background (don't await)
 setTimeout(() => {
     initializeServer().catch(err => {
@@ -6031,6 +6269,9 @@ async function initializeServer() {
         await createPiTables();
         await testS3Connection();
         console.log('✓ Server initialization complete');
+        startRecentClassMarkingRescan().catch((err) => {
+            console.error('[photo-rescan] one-time class-marking rescan failed:', err.message);
+        });
     } catch (startupError) {
         console.error('Error during server initialization:', startupError);
         console.error('Stack:', startupError.stack);
