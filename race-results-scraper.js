@@ -7,6 +7,7 @@
  */
 
 const { parseChatIntent } = require('./chat-intent');
+const { chatSessionId, readChatQuota, consumeChatMessage } = require('./chat-rate-limit');
 const { PARSE_APP_ID, clubspotGet, clubspotConfigSummary } = require('./clubspot-http');
 const { parseRnListingRows, withRnShowDivisions } = require('./regatta-scrape-helpers');
 const {
@@ -1576,6 +1577,53 @@ function displayLocation(value) {
     return text || '—';
 }
 
+function rowsForLatestEvent(rows) {
+    if (!rows || !rows.length) return [];
+    let bestDate = '';
+    for (const row of rows) {
+        const d = row.regatta_date ? String(row.regatta_date).slice(0, 10) : '';
+        if (d > bestDate) bestDate = d;
+    }
+    const dated = bestDate
+        ? rows.filter((r) => String(r.regatta_date || '').slice(0, 10) === bestDate)
+        : rows.slice();
+    const name = dated[0] && dated[0].regatta_name ? String(dated[0].regatta_name) : '';
+    if (!name) return dated;
+    const same = dated.filter((r) => String(r.regatta_name || '') === name);
+    return same.length ? same : dated;
+}
+
+function ordinalPlace(value) {
+    const num = parseInt(String(value == null ? '' : value).replace(/[^\d]/g, ''), 10);
+    if (!Number.isFinite(num) || num <= 0) return null;
+    const mod100 = num % 100;
+    if (mod100 >= 11 && mod100 <= 13) return `${num}th`;
+    switch (num % 10) {
+        case 1: return `${num}st`;
+        case 2: return `${num}nd`;
+        case 3: return `${num}rd`;
+        default: return `${num}th`;
+    }
+}
+
+function latestRegattaReply(sailorName, rows) {
+    const eventRows = rowsForLatestEvent(rows);
+    const event = eventRows[0];
+    if (!event) return `Results for **${sailorName}**.`;
+    const date = formatChatDate(event.regatta_date);
+    const eventName = event.regatta_name || 'a regatta';
+    const finishes = eventRows.map((r) => {
+        const place = ordinalPlace(r.position);
+        const cat = r.category ? String(r.category).trim() : '';
+        if (place && cat) return `**${place}** in ${cat}`;
+        if (place) return `**${place}**`;
+        return null;
+    }).filter(Boolean);
+    const finishBit = finishes.length ? `, finishing ${finishes.join(' and ')}` : '';
+    const dateBit = date && date !== '—' ? ` on ${date}` : '';
+    return `**${sailorName}**'s last regatta was **${eventName}**${dateBit}${finishBit}.`;
+}
+
 function formatChatDate(isoOrText) {
     if (!isoOrText) return '—';
     const s = String(isoOrText).slice(0, 10);
@@ -2234,18 +2282,45 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
         }
     });
 
+    app.get('/api/race-results/chat/quota', async (req, res) => {
+        try {
+            const sessionId = chatSessionId(req, res);
+            const quota = await readChatQuota(pool, sessionId);
+            res.json({ success: true, ...quota });
+        } catch (e) {
+            console.error('race-results chat quota error:', e);
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
     app.post('/api/race-results/chat', async (req, res) => {
         try {
             const message = req.body && req.body.message;
             if (!message || !String(message).trim()) {
                 return res.status(400).json({ success: false, error: 'Message required' });
             }
+            const sessionId = chatSessionId(req, res);
+            const quota = await consumeChatMessage(pool, sessionId);
+            if (!quota.allowed) {
+                return res.status(429).json({
+                    success: false,
+                    rateLimited: true,
+                    error: 'You have used today\'s 10 chats. The limit resets tomorrow.',
+                    limit: quota.limit,
+                    remaining: 0
+                });
+            }
             await ensureScrapedResultsTable(pool);
 
             const parsed = await parseChatIntent(message, openai);
             let intent = (parsed.intent || '').toLowerCase();
             const parser = parsed.parser || 'rules';
-            const ok = (body) => res.json({ parser, ...body });
+            const ok = (body) => res.json({
+                parser,
+                ...body,
+                limit: quota.limit,
+                remaining: quota.remaining
+            });
             const criteria = {
                 skipper: parsed.skipper,
                 boat_name: parsed.boat_name,
@@ -2256,7 +2331,8 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 category: parsed.category,
                 limit: parsed.limit,
                 year: parsed.year,
-                source: parsed.source
+                source: parsed.source,
+                latest: parsed.latest === true
             };
             const clubAliasHit = findClubGroupInText(message)
                 || findClubGroup(criteria.yacht_club)
@@ -2477,7 +2553,7 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                     // try significant tokens (drop tiny filler words)
                     const tokens = needle.split(/\s+/).filter(t =>
                         t.length > 2
-                        && !/^(the|and|for|from|with|who|what|when|where|show|find|get|top|best|sail|sailor|sailors|person|boat|club|race|regatta|place|date|number|named|called|results?)$/i.test(t)
+                        && !/^(the|and|for|from|with|who|what|when|where|how|did|does|show|tell|about|find|get|top|best|sail|sailor|sailors|person|boat|club|race|regatta|regattas|place|date|number|named|called|results?|last|latest|recent|newest|his|her|their|please)$/i.test(t)
                     );
                     if (tokens.length) {
                         const ors = [];
@@ -2536,17 +2612,25 @@ function attachRaceResultsScraper(app, { pool, openai, axios, cheerio }) {
                 }
                 if (card && card.resultType === 'sailor_card') {
                     const sailorName = card.sailor && card.sailor.name ? card.sailor.name : 'that sailor';
+                    const headline = criteria.latest ? latestRegattaReply(sailorName, result.rows) : null;
                     return ok({
                         success: true,
-                        reply: `Results for **${sailorName}**.`,
-                        data: card
+                        reply: headline || `Results for **${sailorName}**.`,
+                        data: headline ? { ...card, headline } : card
                     });
                 }
             }
 
+            if (criteria.latest && result.rows.length) {
+                result.rows = rowsForLatestEvent(result.rows);
+            }
+
             if (intent === 'regatta_search') {
                 const winners = result.rows.filter(r => String(r.position) === '1');
-                reply = `Found **${result.rows.length}** result rows for that regatta. ${winners.length ? 'First-place boats are included where position = 1.' : ''}`;
+                const event = result.rows[0];
+                reply = criteria.latest && event
+                    ? `The latest **${event.regatta_name || 'regatta'}** was ${formatChatDate(event.regatta_date)} (${result.rows.length} result row${result.rows.length === 1 ? '' : 's'}).`
+                    : `Found **${result.rows.length}** result rows for that regatta. ${winners.length ? 'First-place boats are included where position = 1.' : ''}`;
             } else if (intent === 'sail_search') {
                 reply = `Found **${result.rows.length}** row(s) for that sail number.`;
             } else if (criteria.position) {

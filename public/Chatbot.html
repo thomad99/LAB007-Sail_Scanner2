@@ -224,6 +224,19 @@
             border-bottom-left-radius: 6px;
         }
 
+        .msg.bot.thinking {
+            color: #7b8798;
+            font-weight: 700;
+            letter-spacing: 0.22em;
+            min-width: 4.2em;
+            animation: thinkingPulse 1.1s ease-in-out infinite;
+        }
+
+        @keyframes thinkingPulse {
+            0%, 100% { opacity: 0.35; }
+            50% { opacity: 1; }
+        }
+
         .msg.user {
             background: #2f6bff;
             color: #fff;
@@ -1163,6 +1176,8 @@
         const input = document.getElementById('input');
         const sendBtn = document.getElementById('sendBtn');
         const status = document.getElementById('status');
+        let quotaLocked = false;
+        let quotaNote = '';
 
         function welcomeHtml() {
             return '<div class="msg bot" id="welcome">' +
@@ -1174,9 +1189,14 @@
 
         function resetChat() {
             chatPane.innerHTML = welcomeHtml();
-            status.textContent = '';
-            status.className = 'status';
             input.value = '';
+            if (quotaLocked) {
+                status.textContent = quotaNote;
+                status.className = 'status err';
+                return;
+            }
+            status.textContent = quotaNote;
+            status.className = 'status';
             input.focus();
         }
 
@@ -1217,6 +1237,52 @@
         }
 
         loadHeaderStats();
+
+        function paintQuota(remaining) {
+            if (typeof remaining !== 'number') return;
+            if (remaining <= 0) {
+                quotaLocked = true;
+                quotaNote = '10 chats used today. Resets tomorrow.';
+                input.disabled = true;
+                sendBtn.disabled = true;
+                input.placeholder = 'Daily chat limit reached';
+                status.textContent = quotaNote;
+                status.className = 'status err';
+                return;
+            }
+            quotaNote = remaining + (remaining === 1 ? ' chat left today' : ' chats left today');
+            status.textContent = quotaNote;
+            status.className = 'status';
+        }
+
+        async function loadQuota() {
+            try {
+                const res = await fetch('/api/race-results/chat/quota', { credentials: 'same-origin' });
+                const data = await res.json();
+                if (data && data.success) paintQuota(data.remaining);
+            } catch (_err) {
+                /* chat still works; the send path enforces the cap */
+            }
+        }
+
+        loadQuota();
+
+        function showThinking() {
+            hideThinking();
+            const div = document.createElement('div');
+            div.className = 'msg bot thinking';
+            div.id = 'thinkingMsg';
+            div.setAttribute('aria-live', 'polite');
+            div.setAttribute('aria-label', 'Thinking');
+            div.textContent = '.....';
+            chatPane.appendChild(div);
+            scrollChatToMessageTop(div);
+        }
+
+        function hideThinking() {
+            const el = document.getElementById('thinkingMsg');
+            if (el) el.remove();
+        }
 
         function addMsg(content, isUser) {
             const div = document.createElement('div');
@@ -1908,14 +1974,15 @@
                 data.resultType === 'rows' ||
                 (data.resultType === 'regatta_summary' && (data.dates?.length || data.sailorCount != null || (data.byClass && data.byClass.length)))
             );
-            const skipReply = data && (data.resultType === 'sailor_card' || data.resultType === 'sailors_list');
-            if (data && (skipReply || data.resultType === 'sailors_list' || isSailorNameList(data))) {
+            const headline = data && data.headline;
+            const skipReply = data && (data.resultType === 'sailor_card' || data.resultType === 'sailors_list') && !headline;
+            if (data && (data.resultType === 'sailor_card' || data.resultType === 'sailors_list' || isSailorNameList(data))) {
                 div.classList.add('wide');
             }
-            if (!skipReply && reply) {
+            if (headline || (!skipReply && reply)) {
                 const md = document.createElement('div');
                 md.className = 'markdown';
-                md.innerHTML = simpleMarkdown(reply);
+                md.innerHTML = simpleMarkdown(headline || reply);
                 div.appendChild(md);
             }
             if (showCard) {
@@ -1940,18 +2007,26 @@
 
         async function sendMessage(text) {
             const q = String(text || '').trim();
-            if (!q || sendBtn.disabled) return;
+            if (!q || sendBtn.disabled || quotaLocked) return;
             addMsg(q, true);
             sendBtn.disabled = true;
             status.textContent = '';
             status.className = 'status';
+            showThinking();
             try {
                 const res = await fetch('/api/race-results/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
                     body: JSON.stringify({ message: q })
                 });
                 const j = await res.json();
+                hideThinking();
+                if (res.status === 429 || j.rateLimited) {
+                    paintQuota(0);
+                    addBotMsg(j.error || "You have used today's 10 chats. The limit resets tomorrow.");
+                    return;
+                }
                 if (!j.success) {
                     status.textContent = j.error || 'Request failed';
                     status.className = 'status err';
@@ -1959,12 +2034,15 @@
                     return;
                 }
                 addBotMsg(j.reply || "I didn't find anything.", j.data);
+                paintQuota(j.remaining);
             } catch (e) {
+                hideThinking();
                 status.textContent = e.message || 'Network error';
                 status.className = 'status err';
                 addBotMsg("Sorry, something went wrong. Please try again.");
             } finally {
-                sendBtn.disabled = false;
+                hideThinking();
+                if (!quotaLocked) sendBtn.disabled = false;
             }
         }
 

@@ -33,10 +33,13 @@ Vocabulary:
 - "sailors at/for [club]", "club SYS sailors", "SYS sailors", or a club with no sailor/regatta → club_sailors (unique skipper names)
 - "best/top sailor(s)" → top_sailors; "best/top club(s)" → top_clubs
 - "top 10 sailors" / "top 5 sailors in C420" → top_sailors with limit and optional category (boat class)
+- Conversational questions are still searches. "how did Dominic Thomas do", "tell me about Jane Smith", "where did X finish" → sailor_search with skipper set to the person
+- "Dominic Thomas last regatta", "what was X's most recent race", "last regatta for X", "latest result for X" → sailor_search, skipper=X, latest=true. Never put "last"/"latest"/"recent" into regatta_name or the person's name
+- "latest Optimist Nationals" / "who won the last Harvest Moon" → regatta_search for that event name, latest=true
 
 Return JSON only:
-{"intent":"sailor_search|boat_search|club_search|regatta_search|sail_search|club_sailors|top_sailors|top_clubs|clubs_in_region|data_summary|sample","skipper":null,"boat_name":null,"yacht_club":null,"regatta_name":null,"sail_number":null,"position":null,"category":null,"limit":null,"year":null,"region":null,"source":null}
-source is clubspot, regattanetwork, or null. limit is an integer when the user asks for top N. category is a boat class like C420, Laser, Sunfish. Unused fields null.`;
+{"intent":"sailor_search|boat_search|club_search|regatta_search|sail_search|club_sailors|top_sailors|top_clubs|clubs_in_region|data_summary|sample","skipper":null,"boat_name":null,"yacht_club":null,"regatta_name":null,"sail_number":null,"position":null,"category":null,"limit":null,"year":null,"region":null,"source":null,"latest":false}
+source is clubspot, regattanetwork, or null. limit is an integer when the user asks for top N. category is a boat class like C420, Laser, Sunfish. latest is true only when they want the most recent event. Unused fields null.`;
 
 const FILLER_RE = /\b(the|a|an|show|me|for|please|what|are|is|was|were|find|get|list|about|of|from|to|in|on|at|named|called|number|#|results?|info|information|lookup|search)\b/gi;
 
@@ -53,7 +56,8 @@ function blankCriteria(year, source) {
         limit: null,
         year: year || null,
         region: null,
-        source: source || null
+        source: source || null,
+        latest: false
     };
 }
 
@@ -142,6 +146,76 @@ function parseClubSailorsClub(q) {
     return null;
 }
 
+function looksLikePersonName(s) {
+    const words = String(s || '').split(/\s+/).filter(Boolean);
+    if (!words.length || words.length > 4) return false;
+    if (/\b(day|series|cup|championship|championships|regatta|race|open|classic|memorial|invite|invitational|nationals?|worlds?|midwinters?|labour|labor|fleet|class)\b/i.test(s)) {
+        return false;
+    }
+    return words.every((w) => /^[A-Za-z][A-Za-z.'-]*$/.test(w))
+        && !/^(who|what|when|where|how|show|list|top|find|get|the|a|an|sailor|person|boat|club|race|regatta|place|date|sail|best|last|latest|recent)$/i.test(words[0]);
+}
+
+/** "last year" is a time range. "last regatta" / "latest race" asks for the newest event. */
+function hasRecencyAsk(text) {
+    const s = String(text || '');
+    if (/\b(?:latest|newest|most\s+recent)\b/i.test(s)) return true;
+    if (/\brecent\b/i.test(s)) return true;
+    if (/\blast\s+(?:regatta|race|event|series|result|results|finish|outing)\b/i.test(s)) return true;
+    if (/\blast\b/i.test(s) && !/\blast\s+(?:year|week|month|season|place|night|time|one)\b/i.test(s)) return true;
+    return false;
+}
+
+function stripConversational(s) {
+    return cleanValue(String(s || '')
+        .replace(/['’]s\b/g, ' ')
+        .replace(/\b(?:what|when|where|who|how|which|did|does|do|was|were|is|are|show|tell|me|about|please|his|her|their|the|a|an|of|for|by|from|at|in|on|my)\b/gi, ' ')
+        .replace(/\b(?:last|latest|newest|most\s+recent|recent)\b/gi, ' ')
+        .replace(/\b(?:regattas?|races?|events?|series|results?|finish(?:ed)?|outings?|sailed|raced)\b/gi, ' ')
+        .replace(/\b(20\d{2})\b/g, ' '));
+}
+
+function namePrecedesRecency(q, name) {
+    const idxName = String(q).toLowerCase().indexOf(String(name).toLowerCase());
+    const idxRec = String(q).search(/\b(?:last|latest|newest|most\s+recent|recent)\b/i);
+    return idxName >= 0 && idxRec >= 0 && idxName < idxRec;
+}
+
+/**
+ * "dominic thomas last regatta" is a sailor's newest event, not a regatta titled "dominic thomas last".
+ * Returns a criteria object, or null when this isn't a recency question.
+ */
+function parseRecencyQuery(q, base) {
+    if (!hasRecencyAsk(q)) return null;
+    const forName = q.match(/\b(?:last|latest|most\s+recent|recent|newest)\s+(?:regatta|race|event|series|result|results|finish|outing)?\s*(?:for|of|by|from)\s+(.+)/i);
+    if (forName) {
+        const subject = cleanValue(String(forName[1]).replace(/['’]s\b/g, ' ').replace(/\b(?:regattas?|races?|events?|series|results?)\b/ig, ' '));
+        if (looksLikePersonName(subject)) {
+            return { ...base, intent: 'sailor_search', skipper: subject, latest: true, confidence: 'high' };
+        }
+        if (subject && subject.length > 1) {
+            return { ...base, intent: 'regatta_search', regatta_name: subject, latest: true, confidence: 'high' };
+        }
+    }
+
+    const before = q.match(/^(.+?)\s+(?:['’]s\s+)?(?:last|latest|newest|most\s+recent|(?<!most\s)recent)\b/i);
+    if (before) {
+        const subject = stripConversational(before[1]);
+        if (looksLikePersonName(subject)) {
+            return { ...base, intent: 'sailor_search', skipper: subject, latest: true, confidence: 'high' };
+        }
+    }
+
+    const subject = stripConversational(q);
+    if (subject && subject.length > 1 && !looksLikePersonName(subject)) {
+        return { ...base, intent: 'regatta_search', regatta_name: subject, latest: true, confidence: 'high' };
+    }
+    if (subject && looksLikePersonName(subject) && namePrecedesRecency(q, subject)) {
+        return { ...base, intent: 'sailor_search', skipper: subject, latest: true, confidence: 'high' };
+    }
+    return null;
+}
+
 function extractClassCategory(text) {
     const m = String(text).match(/\b(?:in|for|class|fleet)\s+([A-Za-z0-9][A-Za-z0-9+\/\- ]{0,30})$/i)
         || String(text).match(/\b(?:in|for)\s+(?:the\s+)?([A-Za-z0-9][A-Za-z0-9+\/\-]{1,20})\s+class\b/i);
@@ -207,14 +281,29 @@ function parseIntentRules(message) {
 
     const won = q.match(/\b(?:who won|winner(?:s)? of|results? for|standings? for|places? (?:at|for))\s+(.+)/i);
     if (won) {
-        const name = cleanValue(won[1].replace(/\b(?:regatta|race|event|series)\b/ig, ' '));
+        const latest = hasRecencyAsk(q);
+        const name = cleanValue(won[1]
+            .replace(/\b(?:last|latest|newest|most\s+recent|recent)\b/ig, ' ')
+            .replace(/\b(?:regatta|race|event|series)\b/ig, ' '));
         return {
             ...base,
             intent: 'regatta_search',
             regatta_name: name || cleanValue(won[1]),
             position: base.position || (/who won|winner/i.test(q) ? '1' : null),
+            latest,
             confidence: 'high'
         };
+    }
+
+    const recency = parseRecencyQuery(q, base);
+    if (recency) return recency;
+
+    const howDid = q.match(/\bhow\s+(?:did|does|has)\s+(.+?)\s+(?:do|did|finish|finished|sail|sailed|race|raced|place|placed)\b/i);
+    if (howDid) {
+        const person = stripConversational(howDid[1]);
+        if (looksLikePersonName(person)) {
+            return { ...base, intent: 'sailor_search', skipper: person, latest: hasRecencyAsk(q), confidence: 'high' };
+        }
     }
 
     // "first place at Sunfish" / "place 1 Harvest Day"
@@ -265,16 +354,27 @@ function parseIntentRules(message) {
 
     const eventLabeled = labeledCapture(q, ['regatta', 'race', 'event', 'series']);
     if (eventLabeled) {
-        return { ...base, intent: 'regatta_search', regatta_name: cleanValue(eventLabeled), confidence: 'high' };
+        const name = cleanValue(String(eventLabeled).replace(/\b(?:last|latest|newest|most\s+recent|recent)\b/ig, ' '));
+        return {
+            ...base,
+            intent: 'regatta_search',
+            regatta_name: name || cleanValue(eventLabeled),
+            latest: hasRecencyAsk(q),
+            confidence: 'high'
+        };
     }
 
     if (/\b(?:regatta|race|event|series)\b/i.test(q)) {
         const name = cleanValue(
             q.replace(/\b(?:regatta|race|event|series|who|won|winner|winners|standings?|results?|places?|positions?)\b/ig, ' ')
+                .replace(/\b(?:last|latest|newest|most\s+recent|recent)\b/ig, ' ')
                 .replace(/\b(20\d{2})\b/g, ' ')
         );
+        if (looksLikePersonName(name) && namePrecedesRecency(q, name)) {
+            return { ...base, intent: 'sailor_search', skipper: name, latest: true, confidence: 'high' };
+        }
         if (name.length > 1) {
-            return { ...base, intent: 'regatta_search', regatta_name: name, confidence: 'high' };
+            return { ...base, intent: 'regatta_search', regatta_name: name, latest: hasRecencyAsk(q), confidence: 'high' };
         }
     }
 
@@ -319,6 +419,18 @@ function parseIntentRules(message) {
         }
     }
 
+    const conversationalName = stripConversational(q);
+    const nameWords = conversationalName.split(/\s+/).filter(Boolean);
+    if (looksLikePersonName(conversationalName) && nameWords.length >= 2) {
+        return {
+            ...base,
+            intent: 'sailor_search',
+            skipper: conversationalName,
+            latest: hasRecencyAsk(q),
+            confidence: 'low'
+        };
+    }
+
     return { ...base, intent: 'sailor_search', skipper: q, confidence: 'low' };
 }
 
@@ -361,6 +473,9 @@ function normalizeParsed(parsed, fallbackMessage) {
         year: Number.isFinite(yearRaw) ? yearRaw : null,
         region: parsed.region || null,
         source: parsed.source || rules.source || null,
+        latest: parsed.latest === true || parsed.latest === 'true'
+            ? true
+            : (parsed.latest === false || parsed.latest === 'false' ? false : rules.latest === true),
         confidence: 'high',
         parser: 'openai'
     };

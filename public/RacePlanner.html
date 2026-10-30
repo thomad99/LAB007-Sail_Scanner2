@@ -49,8 +49,9 @@
         }
         .landing h1 { margin: 0 0 8px; font-size: clamp(1.7rem, 6vw, 2.4rem); letter-spacing: -0.04em; text-align: center; }
         .landing p.lead { margin: 0 0 22px; color: var(--muted); text-align: center; max-width: 420px; }
-        .role-cards { display: grid; gap: 14px; width: min(640px, 100%); grid-template-columns: 1fr; }
+        .role-cards { display: grid; gap: 14px; width: min(980px, 100%); grid-template-columns: 1fr; }
         @media (min-width: 700px) { .role-cards { grid-template-columns: 1fr 1fr; } }
+        @media (min-width: 980px) { .role-cards { grid-template-columns: 1fr 1fr 1fr; } }
         .role-card {
             background: #fff; border-radius: 20px; padding: 22px; text-align: center;
             border: 1px solid #d7e3f0; box-shadow: 0 16px 40px rgba(15,40,80,.08);
@@ -156,6 +157,17 @@
             max-height: 38vh; overflow: auto;
         }
         body.role-committee .toolbar { max-height: none; overflow: visible; padding: 8px; }
+        body.role-testing .toolbar { max-height: none; overflow: visible; }
+        body.role-testing .water-chip,
+        body.role-testing .status-ring,
+        body.role-testing .configured-banner,
+        body.role-testing .drag-readout,
+        body.role-testing .degree-canvas { display: none !important; }
+        .test-measure {
+            background: #04102b; color: #fff; border-radius: 12px; padding: 10px 12px;
+        }
+        .test-measure strong { display: block; font-size: 1.05rem; }
+        .test-measure span { display: block; margin-top: 2px; font-size: 0.92rem; }
         .toolbar h3 { margin: 0; font-size: 0.9rem; }
         .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
         .chip {
@@ -243,6 +255,14 @@
                     <button class="btn primary" id="joinBtn">Join course</button>
                 </div>
             </div>
+            <div class="role-card">
+                <div class="role-icon">📍</div>
+                <h2>Testing</h2>
+                <p>Drop your GPS position on the map, remove marks, and check the distance and angle between two of them.</p>
+                <div class="join-box">
+                    <button class="btn primary" id="testBtn">Open testing map</button>
+                </div>
+            </div>
         </div>
         <p class="err" id="landingErr"></p>
     </section>
@@ -311,6 +331,9 @@
         let lastPush = 0;
         let orientOn = false;
         let fromAdmin = false;
+        let testMarks = [];
+        let testSelected = [];
+        let testSeq = 1;
 
         function $(id) { return document.getElementById(id); }
         function cookieSecure() { return location.protocol === 'https:' ? '; Secure' : ''; }
@@ -452,6 +475,7 @@
             $('mapScreen').classList.add('active');
             document.body.classList.toggle('role-committee', role === 'committee');
             document.body.classList.toggle('role-pmo', role === 'pmo');
+            document.body.classList.toggle('role-testing', role === 'testing');
             if (!map) {
                 map = L.map('map', { zoomControl: true, attributionControl: true });
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -572,6 +596,7 @@
             } else {
                 youMarker.setLatLng([myPos.lat, myPos.lng]);
             }
+            if (role === 'testing') youMarker.setZIndexOffset(40);
             const acc = Number(myPos.accuracy);
             if (Number.isFinite(acc) && acc > 0 && acc < 80) {
                 if (!youCircle) {
@@ -602,6 +627,15 @@
             } else {
                 card.classList.remove('show');
             }
+            const testGps = $('testGps');
+            if (testGps) {
+                const acc = myPos && Number(myPos.accuracy);
+                testGps.textContent = Number.isFinite(acc)
+                    ? ('GPS ± ' + Math.round(metersToFeet(acc)) + ' ft')
+                    : 'Waiting for GPS…';
+            }
+            const testMarkBtn = $('testMarkBtn');
+            if (testMarkBtn) testMarkBtn.disabled = !myPos;
             const drop = $('dropBtn');
             if (drop) {
                 drop.disabled = !(role === 'committee' && myPos && mark && !mark.dropped);
@@ -970,8 +1004,182 @@
             }
         }
 
+        function testPair() {
+            const byId = new Map(testMarks.map((m) => [m.id, m]));
+            return testSelected.map((id) => byId.get(id)).filter(Boolean);
+        }
+
+        function renderTestToolbar() {
+            const box = $('toolbar');
+            const pair = testPair();
+            const selected = pair.length;
+            let measure = '';
+            if (pair.length === 2) {
+                const dist = haversine(pair[0].lat, pair[0].lng, pair[1].lat, pair[1].lng);
+                const ang = bearing(pair[0].lat, pair[0].lng, pair[1].lat, pair[1].lng);
+                measure = '<div class="test-measure"><strong>' + pair[0].n + ' → ' + pair[1].n +
+                    ' · ' + fmtDist(dist) + '</strong><span>Angle ' + fmtBrg(ang) + '</span></div>';
+            }
+            const acc = myPos && Number(myPos.accuracy);
+            const gpsLine = Number.isFinite(acc)
+                ? ('GPS ± ' + Math.round(metersToFeet(acc)) + ' ft')
+                : 'Waiting for GPS…';
+            box.innerHTML =
+                '<div class="row">' +
+                '<button class="btn warn" id="testMarkBtn"' + (myPos ? '' : ' disabled') + '>Mark</button>' +
+                '<button class="btn ghost" id="testDeleteBtn"' + (selected ? '' : ' disabled') + '>Delete' +
+                (selected ? ' (' + selected + ')' : '') + '</button>' +
+                '<button class="btn ghost" id="testBackBtn">Back</button>' +
+                '</div>' +
+                measure +
+                '<p class="hint" id="testGps">' + gpsLine + '</p>' +
+                '<p class="hint">Mark drops your current GPS fix. Tap a mark to select it. Tap two to see distance and angle. Delete removes the selected marks.</p>';
+            $('testMarkBtn').onclick = dropTestMark;
+            $('testDeleteBtn').onclick = deleteSelectedTestMarks;
+            $('testBackBtn').onclick = exitTesting;
+            $('topMeta').textContent = 'Testing';
+            const back = $('adminBack');
+            if (back) back.hidden = true;
+        }
+
+        function renderTestMarks() {
+            if (!map || !layers.marks || !layers.lines || !layers.drops) return;
+            layers.marks.clearLayers();
+            layers.lines.clearLayers();
+            layers.drops.clearLayers();
+            const selected = new Set(testSelected);
+            testMarks.forEach((m) => {
+                const acc = Number(m.accuracy);
+                if (Number.isFinite(acc) && acc > 0) {
+                    const color = acc <= 5 ? '#16a34a' : (acc <= 15 ? '#ca8a04' : '#dc2626');
+                    L.circle([m.lat, m.lng], {
+                        radius: acc,
+                        color: color,
+                        weight: 1,
+                        fillColor: color,
+                        fillOpacity: 0.12,
+                        interactive: false
+                    }).addTo(layers.drops);
+                }
+                const on = selected.has(m.id);
+                const marker = L.marker([m.lat, m.lng], {
+                    icon: icon(on ? '#1d4ed8' : '#dc2626', String(m.n)),
+                    zIndexOffset: on ? 900 : 700
+                });
+                const accFt = Number.isFinite(acc) ? (' · ±' + Math.round(metersToFeet(acc)) + ' ft') : '';
+                marker.bindTooltip(String(m.n) + accFt, {
+                    permanent: true,
+                    direction: 'top',
+                    offset: [0, -12],
+                    className: 'mark-label'
+                });
+                marker.on('click', (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    toggleTestSelect(m.id);
+                });
+                marker.addTo(layers.marks);
+            });
+            const pair = testPair();
+            if (pair.length === 2) {
+                const dist = haversine(pair[0].lat, pair[0].lng, pair[1].lat, pair[1].lng);
+                const ang = bearing(pair[0].lat, pair[0].lng, pair[1].lat, pair[1].lng);
+                L.polyline([[pair[0].lat, pair[0].lng], [pair[1].lat, pair[1].lng]], {
+                    color: '#1d4ed8', weight: 3
+                }).addTo(layers.lines);
+                const mid = [(pair[0].lat + pair[1].lat) / 2, (pair[0].lng + pair[1].lng) / 2];
+                L.marker(mid, {
+                    interactive: false,
+                    icon: L.divIcon({
+                        className: 'dist-label',
+                        html: '<span>' + fmtDist(dist) + ' · ' + fmtBrg(ang) + '</span>',
+                        iconSize: [220, 24],
+                        iconAnchor: [110, 28]
+                    })
+                }).addTo(layers.lines);
+            }
+        }
+
+        function toggleTestSelect(id) {
+            const idx = testSelected.indexOf(id);
+            if (idx >= 0) testSelected.splice(idx, 1);
+            else {
+                testSelected.push(id);
+                if (testSelected.length > 2) testSelected.shift();
+            }
+            renderTestMarks();
+            renderTestToolbar();
+        }
+
+        function deleteSelectedTestMarks() {
+            if (!testSelected.length) return;
+            const drop = new Set(testSelected);
+            testMarks = testMarks.filter((m) => !drop.has(m.id));
+            testSelected = [];
+            renderTestMarks();
+            renderTestToolbar();
+        }
+
+        function dropTestMark() {
+            if (!myPos) return;
+            testMarks.push({
+                id: 't' + testSeq,
+                n: testSeq,
+                lat: myPos.lat,
+                lng: myPos.lng,
+                accuracy: myPos.accuracy
+            });
+            testSeq += 1;
+            renderTestMarks();
+            renderTestToolbar();
+        }
+
+        function exitTesting() {
+            role = null;
+            testMarks = [];
+            testSelected = [];
+            document.body.classList.remove('role-testing');
+            $('mapScreen').classList.remove('active');
+            $('landing').classList.add('active');
+            $('topMeta').textContent = '';
+            if (layers.marks) layers.marks.clearLayers();
+            if (layers.lines) layers.lines.clearLayers();
+            if (layers.drops) layers.drops.clearLayers();
+        }
+
+        async function startTesting() {
+            $('landingErr').textContent = '';
+            role = 'testing';
+            courseCode = null;
+            pmoToken = null;
+            state = null;
+            selectedMarkerId = null;
+            testMarks = [];
+            testSelected = [];
+            testSeq = 1;
+            showMap();
+            renderTestToolbar();
+            renderTestMarks();
+            try {
+                await enableCompass();
+                const pos = await gps();
+                myPos = pos;
+                if (Number.isFinite(pos.heading)) applyHeading(pos.heading);
+                map.setView([pos.lat, pos.lng], 18);
+                updateYouMarker();
+                startWatch();
+                renderTestToolbar();
+            } catch (err) {
+                map.setView([41.3, -72.4], 9);
+                $('landingErr').textContent = '';
+                const gpsLine = $('testGps');
+                if (gpsLine) gpsLine.textContent = 'Allow location access, then press Mark.';
+                startWatch();
+            }
+        }
+
         $('createCourseBtn').onclick = startPmo;
         $('joinBtn').onclick = joinCommittee;
+        $('testBtn').onclick = startTesting;
         if (userName) $('rcName').value = userName;
         window.addEventListener('resize', () => { if (map) { map.invalidateSize(); drawDegrees(); } });
         (async function boot() {

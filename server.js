@@ -2441,6 +2441,15 @@ function safePhotoDownloadName(name) {
     return base;
 }
 
+function photoDownloadContentType(filename, contentType) {
+    if (contentType && /^image\//i.test(contentType)) return contentType.split(';')[0];
+    const ext = path.extname(filename).toLowerCase();
+    if (ext === '.png') return 'image/png';
+    if (ext === '.gif') return 'image/gif';
+    if (ext === '.webp') return 'image/webp';
+    return 'image/jpeg';
+}
+
 // Same-origin download so the browser saves the file instead of opening the image.
 app.get('/api/photo-download', async (req, res) => {
     try {
@@ -2450,8 +2459,9 @@ app.get('/api/photo-download', async (req, res) => {
         }
         const { buffer, contentType } = await downloadS3ObjectToBuffer(`processed/${filename}`);
         const encoded = encodeURIComponent(filename);
-        res.setHeader('Content-Type', contentType || 'application/octet-stream');
+        res.setHeader('Content-Type', photoDownloadContentType(filename, contentType));
         res.setHeader('Content-Length', buffer.length);
+        res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${encoded}`);
         res.send(buffer);
     } catch (err) {
